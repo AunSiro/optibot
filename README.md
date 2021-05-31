@@ -1,0 +1,2 @@
+# optibot
+Optimizing robot trajectories
