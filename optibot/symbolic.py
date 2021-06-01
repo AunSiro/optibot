@@ -1,6 +1,6 @@
 # -*- coding: utf-8 -*-
 """
-Created on Thu Oct 22 14:05:38 2020
+Created on Mon May 31 12:52:20 2021
 
 @author: Siro Moreno
 """
@@ -165,7 +165,8 @@ def lagr_to_RHS(lagr_eqs):
 def print_funcs(RHS, n_var):
     """
     Prints the Right Hand Side of the control ecuations, formatted
-    to be used as python functions.
+    to be used as a python function to solve a system like:
+        x' = F(x, u, params)
 
     Parameters
     ----------
@@ -177,36 +178,42 @@ def print_funcs(RHS, n_var):
     Returns
     -------
     string
-        when outputted by print(), can be copypasted to define functions
-        associated with RHS.
+        when outputted by print(), can be copypasted to define a function
+        associated with RHS: x' = F(x, u, params)
 
     """
     RHS = list(RHS)
-    msg_total = ""
+    x_args = []
+    v_args = []
+    u_args = []
+    params = []
+    args = []
+    funcs = []
+    for jj in range(n_var):
+        q = symbols(f"q_{jj}")
+        x_args.append(q)
+        v = symbols(f"v_{jj}")
+        x_args.append(v)
+        v_args.append(v)
+        u = symbols(f"u_{jj}")
+        u_args.append(u)
+        args += [q, v, u]
     for ii in range(len(RHS)):
         expr = RHS[ii]
         var_set = expr.atoms(Symbol)
-        f_args = []
-        for jj in range(n_var):
-            q = symbols(f"q_{jj}")
-            f_args.append(q)
-            if q in var_set:
-                var_set.remove(q)
-        for jj in range(n_var):
-            v = symbols(f"v_{jj}")
-            f_args.append(v)
-            if v in var_set:
-                var_set.remove(v)
-        for jj in range(n_var):
-            u = symbols(f"u_{jj}")
-            f_args.append(u)
-            if u in var_set:
-                var_set.remove(u)
-        f_args = f_args + list(var_set)
-        msg = f"def f_{ii}({f_args.__str__()[1:-1]}):\n"
-        msg += "    result = " + expr.__str__()
-        msg += "\n    return result\n"
+        for symb in var_set:
+            if not symb in args:
+                params.append(symb)
+        funcs.append(expr)
 
-        print(msg)
-        msg_total += msg + "\n"
-    return msg_total
+    msg = "def F(x, u, params):\n"
+    msg += f"    {x_args.__str__()[1:-1]} = unpack(x)\n"
+    msg += f"    {u_args.__str__()[1:-1]} = unpack(u)\n"
+    msg += f"    {params.__str__()[1:-1]} = params\n"
+    msg += f"    result = [{v_args.__str__()[1:-1]},]\n"
+    for expr in funcs:
+        msg += "    result.append(" + expr.__str__() + ")\n"
+    msg += "\n    return result\n"
+
+    print(msg)
+    return msg
