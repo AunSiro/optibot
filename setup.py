@@ -8,7 +8,7 @@ setuptools.setup(
     version="0.0.1",
     author="Siro Moreno",
     author_email="siro.moreno.martin@edu.upc",
-    description="Small package containing models and functions for using lagrangian mechanics in order to optimize robot trajectories and control“,
+    description="Small package containing models and functions for using lagrangian mechanics in order to optimize robot trajectories and control",
     long_description=long_description,
     long_description_content_type="text/markdown",
     url="https://github.com/AunSiro/optibot",
