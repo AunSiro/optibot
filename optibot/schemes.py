@@ -218,7 +218,9 @@ def hs_mod_midpoint(x, x_n, u, u_n, tau, F, h, params):
     return q_c, v_c
 
 
-def hs_interp(x, x_n, x_c, u, u_n, u_c, tau, F, h, params):
+def hs_interp(x, x_n, u, u_n, tau, F, h, params):
+    x_c = hs_midpoint(x, x_n, u, u_n, tau, F, h, params)
+    u_c = (u + u_n) / 2
     dim = len(x) // 2
     q = x[:dim]
     v = x[dim:]
@@ -244,7 +246,9 @@ def hs_interp(x, x_n, x_c, u, u_n, u_c, tau, F, h, params):
     return q_interp, v_interp
 
 
-def hs_mod_interp(x, x_n, x_c, u, u_n, u_c, tau, F, h, params):
+def hs_mod_interp(x, x_n, u, u_n, tau, F, h, params):
+    x_c = hs_mod_midpoint(x, x_n, u, u_n, tau, F, h, params)
+    u_c = (u + u_n) / 2
     dim = len(x) // 2
     q = x[:dim]
     v = x[dim:]
@@ -284,13 +288,9 @@ def newpoint(X, U, F, h, t, params, scheme):
         elif scheme == "trapz":
             x_interp = trap_interp(x, x_n, u, u_n, tau, F, h, params)
         elif scheme == "hs":
-            x_c = hs_midpoint(x, x_n, u, u_n, tau, F, h, params)
-            u_c = (u + u_n) / 2
-            x_interp = hs_interp(x, x_n, x_c, u, u_n, u_c, tau, F, h, params)
+            x_interp = hs_interp(x, x_n, u, u_n, tau, F, h, params)
         elif scheme == "hs_mod":
-            x_c = hs_mod_midpoint(x, x_n, u, u_n, tau, F, h, params)
-            u_c = (u + u_n) / 2
-            x_interp = hs_mod_interp(x, x_n, x_c, u, u_n, u_c, tau, F, h, params)
+            x_interp = hs_mod_interp(x, x_n, u, u_n, tau, F, h, params)
         else:
             raise NameError(f"scheme {scheme} not recognized")
     return x_interp
