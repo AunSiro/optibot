@@ -183,7 +183,7 @@ def print_funcs(RHS, n_var):
 
     """
     RHS = list(RHS)
-    x_args = []
+    q_args = []
     v_args = []
     u_args = []
     params = []
@@ -191,13 +191,13 @@ def print_funcs(RHS, n_var):
     funcs = []
     for jj in range(n_var):
         q = symbols(f"q_{jj}")
-        x_args.append(q)
+        q_args.append(q)
         v = symbols(f"v_{jj}")
-        x_args.append(v)
         v_args.append(v)
         u = symbols(f"u_{jj}")
         u_args.append(u)
         args += [q, v, u]
+    x_args = q_args + v_args
     for ii in range(len(RHS)):
         expr = RHS[ii]
         var_set = expr.atoms(Symbol)

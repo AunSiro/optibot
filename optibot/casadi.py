@@ -47,6 +47,52 @@ def sympy2casadi(sympy_expr, sympy_var, casadi_var):
     return f(*casadi_var)
 
 
+def symlist2cas(symlist):
+    caslist = []
+    for symbol in symlist:
+        caslist.append(cas.MX.sym(symbol.__str__()))
+    return caslist
+
+
+def RHS2casF(RHS, n_var):
+    from sympy import symbols, Symbol
+
+    RHS = list(RHS)
+    q_args = []
+    v_args = []
+    u_args = []
+    params = []
+    args = []
+    funcs = []
+    for jj in range(n_var):
+        q = symbols(f"q_{jj}")
+        q_args.append(q)
+        v = symbols(f"v_{jj}")
+        v_args.append(v)
+        u = symbols(f"u_{jj}")
+        u_args.append(u)
+        args += [q, v, u]
+    x_args = q_args + v_args
+    for ii in range(len(RHS)):
+        expr = RHS[ii]
+        var_set = expr.atoms(Symbol)
+        for symb in var_set:
+            if not symb in args:
+                params.append(symb)
+        funcs.append(expr)
+    all_vars = args + params
+    cas_x_args = cas.horzcat(*symlist2cas(x_args))
+    cas_u_args = cas.horzcat(*symlist2cas(u_args))
+    cas_v_args = symlist2cas(v_args)
+    cas_params = symlist2cas(params)
+    cas_all_vars = list2casadi(symlist2cas(all_vars))
+    cas_funcs = []
+    for function in funcs:
+        cas.funcs.append(sympy2casadi(function, all_vars, cas_all_vars))
+    cas_funcs = cas.horzcat(*(cas_v_args + cas_funcs))
+    return cas.Function("F", [cas_x_args, cas_u_args, cas_params], cas_funcs)
+
+
 def unpack(arr):
     arr = cas.horzcat(arr)
     if arr.shape[-1] == 1:
@@ -60,7 +106,7 @@ def unpack(arr):
 
 
 def doub_pend_F(x, u, params=[1, 1, 1, 1, 1]):
-    q_0, v_0, q_1, v_1 = unpack(x)
+    q_0, q_1, v_0, v_1 = unpack(x)
     u_0, u_1 = unpack(u)
     m_1, l_1, l_0, m_0, g, m_1, l_1, l_0, m_0, g = params
     result = [
