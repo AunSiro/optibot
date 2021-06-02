@@ -102,7 +102,11 @@ def diff_to_symb(expr, n_var):
     for jj in range(n_var):
         q = dynamicsymbols(f"q_{jj}")
         expr = expr.subs(
-            ([q.diff(t, 2), symbols(f"a_{jj}")], [q.diff(t), symbols(f"v_{jj}")])
+            (
+                [q.diff(t, 2), symbols(f"a_{jj}")],
+                [q.diff(t), symbols(f"v_{jj}")],
+                [q, symbols(f"q_{jj}")],
+            )
         )
     return expr
 
@@ -154,12 +158,12 @@ def lagr_to_RHS(lagr_eqs):
     c_mat = Matrix(c_mat)
     u_mat = Matrix(u_mat)
     RHS = simplify(coeff_mat.inv() @ (u_mat - c_mat))
-    new_RHS = []
-    for expr in RHS:
-        for jj in range(n_var):
-            expr = expr.subs(dynamicsymbols(f"q_{jj}"), symbols(f"q_{jj}"))
-        new_RHS.append(expr)
-    return Matrix(new_RHS)
+    # new_RHS = []
+    # for expr in RHS:
+    #     for jj in range(n_var):
+    #         expr = expr.subs(dynamicsymbols(f"q_{jj}"), symbols(f"q_{jj}"))
+    #     new_RHS.append(expr)
+    return Matrix(RHS)
 
 
 def print_funcs(RHS, n_var):

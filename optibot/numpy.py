@@ -34,6 +34,49 @@ def congruent_concatenate(varlist):
     return res
 
 
+def RHS2numpy(RHS, n_var):
+    from sympy import symbols, Symbol, lambdify
+
+    RHS = list(RHS)
+    q_args = []
+    v_args = []
+    u_args = []
+    param_list = []
+    args = []
+    funcs = []
+    for jj in range(n_var):
+        q = symbols(f"q_{jj}")
+        q_args.append(q)
+        v = symbols(f"v_{jj}")
+        v_args.append(v)
+        u = symbols(f"u_{jj}")
+        u_args.append(u)
+        args += [q, v, u]
+    x_args = q_args + v_args
+    for ii in range(len(RHS)):
+        expr = RHS[ii]
+        var_set = expr.atoms(Symbol)
+        for symb in var_set:
+            if not symb in args:
+                if not symb in param_list:
+                    param_list.append(symb)
+        funcs.append(expr)
+    funcs = v_args + funcs
+    all_vars = x_args + u_args + param_list
+    np_funcs = []
+    for function in funcs:
+        np_funcs.append(lambdify(all_vars, function))
+
+    def New_F(x, u, params):
+        all_np_vars = unpack(x) + unpack(u) + unpack(params)
+        results = []
+        for func in np_funcs:
+            results.append(func(*all_np_vars))
+        return congruent_concatenate(results)
+
+    return New_F
+
+
 # --- Double Pendulum ---
 
 

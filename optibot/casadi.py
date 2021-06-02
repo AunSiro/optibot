@@ -3,6 +3,10 @@
 Created on Mon May 31 12:52:24 2021
 
 @author: Siro Moreno
+
+sympy2casadi function original author: Joris Gillis
+https://gist.github.com/jgillis/80bb594a6c8fcf55891d1d88b12b68b8
+
 """
 
 import casadi as cas
@@ -32,10 +36,10 @@ def sympy2casadi(sympy_expr, sympy_var, casadi_var):
     Casadi Function
 
     """
-    assert casadi_var.is_vector()
-    if casadi_var.shape[1] > 1:
-        casadi_var = casadi_var.T
-    casadi_var = cas.vertsplit(casadi_var)
+    # assert casadi_var.is_vector()
+    # if casadi_var.shape[1] > 1:
+    #    casadi_var = casadi_var.T
+    # casadi_var = cas.vertsplit(casadi_var)
     from sympy.utilities.lambdify import lambdify
 
     mapping = {
@@ -78,19 +82,29 @@ def RHS2casF(RHS, n_var):
         var_set = expr.atoms(Symbol)
         for symb in var_set:
             if not symb in args:
-                params.append(symb)
+                if not symb in params:
+                    params.append(symb)
         funcs.append(expr)
-    all_vars = args + params
-    cas_x_args = cas.horzcat(*symlist2cas(x_args))
-    cas_u_args = cas.horzcat(*symlist2cas(u_args))
-    cas_v_args = symlist2cas(v_args)
-    cas_params = symlist2cas(params)
-    cas_all_vars = list2casadi(symlist2cas(all_vars))
+    funcs = v_args + funcs
+    all_vars = x_args + u_args + params
+    # print(len(x_args))
+    cas_x_args = cas.MX.sym("x", len(x_args))
+    cas_u_args = cas.MX.sym("u", len(u_args))
+    cas_params = cas.MX.sym("p", len(params))
+    cas_all_vars = [cas_x_args[ii] for ii in range(n_var * 2)]
+    cas_all_vars += [cas_u_args[ii] for ii in range(n_var)]
+    cas_all_vars += [cas_params[ii] for ii in range(len(params))]
     cas_funcs = []
     for function in funcs:
-        cas.funcs.append(sympy2casadi(function, all_vars, cas_all_vars))
-    cas_funcs = cas.horzcat(*(cas_v_args + cas_funcs))
-    return cas.Function("F", [cas_x_args, cas_u_args, cas_params], cas_funcs)
+        cas_funcs.append(sympy2casadi(function, all_vars, cas_all_vars))
+    cas_funcs = cas.horzcat(*cas_funcs)
+    return cas.Function(
+        "F",
+        [cas_x_args, cas_u_args, cas_params],
+        [cas_funcs,],
+        ["x", "u", "params"],
+        ["x_dot"],
+    )
 
 
 def unpack(arr):
