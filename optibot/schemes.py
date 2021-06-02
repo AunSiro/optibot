@@ -116,6 +116,47 @@ def trapz_mod_step(x, u, u_n, F, dt, params):
     return x_n.x
 
 
+def hs_opti_step(x_n, x, u, u_n, F, dt, params):
+    f = F(x, u, params)
+    f_n = F(x_n, u_n, params)
+    u_c = (u + u_n) / 2
+    x_c = (x + x_n) / 2 + dt / 8 * (f - f_n)
+    f_c = F(x_c, u_c, params)
+    res = x + dt / 6 * (f + 4 * f_c + f_n) - x_n
+    return res
+
+
+def hs_step(x, u, u_n, F, dt, params):
+    x_n = root(hs_opti_step, x, (x, u, u_n, F, dt, params))
+    return x_n.x
+
+
+def hs_mod_opti_step(x_n, x, u, u_n, F, dt, params):
+    dim = len(x) // 2
+    f = F(x, u, params)[:dim]
+    f_n = F(x_n, u_n, params)[:dim]
+    q = x[:dim]
+    v = x[dim:]
+    q_n = x_n[:dim]
+    v_n = x_n[dim:]
+    u_c = (u + u_n) / 2
+    q_c = (13 * q + 3 * q_n) / 16 + 5 * dt / 16 * v + dt ** 2 / 96 * (4 * f - f_n)
+    v_c = (v + v_n) / 2 + dt / 8 * (f - f_n)
+    x_c = x.copy()
+    x_c[:dim] = q_c
+    x_c[dim:] = v_c
+    f_c = F(x_c, u_c, params)
+    res = x.copy()
+    res[dim:] = v + dt / 6 * (f + 4 * f_c + f_n) - v_n
+    res[:dim] = q + dt * v + dt ** 2 / 6 * (f + 2 * f_c) - q_n
+    return res
+
+
+def hs_mod_step(x, u, u_n, F, dt, params):
+    x_n = root(hs_mod_opti_step, x, (x, u, u_n, F, dt, params))
+    return x_n.x
+
+
 # --- Integrations ---
 
 
@@ -156,11 +197,96 @@ def integrate_trapz_mod(x_0, u, F, dt, params):
         x_0,
     ]
     for ii in range(0, len(u) - 1):
-        x_i = trapz_step(x[-1], u[ii], u[ii + 1], F, dt, params)
+        x_i = trapz_mod_step(x[-1], u[ii], u[ii + 1], F, dt, params)
         x.append(x_i)
     x_i = trapz_mod_step(x[-1], u[-1], u[-1], F, dt, params)
     x.append(x_i)
     return x
+
+
+def integrate_hs(x_0, u, F, dt, params):
+    x = [
+        x_0,
+    ]
+    for ii in range(0, len(u) - 1):
+        x_i = hs_step(x[-1], u[ii], u[ii + 1], F, dt, params)
+        x.append(x_i)
+    x_i = hs_step(x[-1], u[-1], u[-1], F, dt, params)
+    x.append(x_i)
+    return x
+
+
+def integrate_hs_mod(x_0, u, F, dt, params):
+    x = [
+        x_0,
+    ]
+    for ii in range(0, len(u) - 1):
+        x_i = hs_mod_step(x[-1], u[ii], u[ii + 1], F, dt, params)
+        x.append(x_i)
+    x_i = hs_mod_step(x[-1], u[-1], u[-1], F, dt, params)
+    x.append(x_i)
+    return x
+
+
+# --- Schemes as Restrictions ---
+
+
+def euler_restr(x, x_n, u, u_n, F, dt, params):
+    return x_n - x + dt * F(x, u, params)
+
+
+def rk4_restr(x, x_n, u, u_n, F, dt, params):
+    k1 = F(x, u, params)
+    k2 = F(x + dt / 2 * k1, u, params)
+    k3 = F(x + dt / 2 * k2, u, params)
+    k4 = F(x + dt * k3, u, params)
+    return x_n - x + dt / 6 * (k1 + 2 * k2 + 2 * k3 + k4)
+
+
+def trapz_restr(x, x_n, u, u_n, F, dt, params):
+    f = F(x, u, params)
+    f_n = F(x_n, u_n, params)
+    return x_n - x + dt / 2 * (f + f_n)
+
+
+def trapz_mod_restr(x, x_n, u, u_n, F, dt, params):
+    dim = len(x) // 2
+    f = F(x, u, params)[:dim]
+    f_n = F(x_n, u_n, params)[:dim]
+    res = x.copy()
+    res[dim:] = x[dim:] + dt / 2 * (f + f_n)
+    res[:dim] = x[:dim] + dt * x[dim:] + dt ** 2 / 6 * (f_n + 2 * f)
+    return x_n - res
+
+
+def hs_restr(x, x_n, u, u_n, F, dt, params):
+    f = F(x, u, params)
+    f_n = F(x_n, u_n, params)
+    x_c = (x + x_n) / 2 + dt / 8 * (f - f_n)
+    u_c = (u + u_n) / 2
+    f_c = F(x_c, u_c, params)
+    return x + dt / 6 * (f + 4 * f_c + f_n) - x_n
+
+
+def hs_mod_restr(x_n, x, u, u_n, F, dt, params):
+    dim = len(x) // 2
+    f = F(x, u, params)[:dim]
+    f_n = F(x_n, u_n, params)[:dim]
+    q = x[:dim]
+    v = x[dim:]
+    q_n = x_n[:dim]
+    v_n = x_n[dim:]
+    u_c = (u + u_n) / 2
+    q_c = (13 * q + 3 * q_n) / 16 + 5 * dt / 16 * v + dt ** 2 / 96 * (4 * f - f_n)
+    v_c = (v + v_n) / 2 + dt / 8 * (f - f_n)
+    x_c = x.copy()
+    x_c[:dim] = q_c
+    x_c[dim:] = v_c
+    f_c = F(x_c, u_c, params)
+    res = x.copy()
+    res[dim:] = v + dt / 6 * (f + 4 * f_c + f_n) - v_n
+    res[:dim] = q + dt * v + dt ** 2 / 6 * (f + 2 * f_c) - q_n
+    return x_n - res
 
 
 # --- Interpolations ---
