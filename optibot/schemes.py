@@ -277,8 +277,8 @@ def trapz_mod_restr(x, x_n, u, u_n, F, dt, params):
     else:
         first_ind = slice(None, dim)
         last_ind = slice(dim, None)
-    f = F(x, u, params)[first_ind]
-    f_n = F(x_n, u_n, params)[first_ind]
+    f = F(x, u, params)[last_ind]
+    f_n = F(x_n, u_n, params)[last_ind]
     res[last_ind] = x[last_ind] + dt / 2 * (f + f_n)
     res[first_ind] = x[first_ind] + dt * x[last_ind] + dt ** 2 / 6 * (f_n + 2 * f)
     return x_n - res
@@ -303,8 +303,8 @@ def hs_mod_restr(x_n, x, u, u_n, F, dt, params):
     else:
         first_ind = slice(None, dim)
         last_ind = slice(dim, None)
-    f = F(x, u, params)[first_ind]
-    f_n = F(x_n, u_n, params)[first_ind]
+    f = F(x, u, params)[last_ind]
+    f_n = F(x_n, u_n, params)[last_ind]
     q = x[first_ind]
     v = x[last_ind]
     q_n = x_n[first_ind]
@@ -314,7 +314,7 @@ def hs_mod_restr(x_n, x, u, u_n, F, dt, params):
     v_c = (v + v_n) / 2 + dt / 8 * (f - f_n)
     x_c[first_ind] = q_c
     x_c[last_ind] = v_c
-    f_c = F(x_c, u_c, params)[first_ind]
+    f_c = F(x_c, u_c, params)[last_ind]
     res[last_ind] = v + dt / 6 * (f + 4 * f_c + f_n) - v_n
     res[first_ind] = q + dt * v + dt ** 2 / 6 * (f + 2 * f_c) - q_n
     return x_n - res
@@ -458,12 +458,12 @@ def extend_array(x):
     return append(x, apppendix, 0)
 
 
-def interpolated_array(X, U, F, h, t_array, params, scheme="hs"):
+def interpolated_array(X, U, F, h, t_array, params, scheme="hs_scipy"):
     N = t_array.size
     new_X = zeros(N)
-    if X.shape[-1] == U.shape[-1] + 1:
+    if X.shape[0] == U.shape[0] + 1:
         U = extend_array(U)
-    if X.shape[-1] != U.shape[-1]:
+    if X.shape[0] != U.shape[0]:
         raise ValueError("X and U have incompatible sizes")
     old_t_array = linspace(0, (X.shape[0] - 1) * h, X.shape[0])
     if t_array[-1] - old_t_array[-1] > h * 1e-9:
