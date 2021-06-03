@@ -9,6 +9,7 @@ Created on Mon May 31 14:52:34 2021
 from scipy.optimize import root
 from numpy import zeros, append, linspace, expand_dims, interp
 from scipy.interpolate import CubicHermiteSpline as hermite
+from copy import copy
 
 
 def is_iterable(x):
@@ -17,6 +18,24 @@ def is_iterable(x):
         return True
     except TypeError:
         return False
+
+
+def is2d(x):
+    try:
+        shape = x.shape
+        if len(shape) > 1:
+            return True
+        else:
+            return False
+    except AttributeError:
+        return False
+
+
+def vec_len(x):
+    try:
+        return len(x)
+    except TypeError:
+        return max(x.shape)
 
 
 def expand_F(F, mode="numpy"):
@@ -102,10 +121,10 @@ def trapz_step(x, u, u_n, F, dt, params):
 
 
 def trapz_mod_opti_step(x_n, x, u, u_n, F, dt, params):
-    dim = len(x) // 2
+    dim = vec_len(x) // 2
     f = F(x, u, params)[:dim]
     f_n = F(x_n, u_n, params)[:dim]
-    res = x.copy()
+    res = copy(x)
     res[dim:] = x[dim:] + dt / 2 * (f + f_n) - x_n[dim:]
     res[:dim] = x[:dim] + dt * x[dim:] + dt ** 2 / 6 * (f_n + 2 * f) - x_n[:dim]
     return res
@@ -132,7 +151,7 @@ def hs_step(x, u, u_n, F, dt, params):
 
 
 def hs_mod_opti_step(x_n, x, u, u_n, F, dt, params):
-    dim = len(x) // 2
+    dim = vec_len(x) // 2
     f = F(x, u, params)[:dim]
     f_n = F(x_n, u_n, params)[:dim]
     q = x[:dim]
@@ -142,11 +161,11 @@ def hs_mod_opti_step(x_n, x, u, u_n, F, dt, params):
     u_c = (u + u_n) / 2
     q_c = (13 * q + 3 * q_n) / 16 + 5 * dt / 16 * v + dt ** 2 / 96 * (4 * f - f_n)
     v_c = (v + v_n) / 2 + dt / 8 * (f - f_n)
-    x_c = x.copy()
+    x_c = copy(x)
     x_c[:dim] = q_c
     x_c[dim:] = v_c
     f_c = F(x_c, u_c, params)
-    res = x.copy()
+    res = copy(x)
     res[dim:] = v + dt / 6 * (f + 4 * f_c + f_n) - v_n
     res[:dim] = q + dt * v + dt ** 2 / 6 * (f + 2 * f_c) - q_n
     return res
@@ -164,7 +183,7 @@ def integrate_euler(x_0, u, F, dt, params):
     x = [
         x_0,
     ]
-    for ii in range(len(u)):
+    for ii in range(vec_len(u)):
         x_i = euler_step(x[-1], u[ii], F, dt, params)
         x.append(x_i)
     return x
@@ -174,7 +193,7 @@ def integrate_rk4(x_0, u, F, dt, params):
     x = [
         x_0,
     ]
-    for ii in range(len(u)):
+    for ii in range(vec_len(u)):
         x_i = rk4_step(x[-1], u[ii], F, dt, params)
         x.append(x_i)
     return x
@@ -184,7 +203,7 @@ def integrate_trapz(x_0, u, F, dt, params):
     x = [
         x_0,
     ]
-    for ii in range(0, len(u) - 1):
+    for ii in range(0, vec_len(u) - 1):
         x_i = trapz_step(x[-1], u[ii], u[ii + 1], F, dt, params)
         x.append(x_i)
     x_i = trapz_step(x[-1], u[-1], u[-1], F, dt, params)
@@ -196,7 +215,7 @@ def integrate_trapz_mod(x_0, u, F, dt, params):
     x = [
         x_0,
     ]
-    for ii in range(0, len(u) - 1):
+    for ii in range(0, vec_len(u) - 1):
         x_i = trapz_mod_step(x[-1], u[ii], u[ii + 1], F, dt, params)
         x.append(x_i)
     x_i = trapz_mod_step(x[-1], u[-1], u[-1], F, dt, params)
@@ -208,7 +227,7 @@ def integrate_hs(x_0, u, F, dt, params):
     x = [
         x_0,
     ]
-    for ii in range(0, len(u) - 1):
+    for ii in range(0, vec_len(u) - 1):
         x_i = hs_step(x[-1], u[ii], u[ii + 1], F, dt, params)
         x.append(x_i)
     x_i = hs_step(x[-1], u[-1], u[-1], F, dt, params)
@@ -220,7 +239,7 @@ def integrate_hs_mod(x_0, u, F, dt, params):
     x = [
         x_0,
     ]
-    for ii in range(0, len(u) - 1):
+    for ii in range(0, vec_len(u) - 1):
         x_i = hs_mod_step(x[-1], u[ii], u[ii + 1], F, dt, params)
         x.append(x_i)
     x_i = hs_mod_step(x[-1], u[-1], u[-1], F, dt, params)
@@ -250,12 +269,18 @@ def trapz_restr(x, x_n, u, u_n, F, dt, params):
 
 
 def trapz_mod_restr(x, x_n, u, u_n, F, dt, params):
-    dim = len(x) // 2
-    f = F(x, u, params)[:dim]
-    f_n = F(x_n, u_n, params)[:dim]
-    res = x.copy()
-    res[dim:] = x[dim:] + dt / 2 * (f + f_n)
-    res[:dim] = x[:dim] + dt * x[dim:] + dt ** 2 / 6 * (f_n + 2 * f)
+    dim = vec_len(x) // 2
+    res = copy(x)
+    if is2d(x):
+        first_ind = slice(None, None), slice(None, dim)
+        last_ind = slice(None, None), slice(dim, None)
+    else:
+        first_ind = slice(None, dim)
+        last_ind = slice(dim, None)
+    f = F(x, u, params)[first_ind]
+    f_n = F(x_n, u_n, params)[first_ind]
+    res[last_ind] = x[last_ind] + dt / 2 * (f + f_n)
+    res[first_ind] = x[first_ind] + dt * x[last_ind] + dt ** 2 / 6 * (f_n + 2 * f)
     return x_n - res
 
 
@@ -269,23 +294,29 @@ def hs_restr(x, x_n, u, u_n, F, dt, params):
 
 
 def hs_mod_restr(x_n, x, u, u_n, F, dt, params):
-    dim = len(x) // 2
-    f = F(x, u, params)[:dim]
-    f_n = F(x_n, u_n, params)[:dim]
-    q = x[:dim]
-    v = x[dim:]
-    q_n = x_n[:dim]
-    v_n = x_n[dim:]
+    dim = vec_len(x) // 2
+    x_c = copy(x)
+    res = copy(x)
+    if is2d(x):
+        first_ind = slice(None, None), slice(None, dim)
+        last_ind = slice(None, None), slice(dim, None)
+    else:
+        first_ind = slice(None, dim)
+        last_ind = slice(dim, None)
+    f = F(x, u, params)[first_ind]
+    f_n = F(x_n, u_n, params)[first_ind]
+    q = x[first_ind]
+    v = x[last_ind]
+    q_n = x_n[first_ind]
+    v_n = x_n[last_ind]
     u_c = (u + u_n) / 2
     q_c = (13 * q + 3 * q_n) / 16 + 5 * dt / 16 * v + dt ** 2 / 96 * (4 * f - f_n)
     v_c = (v + v_n) / 2 + dt / 8 * (f - f_n)
-    x_c = x.copy()
-    x_c[:dim] = q_c
-    x_c[dim:] = v_c
-    f_c = F(x_c, u_c, params)
-    res = x.copy()
-    res[dim:] = v + dt / 6 * (f + 4 * f_c + f_n) - v_n
-    res[:dim] = q + dt * v + dt ** 2 / 6 * (f + 2 * f_c) - q_n
+    x_c[first_ind] = q_c
+    x_c[last_ind] = v_c
+    f_c = F(x_c, u_c, params)[first_ind]
+    res[last_ind] = v + dt / 6 * (f + 4 * f_c + f_n) - v_n
+    res[first_ind] = q + dt * v + dt ** 2 / 6 * (f + 2 * f_c) - q_n
     return x_n - res
 
 
@@ -293,7 +324,7 @@ def hs_mod_restr(x_n, x, u, u_n, F, dt, params):
 
 
 def trap_mod_interp(x, x_n, u, u_n, tau, F, h, params):
-    dim = len(x) // 2
+    dim = vec_len(x) // 2
     q = x[:dim]
     v = x[dim:]
     q_n = x_n[:dim]
@@ -306,7 +337,7 @@ def trap_mod_interp(x, x_n, u, u_n, tau, F, h, params):
 
 
 def trap_interp(x, x_n, u, u_n, tau, F, h, params):
-    dim = len(x) // 2
+    dim = vec_len(x) // 2
     q = x[:dim]
     v = x[dim:]
     q_n = x_n[:dim]
@@ -319,7 +350,7 @@ def trap_interp(x, x_n, u, u_n, tau, F, h, params):
 
 
 def hs_midpoint(x, x_n, u, u_n, tau, F, h, params):
-    dim = len(x) // 2
+    dim = vec_len(x) // 2
     q = x[:dim]
     v = x[dim:]
     q_n = x_n[:dim]
@@ -332,7 +363,7 @@ def hs_midpoint(x, x_n, u, u_n, tau, F, h, params):
 
 
 def hs_mod_midpoint(x, x_n, u, u_n, tau, F, h, params):
-    dim = len(x) // 2
+    dim = vec_len(x) // 2
     q = x[:dim]
     v = x[dim:]
     q_n = x_n[:dim]
@@ -347,7 +378,7 @@ def hs_mod_midpoint(x, x_n, u, u_n, tau, F, h, params):
 def hs_interp(x, x_n, u, u_n, tau, F, h, params):
     x_c = hs_midpoint(x, x_n, u, u_n, tau, F, h, params)
     u_c = (u + u_n) / 2
-    dim = len(x) // 2
+    dim = vec_len(x) // 2
     q = x[:dim]
     v = x[dim:]
     q_n = x_n[:dim]
@@ -375,7 +406,7 @@ def hs_interp(x, x_n, u, u_n, tau, F, h, params):
 def hs_mod_interp(x, x_n, u, u_n, tau, F, h, params):
     x_c = hs_mod_midpoint(x, x_n, u, u_n, tau, F, h, params)
     u_c = (u + u_n) / 2
-    dim = len(x) // 2
+    dim = vec_len(x) // 2
     q = x[:dim]
     v = x[dim:]
     q_n = x_n[:dim]
