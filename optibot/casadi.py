@@ -28,7 +28,7 @@ def sympy2casadi(sympy_expr, sympy_var, casadi_var):
         
     sympy_var : list of sympy symbols
         
-    casadi_var : vector of casady symbols
+    casadi_var : list of casady symbols
         
 
     Returns
@@ -87,7 +87,11 @@ def RHS2casF(RHS, n_var):
         funcs.append(expr)
     funcs = v_args + funcs
     all_vars = x_args + u_args + params
-    # print(len(x_args))
+    msg = "Function Arguments:"
+    msg += f"\tx: {x_args}\n"
+    msg += f"\tu: {u_args}\n"
+    msg += f"\tparams: {params}\n"
+    print(msg)
     cas_x_args = cas.MX.sym("x", len(x_args))
     cas_u_args = cas.MX.sym("u", len(u_args))
     cas_params = cas.MX.sym("p", len(params))
@@ -114,6 +118,45 @@ def unpack(arr):
     dim = arr.shape[-1]
     res = [arr[:, ii] for ii in range(dim)]
     return res
+
+
+def restriction2casadi(F_scheme, F, n_vars, n_params):
+    """
+    Converts a restriction funtion F to a casadi function that can be
+    more efficiently used in casadi
+
+    Parameters
+    ----------
+    F_scheme : Function of the form F(x, x_n, u, u_n, F, dt, p)
+        Restriction function that each step has to be equal to zero
+    F : Function of the form F(x, u, p)
+        Physics function that describes the system
+    n_vars : int
+        Number of q variables or coordinates in the problem
+    n_params : int
+        Number of parameters in the problem
+
+    Returns
+    -------
+    Casadi Function
+        A casadi function of the form F(x, x_n, u, u_n, dt, p)
+        Restriction function that each step has to be equal to zero
+
+    """
+    x = cas.MX.sym("x", 2 * n_vars).T
+    x_n = cas.MX.sym("x_n", 2 * n_vars).T
+    u = cas.MX.sym("u", n_vars).T
+    u_n = cas.MX.sym("u_n", n_vars).T
+    p = cas.MX.sym("p", n_params)
+    dt = cas.MX.sym("dt")
+    result = F_scheme(x, x_n, u, u_n, F, dt, p)
+    return cas.Function(
+        "Restriction",
+        [x, x_n, u, u_n, dt, p],
+        [result,],
+        ["x", "x_n", "u", "u_n", "dt", "params"],
+        ["residue"],
+    )
 
 
 # --- Double Pendulum ---

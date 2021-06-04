@@ -63,6 +63,11 @@ def RHS2numpy(RHS, n_var):
         funcs.append(expr)
     funcs = v_args + funcs
     all_vars = x_args + u_args + param_list
+    msg = "Function Arguments:"
+    msg += f"\tx: {x_args}\n"
+    msg += f"\tu: {u_args}\n"
+    msg += f"\tparams: {param_list}\n"
+    print(msg)
     np_funcs = []
     for function in funcs:
         np_funcs.append(lambdify(all_vars, function))

@@ -207,7 +207,8 @@ def print_funcs(RHS, n_var):
         var_set = expr.atoms(Symbol)
         for symb in var_set:
             if not symb in args:
-                params.append(symb)
+                if not symb in params:
+                    params.append(symb)
         funcs.append(expr)
 
     msg = "def F(x, u, params):\n"
