@@ -87,7 +87,7 @@ def RHS2casF(RHS, n_var):
         funcs.append(expr)
     funcs = v_args + funcs
     all_vars = x_args + u_args + params
-    msg = "Function Arguments:"
+    msg = "Function Arguments:\n"
     msg += f"\tx: {x_args}\n"
     msg += f"\tu: {u_args}\n"
     msg += f"\tparams: {params}\n"

@@ -92,7 +92,7 @@ def get_lagr_eqs(T, U, n_vars):
     res = []
     for ii in range(n_vars):
         q = dynamicsymbols(f"q_{ii}")
-        res.append(lagrange(L, q))
+        res.append(simplify(lagrange(L, q)))
     return res
 
 
@@ -111,7 +111,7 @@ def diff_to_symb(expr, n_var):
     return expr
 
 
-def lagr_to_RHS(lagr_eqs):
+def lagr_to_RHS(lagr_eqs, output_msgs=True):
     """
     Takes lagrangian equations,
     Calculates the Right Hand Side functions of
@@ -121,6 +121,9 @@ def lagr_to_RHS(lagr_eqs):
     ----------
     lagr_eqs : List of symbolic expressions
         Lagrange Equations.
+        
+    output_msgs : Bool
+        Wether to print information messages during execution
 
     Returns
     -------
@@ -135,14 +138,17 @@ def lagr_to_RHS(lagr_eqs):
     acc_mat = []
     c_mat = []
     u_mat = []
+    if output_msgs:
+        print("Calculating matrices")
     for ii in range(n_var):
         expr = diff_to_symb(lagr_eqs[ii], n_var)
         coeff_line = []
         rest = expr
         for jj in range(n_var):
             a = symbols(f"a_{jj}")
-            coeff_line.append(expr.collect(a).coeff(a))
-            rest = rest - a * expr.collect(a).coeff(a)
+            expr2 = expr.expand().collect(a).coeff(a)
+            coeff_line.append(expr2)
+            rest = rest - a * expr2
         coeff_mat.append(coeff_line)
         acc_mat.append(
             [symbols(f"a_{ii}"),]
@@ -157,16 +163,21 @@ def lagr_to_RHS(lagr_eqs):
     acc_mat = Matrix(acc_mat)
     c_mat = Matrix(c_mat)
     u_mat = Matrix(u_mat)
-    RHS = simplify(coeff_mat.inv() @ (u_mat - c_mat))
+    if output_msgs:
+        print("Inverting matrix")
+    coeff_mat_inv = coeff_mat.inv()
+    if output_msgs:
+        print("Simplifying result expressions")
+    RHS = simplify(coeff_mat_inv @ (u_mat - c_mat))
     # new_RHS = []
     # for expr in RHS:
     #     for jj in range(n_var):
     #         expr = expr.subs(dynamicsymbols(f"q_{jj}"), symbols(f"q_{jj}"))
     #     new_RHS.append(expr)
-    return Matrix(RHS)
+    return RHS
 
 
-def print_funcs(RHS, n_var):
+def print_funcs_RHS(RHS, n_var, flavour="numpy"):
     """
     Prints the Right Hand Side of the control ecuations, formatted
     to be used as a python function to solve a system like:
@@ -178,6 +189,10 @@ def print_funcs(RHS, n_var):
         
     n_var : int
         Number of variables
+    
+    flavour : str in ["numpy", "casadi"], default = "numpy"
+        experimental feature, converts common functions like sin(x)
+        to np.sin(x) or cas.sin(x) respectively
 
     Returns
     -------
@@ -218,6 +233,69 @@ def print_funcs(RHS, n_var):
     msg += f"    result = [{v_args.__str__()[1:-1]},]\n"
     for expr in funcs:
         msg += "    result.append(" + expr.__str__() + ")\n"
+    msg += "\n    return result\n"
+
+    print(msg)
+    return msg
+
+
+def print_funcs(expr_list, n_var, flavour="numpy"):
+    """
+    Prints the given expression list or matrix as a function
+
+    Parameters
+    ----------
+    expr_list : Matrix or list of symbolic expressions
+        
+    n_var : int
+        Number of variables
+    
+    flavour : str in ["numpy", "casadi"], default = "numpy"
+        experimental feature, converts common functions like sin(x)
+        to np.sin(x) or cas.sin(x) respectively
+
+    Returns
+    -------
+    string
+        when outputted by print(), can be copypasted to define a function
+        associated with RHS: x' = F(x, u, params)
+
+    """
+    expr_list = list(expr_list)
+    q_args = []
+    v_args = []
+    u_args = []
+    params = []
+    args = []
+    funcs = []
+    for jj in range(n_var):
+        q = symbols(f"q_{jj}")
+        q_args.append(q)
+        v = symbols(f"v_{jj}")
+        v_args.append(v)
+        u = symbols(f"u_{jj}")
+        u_args.append(u)
+        args += [q, v, u]
+    x_args = q_args + v_args
+    for ii in range(len(expr_list)):
+        expr = expr_list[ii]
+        var_set = expr.atoms(Symbol)
+        for symb in var_set:
+            if not symb in args:
+                if not symb in params:
+                    params.append(symb)
+        funcs.append(expr)
+
+    msg = "def F(x, u, params):\n"
+    msg += f"    {x_args.__str__()[1:-1]} = unpack(x)\n"
+    msg += f"    {u_args.__str__()[1:-1]} = unpack(u)\n"
+    msg += f"    {params.__str__()[1:-1]} = params\n"
+    if len(funcs) == 1:
+        msg += "    result = " + expr.__str__() + "\n"
+    else:
+        msg += "    result = []\n"
+        for expr in funcs:
+            msg += "    result.append(" + expr.__str__() + ")\n"
     msg += "\n    return result\n"
 
     print(msg)
