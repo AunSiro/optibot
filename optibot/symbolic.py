@@ -239,16 +239,17 @@ def print_funcs_RHS(RHS, n_var, flavour="numpy"):
     return msg
 
 
-def print_funcs(expr_list, n_var, flavour="numpy"):
+def print_funcs(expr_list, n_var=0, flavour="numpy"):
     """
     Prints the given expression list or matrix as a function
 
     Parameters
     ----------
-    expr_list : Matrix or list of symbolic expressions
+    expr_list : Matrix or list of Sympy symbolic expressions
         
-    n_var : int
-        Number of variables
+    n_var : int, default = 0
+        Number of variables q contained in x
+        If set to 0, all detected variables will be considered parameters
     
     flavour : str in ["numpy", "casadi"], default = "numpy"
         experimental feature, converts common functions like sin(x)
@@ -265,6 +266,8 @@ def print_funcs(expr_list, n_var, flavour="numpy"):
     q_args = []
     v_args = []
     u_args = []
+    u_args_found = []
+    x_args_found = []
     params = []
     args = []
     funcs = []
@@ -284,12 +287,26 @@ def print_funcs(expr_list, n_var, flavour="numpy"):
             if not symb in args:
                 if not symb in params:
                     params.append(symb)
+            elif symb in u_args:
+                u_args_found.append(symb)
+            elif symb in x_args:
+                x_args_found.append(symb)
         funcs.append(expr)
 
-    msg = "def F(x, u, params):\n"
-    msg += f"    {x_args.__str__()[1:-1]} = unpack(x)\n"
-    msg += f"    {u_args.__str__()[1:-1]} = unpack(u)\n"
-    msg += f"    {params.__str__()[1:-1]} = params\n"
+    msg = "def F("
+    if len(x_args_found) > 0:
+        msg += "x, "
+    if len(u_args_found) > 0:
+        msg += "u, "
+    if len(params) > 0:
+        msg += "params, "
+    msg += "):\n"
+    if len(x_args_found) > 0:
+        msg += f"    {x_args.__str__()[1:-1]} = unpack(x)\n"
+    if len(u_args_found) > 0:
+        msg += f"    {u_args.__str__()[1:-1]} = unpack(u)\n"
+    if len(params) > 0:
+        msg += f"    {params.__str__()[1:-1]} = params\n"
     if len(funcs) == 1:
         msg += "    result = " + expr.__str__() + "\n"
     else:
