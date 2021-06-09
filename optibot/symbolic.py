@@ -28,6 +28,10 @@ from sympy.physics.mechanics import dynamicsymbols
 from sympy.functions import sign
 
 
+def get_str(x):
+    return x.__str__()
+
+
 def integerize(expr):
     expr2 = expr
     for a in preorder_traversal(expr):
@@ -226,6 +230,7 @@ def print_funcs_RHS(RHS, n_var, flavour="numpy"):
                     params.append(symb)
         funcs.append(expr)
 
+    params = sorted(params, key=get_str)
     msg = "def F(x, u, params):\n"
     msg += f"    {x_args.__str__()[1:-1]} = unpack(x)\n"
     msg += f"    {u_args.__str__()[1:-1]} = unpack(u)\n"
@@ -293,6 +298,7 @@ def print_funcs(expr_list, n_var=0, flavour="numpy"):
                 x_args_found.append(symb)
         funcs.append(expr)
 
+    params = sorted(params, key=get_str)
     msg = "def F("
     if len(x_args_found) > 0:
         msg += "x, "
