@@ -9,6 +9,10 @@ import numpy as np
 from numpy import sin, cos
 
 
+def get_str(x):
+    return x.__str__()
+
+
 def unpack(arr):
     arr = np.array(arr)
     dim = arr.shape[-1]
@@ -61,6 +65,7 @@ def RHS2numpy(RHS, n_var):
                 if not symb in param_list:
                     param_list.append(symb)
         funcs.append(expr)
+    param_list = sorted(param_list, key=get_str)
     funcs = v_args + funcs
     all_vars = x_args + u_args + param_list
     msg = "Function Arguments:\n"

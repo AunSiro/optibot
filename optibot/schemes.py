@@ -116,7 +116,8 @@ def trapz_opti_step(x_n, x, u, u_n, F, dt, params):
 
 
 def trapz_step(x, u, u_n, F, dt, params):
-    x_n = root(trapz_opti_step, x, (x, u, u_n, F, dt, params))
+    x_0 = euler_step(x, u, F, dt, params)
+    x_n = root(trapz_opti_step, x_0, (x, u, u_n, F, dt, params))
     return x_n.x
 
 
@@ -146,7 +147,8 @@ def hs_opti_step(x_n, x, u, u_n, F, dt, params):
 
 
 def hs_step(x, u, u_n, F, dt, params):
-    x_n = root(hs_opti_step, x, (x, u, u_n, F, dt, params))
+    x_0 = euler_step(x, u, F, dt, params)
+    x_n = root(hs_opti_step, x_0, (x, u, u_n, F, dt, params))
     return x_n.x
 
 

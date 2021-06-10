@@ -13,6 +13,10 @@ import casadi as cas
 from casadi import sin, cos
 
 
+def get_str(x):
+    return x.__str__()
+
+
 def list2casadi(vallist):
     """convert a list into a casadi array of the apropiate shape"""
     return cas.horzcat(*vallist).T
@@ -86,6 +90,7 @@ def RHS2casF(RHS, n_var):
                     params.append(symb)
         funcs.append(expr)
     funcs = v_args + funcs
+    params = sorted(params, key=get_str)
     all_vars = x_args + u_args + params
     msg = "Function Arguments:\n"
     msg += f"\tx: {x_args}\n"
