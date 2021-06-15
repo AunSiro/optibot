@@ -38,6 +38,13 @@ def congruent_concatenate(varlist):
     return res
 
 
+def trapz_integrate(X, t_array):
+    new_X = np.zeros_like(X)
+    for i in range(1, X.shape[0]):
+        new_X[i] = np.trapz(X[: i + 1], t_array[: i + 1])
+    return new_X
+
+
 def RHS2numpy(RHS, n_var):
     from sympy import symbols, Symbol, lambdify
 

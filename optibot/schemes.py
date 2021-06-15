@@ -7,7 +7,7 @@ Created on Mon May 31 14:52:34 2021
 """
 
 from scipy.optimize import root
-from numpy import zeros, append, linspace, expand_dims, interp, array
+from numpy import zeros, zeros_like, append, linspace, expand_dims, interp, array
 from scipy.interpolate import CubicHermiteSpline as hermite
 from copy import copy
 
@@ -36,6 +36,14 @@ def vec_len(x):
         return len(x)
     except TypeError:
         return max(x.shape)
+
+
+def num_derivative(X, h):
+    X_dot = zeros_like(X)
+    X_dot[1:-1] = (X[2:] - X[:-2]) / (2 * h)
+    X_dot[0] = (X[1] - X[0]) / h
+    X_dot[-1] = (X[-2] - X[-1]) / h
+    return X_dot
 
 
 def interp_2d(t_array, old_t_array, Y):
@@ -340,8 +348,8 @@ def trap_mod_interp(x, x_n, u, u_n, tau, F, h, params):
     v = x[dim:]
     q_n = x_n[:dim]
     v_n = x_n[dim:]
-    f = F(x, u, params)[:dim]
-    f_n = F(x_n, u_n, params)[:dim]
+    f = F(x, u, params)[dim:]
+    f_n = F(x_n, u_n, params)[dim:]
     q_interp = q + v * tau + 1 / 2 * f * tau ** 2 + 1 / (6 * h) * tau ** 3 * (f_n - f)
     v_interp = v + tau * f + tau ** 2 / (2 * h) * (f_n - f)
     return q_interp, v_interp
@@ -353,10 +361,10 @@ def trap_interp(x, x_n, u, u_n, tau, F, h, params):
     v = x[dim:]
     q_n = x_n[:dim]
     v_n = x_n[dim:]
-    f = F(x, u, params)[:dim]
-    f_n = F(x_n, u_n, params)[:dim]
+    f = F(x, u, params)[dim:]
+    f_n = F(x_n, u_n, params)[dim:]
     q_interp = q + v * tau + 1 / (2 * h) * tau ** 2 * (v_n - v)
-    v_interp = v + tau * f + tau ** 2 / (2 * h) * (f_n - f)
+    v_interp = v + f * tau + 1 / (2 * h) * tau ** 2 * (f_n - f)
     return q_interp, v_interp
 
 
@@ -366,8 +374,8 @@ def hs_midpoint(x, x_n, u, u_n, tau, F, h, params):
     v = x[dim:]
     q_n = x_n[:dim]
     v_n = x_n[dim:]
-    f = F(x, u, params)[:dim]
-    f_n = F(x_n, u_n, params)[:dim]
+    f = F(x, u, params)[dim:]
+    f_n = F(x_n, u_n, params)[dim:]
     v_c = (v + v_n) / 2 + h / 8 * (f - f_n)
     q_c = (q + q_n) / 2 + h / 8 * (v - v_n)
     return q_c, v_c
@@ -379,8 +387,8 @@ def hs_mod_midpoint(x, x_n, u, u_n, tau, F, h, params):
     v = x[dim:]
     q_n = x_n[:dim]
     v_n = x_n[dim:]
-    f = F(x, u, params)[:dim]
-    f_n = F(x_n, u_n, params)[:dim]
+    f = F(x, u, params)[dim:]
+    f_n = F(x_n, u_n, params)[dim:]
     v_c = (v + v_n) / 2 + h / 8 * (f - f_n)
     q_c = (13 * q + 3 * q_n + 5 * v * h) / 16 + h ** 2 / 96 * (4 * f - f_n)
     return q_c, v_c
@@ -396,9 +404,9 @@ def hs_interp(x, x_n, u, u_n, tau, F, h, params):
     v_n = x_n[dim:]
     q_c = x_c[:dim]
     v_c = x_c[dim:]
-    f = F(x, u, params)[:dim]
-    f_n = F(x_n, u_n, params)[:dim]
-    f_c = F(x_c, u_c, params)[:dim]
+    f = F(x, u, params)[dim:]
+    f_n = F(x_n, u_n, params)[dim:]
+    f_c = F(x_c, u_c, params)[dim:]
     q_interp = (
         q
         + v * tau
@@ -424,9 +432,9 @@ def hs_mod_interp(x, x_n, u, u_n, tau, F, h, params):
     v_n = x_n[dim:]
     q_c = x_c[:dim]
     v_c = x_c[dim:]
-    f = F(x, u, params)[:dim]
-    f_n = F(x_n, u_n, params)[:dim]
-    f_c = F(x_c, u_c, params)[:dim]
+    f = F(x, u, params)[dim:]
+    f_n = F(x_n, u_n, params)[dim:]
+    f_c = F(x_c, u_c, params)[dim:]
     q_interp = (
         q
         + v * tau
@@ -449,6 +457,8 @@ def newpoint(X, U, F, h, t, params, scheme):
     # print(f't = {t} , tau = {tau} , n = {n} , h = {h}')
     if abs(tau) < h * 1e-8:
         x_interp = X[n]
+    elif abs(tau - h) < h * 1e-8:
+        x_interp = X[n + 1]
     else:
         x, x_n, u, u_n = X[n], X[n + 1], U[n], U[n + 1]
         if scheme == "trapz_mod":
