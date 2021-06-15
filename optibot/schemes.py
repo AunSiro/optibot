@@ -270,7 +270,7 @@ def integrate_hs_mod(x_0, u, F, dt, params):
 
 
 def euler_restr(x, x_n, u, u_n, F, dt, params):
-    return x_n - x + dt * F(x, u, params)
+    return x_n - (x + dt * F(x, u, params))
 
 
 def rk4_restr(x, x_n, u, u_n, F, dt, params):
@@ -278,13 +278,13 @@ def rk4_restr(x, x_n, u, u_n, F, dt, params):
     k2 = F(x + dt / 2 * k1, u, params)
     k3 = F(x + dt / 2 * k2, u, params)
     k4 = F(x + dt * k3, u, params)
-    return x_n - x + dt / 6 * (k1 + 2 * k2 + 2 * k3 + k4)
+    return x_n - (x + dt / 6 * (k1 + 2 * k2 + 2 * k3 + k4))
 
 
 def trapz_restr(x, x_n, u, u_n, F, dt, params):
     f = F(x, u, params)
     f_n = F(x_n, u_n, params)
-    return x_n - x + dt / 2 * (f + f_n)
+    return x_n - (x + dt / 2 * (f + f_n))
 
 
 def trapz_mod_restr(x, x_n, u, u_n, F, dt, params):
@@ -309,7 +309,7 @@ def hs_restr(x, x_n, u, u_n, F, dt, params):
     x_c = (x + x_n) / 2 + dt / 8 * (f - f_n)
     u_c = (u + u_n) / 2
     f_c = F(x_c, u_c, params)
-    return x + dt / 6 * (f + 4 * f_c + f_n) - x_n
+    return x + (dt / 6 * (f + 4 * f_c + f_n) - x_n)
 
 
 def hs_mod_restr(x_n, x, u, u_n, F, dt, params):
