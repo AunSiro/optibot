@@ -45,6 +45,14 @@ def trapz_integrate(X, t_array):
     return new_X
 
 
+def num_derivative(X, h):
+    X_dot = np.zeros_like(X)
+    X_dot[1:-1] = (X[2:] - X[:-2]) / (2 * h)
+    X_dot[0] = (X[1] - X[0]) / h
+    X_dot[-1] = (X[-2] - X[-1]) / h
+    return X_dot
+
+
 def RHS2numpy(RHS, n_var):
     from sympy import symbols, Symbol, lambdify
 

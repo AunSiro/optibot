@@ -7,7 +7,7 @@ Created on Mon May 31 14:52:34 2021
 """
 
 from scipy.optimize import root
-from numpy import zeros, zeros_like, append, linspace, expand_dims, interp, array
+from numpy import zeros, append, linspace, expand_dims, interp, array
 from scipy.interpolate import CubicHermiteSpline as hermite
 from copy import copy
 
@@ -23,7 +23,7 @@ def is_iterable(x):
 def is2d(x):
     try:
         shape = x.shape
-        if len(shape) > 1:
+        if len(shape) == 2:
             return True
         else:
             return False
@@ -35,15 +35,7 @@ def vec_len(x):
     try:
         return len(x)
     except TypeError:
-        return max(x.shape)
-
-
-def num_derivative(X, h):
-    X_dot = zeros_like(X)
-    X_dot[1:-1] = (X[2:] - X[:-2]) / (2 * h)
-    X_dot[0] = (X[1] - X[0]) / h
-    X_dot[-1] = (X[-2] - X[-1]) / h
-    return X_dot
+        return x.shape[0]
 
 
 def interp_2d(t_array, old_t_array, Y):
