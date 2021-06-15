@@ -7,7 +7,7 @@ Created on Mon May 31 14:52:34 2021
 """
 
 from scipy.optimize import root
-from numpy import zeros, append, linspace, expand_dims, interp
+from numpy import zeros, append, linspace, expand_dims, interp, array
 from scipy.interpolate import CubicHermiteSpline as hermite
 from copy import copy
 
@@ -38,6 +38,15 @@ def vec_len(x):
         return max(x.shape)
 
 
+def interp_2d(t_array, old_t_array, Y):
+    new_Y_len = t_array.shape[0]
+    new_Y_width = Y.shape[-1]
+    new_Y = zeros([new_Y_len, new_Y_width])
+    for ii in range(new_Y_width):
+        new_Y[:, ii] = interp(t_array, old_t_array, Y[:, ii])
+    return new_Y
+
+
 def expand_F(F, mode="numpy"):
     """
     Expands a function F(x,u,params) that returns accelerations,
@@ -63,7 +72,7 @@ def expand_F(F, mode="numpy"):
     if not mode in ["numpy", "casadi"]:
         raise NameError(f"Unrecognized mode: {mode}")
     if mode == "numpy":
-        from numpy import concatenate, array
+        from numpy import concatenate
 
         def new_F(x, u, params):
             x = array(x)
@@ -462,7 +471,8 @@ def extend_array(x):
 
 def interpolated_array(X, U, F, h, t_array, params, scheme="hs_scipy"):
     N = t_array.size
-    new_X = zeros(N)
+    arr_width = X.shape[-1]
+    new_X = zeros([N, arr_width])
     if X.shape[0] == U.shape[0] + 1:
         U = extend_array(U)
     if X.shape[0] != U.shape[0]:
@@ -470,12 +480,22 @@ def interpolated_array(X, U, F, h, t_array, params, scheme="hs_scipy"):
     old_t_array = linspace(0, (X.shape[0] - 1) * h, X.shape[0])
     if t_array[-1] - old_t_array[-1] > h * 1e-9:
         raise ValueError("Proposed time array extends outside interpolation")
-    # print(Q.size, U.size, old_t_array.size, Q, U, old_t_array)
-    new_U = interp(t_array, old_t_array, U)
+
+    if len(U.shape) == 1:
+        new_U = interp(t_array, old_t_array, U)
+    elif len(U.shape) == 2:
+        new_U = interp_2d(t_array, old_t_array, U)
+    else:
+        raise ValueError(
+            f"U has {len(U.shape)} dimensions, values accepted are 1 and 2"
+        )
+
     if scheme == "hs_scipy":
         X_interp = hermite(old_t_array, X, F(X, U, params))
         new_X = X_interp(t_array)
     else:
         for ii in range(N):
-            new_X[ii] = newpoint(X, U, F, h, t_array[ii], params, scheme)
+            new_X[ii] = array(
+                newpoint(X, U, F, h, t_array[ii], params, scheme)
+            ).flatten()
     return new_X, new_U

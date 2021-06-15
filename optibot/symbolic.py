@@ -173,11 +173,6 @@ def lagr_to_RHS(lagr_eqs, output_msgs=True):
     if output_msgs:
         print("Simplifying result expressions")
     RHS = simplify(coeff_mat_inv @ (u_mat - c_mat))
-    # new_RHS = []
-    # for expr in RHS:
-    #     for jj in range(n_var):
-    #         expr = expr.subs(dynamicsymbols(f"q_{jj}"), symbols(f"q_{jj}"))
-    #     new_RHS.append(expr)
     return RHS
 
 
