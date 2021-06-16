@@ -165,8 +165,8 @@ def trapz_step(x, u, u_n, F, dt, params):
 
 def trapz_mod_opti_step(x_n, x, u, u_n, F, dt, params):
     dim = vec_len(x) // 2
-    f = F(x, u, params)[:dim]
-    f_n = F(x_n, u_n, params)[:dim]
+    f = F(x, u, params)[dim:]
+    f_n = F(x_n, u_n, params)[dim:]
     res = copy(x)
     res[dim:] = x[dim:] + dt / 2 * (f + f_n) - x_n[dim:]
     res[:dim] = x[:dim] + dt * x[dim:] + dt ** 2 / 6 * (f_n + 2 * f) - x_n[:dim]
@@ -196,8 +196,8 @@ def hs_step(x, u, u_n, F, dt, params):
 
 def hs_mod_opti_step(x_n, x, u, u_n, F, dt, params):
     dim = vec_len(x) // 2
-    f = F(x, u, params)[:dim]
-    f_n = F(x_n, u_n, params)[:dim]
+    f = F(x, u, params)[dim:]
+    f_n = F(x_n, u_n, params)[dim:]
     q = x[:dim]
     v = x[dim:]
     q_n = x_n[:dim]
@@ -208,7 +208,7 @@ def hs_mod_opti_step(x_n, x, u, u_n, F, dt, params):
     x_c = copy(x)
     x_c[:dim] = q_c
     x_c[dim:] = v_c
-    f_c = F(x_c, u_c, params)
+    f_c = F(x_c, u_c, params)[dim:]
     res = copy(x)
     res[dim:] = v + dt / 6 * (f + 4 * f_c + f_n) - v_n
     res[:dim] = q + dt * v + dt ** 2 / 6 * (f + 2 * f_c) - q_n
@@ -216,7 +216,8 @@ def hs_mod_opti_step(x_n, x, u, u_n, F, dt, params):
 
 
 def hs_mod_step(x, u, u_n, F, dt, params):
-    x_n = root(hs_mod_opti_step, x, (x, u, u_n, F, dt, params))
+    x_0 = euler_step(x, u, F, dt, params)
+    x_n = root(hs_mod_opti_step, x_0, (x, u, u_n, F, dt, params))
     return x_n.x
 
 
