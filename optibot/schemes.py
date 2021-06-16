@@ -69,6 +69,8 @@ def expand_F(F, mode="numpy"):
             x' = F(x, u, params)
 
     """
+    old_docstring = str(F.__doc__)
+    old_f_name = str(F.__name__)
     if not mode in ["numpy", "casadi"]:
         raise NameError(f"Unrecognized mode: {mode}")
     if mode == "numpy":
@@ -76,14 +78,33 @@ def expand_F(F, mode="numpy"):
 
         def new_F(x, u, params):
             x = array(x)
+            u = array(u)
+            axnum = len(x.shape) - 1
+            if axnum >= 2:
+                raise ValueError(
+                    f"Array X must have dimension 1 or 2, but has {len(x.shape)} instead"
+                )
+            if len(u.shape) >= 3:
+                raise ValueError(
+                    f"Array U must have dimension 1 or 2, but has {len(u.shape)} instead"
+                )
             a = F(x, u, params)
             dim = x.shape[-1] // 2
-            axnum = len(x.shape) - 1
             if axnum == 1:
                 v = x[:, dim:]
             else:
                 v = x[dim:]
-            res = concatenate((v, array(a)), axnum)
+            if is_iterable(a):
+                new_a = array(a)
+            else:
+                new_a = array([a,])
+            if len(new_a.shape) != len(v.shape):
+                if new_a.shape[0] == v.shape[0]:
+                    new_a = expand_dims(new_a, axis=1)
+                elif new_a.shape[-1] == v.shape[-1]:
+                    new_a = expand_dims(new_a, axis=0)
+            assert new_a.shape == v.shape
+            res = concatenate((v, new_a), axnum)
             return res
 
     elif mode == "casadi":
@@ -98,6 +119,18 @@ def expand_F(F, mode="numpy"):
             v = array(x)[:, dim:]
             res = horzcat(v, a)
             return res
+
+    new_docstring = f"""
+    This is an expanded version of function {old_f_name}.
+    This expanded function is designed to describe a dinamic sistem so that:
+        x' = F(x, u, params)
+    While the old function was:
+        v' = F(x, u, params),
+        q' = v
+    Old function documentation:
+    """
+    new_docstring += old_docstring
+    new_F.__doc__ = new_docstring
 
     return new_F
 

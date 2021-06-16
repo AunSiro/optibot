@@ -72,7 +72,12 @@ def test_interp_2d():
         (
             np.array([[1.0, 2.0], [3.0, 4.0]]),
             np.array([5.0, 6.0]),
-            np.array([[3.0, 4.0], [5.0, 6.0]]),
+            np.array([[2.0, 5.0], [4.0, 6.0]]),
+        ),
+        (
+            np.array([1.0, 2.0, 3.0, 4.0]),
+            np.array([5.0, 6.0]),
+            np.array([3.0, 4.0, 5.0, 6.0]),
         ),
         (
             np.array([[1.0, 2.0, 3.0, 4.0]]),
@@ -81,7 +86,7 @@ def test_interp_2d():
         ),
     ],
 )
-def test_expand_F(x_test, u_test, f_x_u):
+def test_expand_F_numpy(x_test, u_test, f_x_u):
     def F(x, u, params):
         return u
 
