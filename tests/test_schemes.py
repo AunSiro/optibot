@@ -47,11 +47,15 @@ def test_things_are_2D(maybe_2d, expected):
 @pytest.mark.parametrize(
     "array_like, expected_length",
     [
+        (1, 1),
+        (1.0, 1),
+        (np.array(1), 1),
         ([1, 2], 2),
         ((2.5, 45), 2),
         (np.array([1, 2]), 2),
         (cas.DM([1, 2]), 2),
         (np.array([[1, 2, 3], [2, 1, 3]]), 2),
+        (cas.DM([[1, 2, 3], [2, 1, 3]]), 2),
         ([[1, 2, 3], [2, 1, 3]], 2),
     ],
 )
@@ -66,6 +70,17 @@ def test_interp_2d():
     expected = np.array([[0.0, 0.0], [0.5, 0.5], [1.0, 1.0]])
     result = sch.interp_2d(t_array, old_t_array, Y)
     assert np.all(result == expected)
+
+
+@pytest.mark.parametrize(
+    "array_case, expected",
+    [
+        (np.array([1, 2]), np.array([1, 2, 2])),
+        (np.array([[1, 2], [3, 4]]), np.array([[1, 2], [3, 4], [3, 4]])),
+    ],
+)
+def test_extend_array(array_case, expected):
+    assert np.all(sch.extend_array(array_case) == expected)
 
 
 @pytest.mark.parametrize(
@@ -91,12 +106,38 @@ def test_interp_2d():
     ],
 )
 def test_expand_F_numpy(x_test, u_test, f_x_u):
-    def F(x, u, params):
-        return u
-
+    F = sch.expand_F(lambda x, u, params: u, mode="numpy")
     params = []
-    new_F = sch.expand_F(F, mode="numpy")
-    result = new_F(x_test, u_test, params)
+    result = F(x_test, u_test, params)
+    assert np.all(result == f_x_u)
+
+
+@pytest.mark.parametrize(
+    "x_test, u_test, f_x_u",
+    [
+        ([1.0, 2.0], 3.0, cas.DM([2.0, 3.0])),
+        (cas.DM([1.0, 2.0]), 3.0, cas.DM([2.0, 3.0])),
+        (
+            cas.DM([[1.0, 2.0], [3.0, 4.0]]),
+            cas.DM([5.0, 6.0]),
+            cas.DM([[2.0, 5.0], [4.0, 6.0]]),
+        ),
+        (
+            cas.DM([1.0, 2.0, 3.0, 4.0]),
+            cas.DM([5.0, 6.0]),
+            cas.DM([3.0, 4.0, 5.0, 6.0]),
+        ),
+        (
+            cas.DM([[1.0, 2.0, 3.0, 4.0]]),
+            cas.DM([5.0, 6.0]),
+            cas.DM([[3.0, 4.0, 5.0, 6.0]]),
+        ),
+    ],
+)
+def test_expand_F_casadi(x_test, u_test, f_x_u):
+    F = sch.expand_F(lambda x, u, params: u, mode="casadi")
+    params = []
+    result = F(x_test, u_test, params)
     assert np.all(result == f_x_u)
 
 
@@ -266,3 +307,175 @@ def test_hs_mod_step(x_0, u, u_n, expected_result):
     params = []
     result = sch.hs_mod_step(x_0, u, u_n, F, dt, params)
     assert np.all(np.abs(result - expected_result) < 0.0002)
+
+
+# --- Array Integrations ---
+
+
+def generate_array_integration_parameters(scheme):
+    x_0_opts = [
+        [0.0, 1.0],
+        [0.0, 1.0],
+        [[0.0, 1.0],],
+        [0.0, 0.0, 1.0, 1.0],
+        [0.0, 0.0, 1.0, 1.0],
+    ]
+    u_opts = [
+        1.0,
+        [0.0, 1.0],
+        [0.0, 1.0],
+        [0.0, 1.0],
+        [[0.0, 1.0], [2.0, 3.0]],
+    ]
+    results_euler = [
+        [[0.0, 1.0], [0.5, 1.5]],
+        [[0.0, 1.0], [0.5, 1.0], [1.0, 1.5]],
+        [[0.0, 1.0], [0.5, 1.0], [1.0, 1.5]],
+        [[0.0, 0.0, 1.0, 1.0], [0.5, 0.5, 1.0, 1.5]],
+        [[0.0, 0.0, 1.0, 1.0], [0.5, 0.5, 1.0, 1.5], [1.0, 1.25, 2.0, 3.0]],
+    ]
+    results_rk4 = [
+        [[0.0, 1.0,], [0.625, 1.5,],],
+        [[0.0, 1.0,], [0.5, 1.0,], [1.125, 1.5,],],
+        [[0.0, 1.0,], [0.5, 1.0,], [1.125, 1.5,],],
+        [[0.0, 0.0, 1.0, 1.0,], [0.5, 0.625, 1.0, 1.5,],],
+        [[0.0, 0.0, 1.0, 1.0,], [0.5, 0.625, 1.0, 1.5,], [1.25, 1.75, 2.0, 3.0,],],
+    ]
+    results_trapz = [
+        [[0.0, 1.0,], [0.625, 1.5,],],
+        [[0.0, 1.0,], [0.5625, 1.25,], [1.3125, 1.75,],],
+        [[0.0, 1.0,], [0.5625, 1.25,], [1.3125, 1.75,],],
+        [[0.0, 0.0, 1.0, 1.0,], [0.5, 0.625, 1.0, 1.5,],],
+        [[0.0, 0.0, 1.0, 1.0,], [0.625, 0.75, 1.5, 2.0,], [1.625, 2.125, 2.5, 3.5,],],
+    ]
+    results_trapz_mod = [
+        [[0.0, 1.0,], [0.625, 1.5,],],
+        [[0.0, 1.0,], [0.5416, 1.25,], [1.2916, 1.75,],],
+        [[0.0, 1.0,], [0.5416, 1.25,], [1.2916, 1.75,],],
+        [[0.0, 0.0, 1.0, 1.0,], [0.5, 0.625, 1.0, 1.5,],],
+        [
+            [0.0, 0.0, 1.0, 1.0,],
+            [0.5833, 0.7083, 1.5, 2.0,],
+            [1.5833, 2.0833, 2.5, 3.5,],
+        ],
+    ]
+    results_hs = [
+        [[0.0, 1.0,], [0.625, 1.5,],],
+        [[0.0, 1.0,], [0.5416, 1.25,], [1.2916, 1.75,],],
+        [[0.0, 1.0,], [0.5416, 1.25,], [1.2916, 1.75,],],
+        [[0.0, 0.0, 1.0, 1.0,], [0.5, 0.625, 1.0, 1.5,],],
+        [
+            [0.0, 0.0, 1.0, 1.0,],
+            [0.5833, 0.7083, 1.5, 2.0,],
+            [1.5833, 2.0833, 2.5, 3.5,],
+        ],
+    ]
+    results_hs_mod = [
+        [[0.0, 1.0,], [0.625, 1.5,],],
+        [[0.0, 1.0,], [0.5416, 1.25,], [1.2916, 1.75,],],
+        [[0.0, 1.0,], [0.5416, 1.25,], [1.2916, 1.75,],],
+        [[0.0, 0.0, 1.0, 1.0,], [0.5, 0.625, 1.0, 1.5,],],
+        [
+            [0.0, 0.0, 1.0, 1.0,],
+            [0.5833, 0.7083, 1.5, 2.0,],
+            [1.5833, 2.0833, 2.5, 3.5,],
+        ],
+    ]
+    if scheme == "euler":
+        return [
+            (x_0_opts[ii], u_opts[ii], np.array(results_euler[ii]))
+            for ii in range(len(x_0_opts))
+        ]
+    elif scheme == "rk4":
+        return [
+            (x_0_opts[ii], u_opts[ii], np.array(results_rk4[ii]))
+            for ii in range(len(x_0_opts))
+        ]
+    elif scheme == "trapz":
+        return [
+            (x_0_opts[ii], u_opts[ii], np.array(results_trapz[ii]))
+            for ii in range(len(x_0_opts))
+        ]
+    elif scheme == "trapz_mod":
+        return [
+            (x_0_opts[ii], u_opts[ii], np.array(results_trapz_mod[ii]))
+            for ii in range(len(x_0_opts))
+        ]
+    elif scheme == "hs":
+        return [
+            (x_0_opts[ii], u_opts[ii], np.array(results_hs[ii]))
+            for ii in range(len(x_0_opts))
+        ]
+    elif scheme == "hs_mod":
+        return [
+            (x_0_opts[ii], u_opts[ii], np.array(results_hs_mod[ii]))
+            for ii in range(len(x_0_opts))
+        ]
+    else:
+        raise ValueError(f"Unrecognized scheme: {scheme}")
+
+
+@pytest.mark.parametrize(
+    "x_0, u, expected_result", generate_array_integration_parameters("euler"),
+)
+def test_integrate_euler(x_0, u, expected_result):
+    F = sch.expand_F(lambda x, u, params: u)
+    dt = 0.5
+    params = []
+    result = sch.integrate_euler(x_0, u, F, dt, params)
+    assert np.all(result == expected_result)
+
+
+@pytest.mark.parametrize(
+    "x_0, u, expected_result", generate_array_integration_parameters("rk4"),
+)
+def test_integrate_rk4(x_0, u, expected_result):
+    F = sch.expand_F(lambda x, u, params: u)
+    dt = 0.5
+    params = []
+    result = sch.integrate_rk4(x_0, u, F, dt, params)
+    assert np.all(result == expected_result)
+
+
+@pytest.mark.parametrize(
+    "x_0, u, expected_result", generate_array_integration_parameters("trapz"),
+)
+def test_integrate_trapz(x_0, u, expected_result):
+    F = sch.expand_F(lambda x, u, params: u)
+    dt = 0.5
+    params = []
+    result = sch.integrate_trapz(x_0, u, F, dt, params)
+    assert np.all(result == expected_result)
+
+
+@pytest.mark.parametrize(
+    "x_0, u, expected_result", generate_array_integration_parameters("trapz_mod"),
+)
+def test_integrate_trapz_mod(x_0, u, expected_result):
+    F = sch.expand_F(lambda x, u, params: u)
+    dt = 0.5
+    params = []
+    result = sch.integrate_trapz_mod(x_0, u, F, dt, params)
+    assert np.all((result - expected_result) < 0.0002)
+
+
+@pytest.mark.parametrize(
+    "x_0, u, expected_result", generate_array_integration_parameters("hs"),
+)
+def test_integrate_hs(x_0, u, expected_result):
+    F = sch.expand_F(lambda x, u, params: u)
+    dt = 0.5
+    params = []
+    result = sch.integrate_hs(x_0, u, F, dt, params)
+    assert np.all((result - expected_result) < 0.0002)
+
+
+@pytest.mark.parametrize(
+    "x_0, u, expected_result", generate_array_integration_parameters("hs_mod"),
+)
+def test_integrate_hs_mod(x_0, u, expected_result):
+    F = sch.expand_F(lambda x, u, params: u)
+    dt = 0.5
+    params = []
+    result = sch.integrate_hs_mod(x_0, u, F, dt, params)
+    assert np.all((result - expected_result) < 0.0002)

@@ -10,6 +10,7 @@ from scipy.optimize import root
 from numpy import zeros, append, linspace, expand_dims, interp, array
 from scipy.interpolate import CubicHermiteSpline as hermite
 from copy import copy
+import functools
 
 
 def is_iterable(x):
@@ -34,10 +35,15 @@ def is2d(x):
 
 
 def vec_len(x):
+    if type(x) == int or type(x) == float:
+        return 1
     try:
         return len(x)
     except TypeError:
-        return x.shape[0]
+        if x.size == 1:
+            return 1
+        else:
+            return x.shape[0]
 
 
 def interp_2d(t_array, old_t_array, Y):
@@ -47,6 +53,11 @@ def interp_2d(t_array, old_t_array, Y):
     for ii in range(new_Y_width):
         new_Y[:, ii] = interp(t_array, old_t_array, Y[:, ii])
     return new_Y
+
+
+def extend_array(x):
+    apppendix = expand_dims(x[-1], axis=0)
+    return append(x, apppendix, 0)
 
 
 def expand_F(F, mode="numpy"):
@@ -110,16 +121,28 @@ def expand_F(F, mode="numpy"):
             return res
 
     elif mode == "casadi":
-        from casadi import horzcat
+        from casadi import horzcat, DM
 
         def new_F(x, u, params):
             a = F(x, u, params)
             x = horzcat(x)
+            x_transposed = False
             if x.shape[-1] == 1:
+                # As x must always contain at least one q and one v,
+                # it can never be a vertical vector of width 1,
+                # considering time as the vertical dimension.
                 x = x.T
+                x_transposed = True
+            if x.shape[0] == 1 and DM(a).shape[0] != 1:
+                a = a.T
             dim = x.shape[-1] // 2
             v = array(x)[:, dim:]
             res = horzcat(v, a)
+            if x_transposed and res.shape[0] == 1:
+                res = res.T
+                # If the input was x as a vertical array of
+                # width 1, we must return a result
+                # dimensionally consistend.
             return res
 
     new_docstring = f"""
@@ -176,7 +199,8 @@ def trapz_mod_opti_step(x_n, x, u, u_n, F, dt, params):
 
 
 def trapz_mod_step(x, u, u_n, F, dt, params):
-    x_n = root(trapz_mod_opti_step, x, (x, u, u_n, F, dt, params))
+    x_0 = euler_step(x, u, F, dt, params)
+    x_n = root(trapz_mod_opti_step, x_0, (x, u, u_n, F, dt, params))
     return x_n.x
 
 
@@ -224,8 +248,57 @@ def hs_mod_step(x, u, u_n, F, dt, params):
 
 
 # --- Integrations ---
+# These functions are expected to work with numpy arrays, and will
+# convert other formats for X and U into them
 
 
+def coherent_dimensions(func):
+    """
+    Adapts input variables to ensure that they are compatible
+    with functions of structure integrate_x(x_0, u, F, dt, params)
+
+    Parameters
+    ----------
+    func : Function
+        Integration function whose structure is F(x_0, u, F, dt, params).
+    -------
+    Function
+        The same function, but with additional comprobations
+        that the input variables are coherent.
+
+    """
+
+    @functools.wraps(func)
+    def wrapper_decorator(x_0, u, F, dt, params):
+        x_0 = array(x_0, dtype=float)
+        u = array(u, dtype=float)
+
+        # If u was a number, it will produce errors later
+        # while trying to iterate over it. We have to to convert it
+        # into a 1D array of lenght 1
+        if u.size == 1 and u.shape == ():
+            u = expand_dims(u, axis=0)
+
+        # x_0 is the initial state and must be 1D:
+        if not (len(x_0.shape) == 1 or (len(x_0.shape) == 2 and x_0.shape[0] == 1)):
+            raise ValueError(
+                f"x_0 must be a 1D array, but instead its shape is {x_0.shape}"
+            )
+        # If x_0 is a 2D array of one line, we have to convert it
+        # to a normal 1D array so that the integration is coherent.
+        if len(x_0.shape) == 2:
+            x_0 = x_0[0]
+        # If u is 1D but the problem has more than 1 q,
+        # it means that it corresponds to only one step
+        if len(u.shape) == 1 and x_0.shape[0] != 2:
+            u = expand_dims(u, axis=0)
+        value = func(x_0, u, F, dt, params)
+        return value
+
+    return wrapper_decorator
+
+
+@coherent_dimensions
 def integrate_euler(x_0, u, F, dt, params):
     x = [
         x_0,
@@ -233,9 +306,10 @@ def integrate_euler(x_0, u, F, dt, params):
     for ii in range(vec_len(u)):
         x_i = euler_step(x[-1], u[ii], F, dt, params)
         x.append(x_i)
-    return x
+    return array(x)
 
 
+@coherent_dimensions
 def integrate_rk4(x_0, u, F, dt, params):
     x = [
         x_0,
@@ -243,9 +317,10 @@ def integrate_rk4(x_0, u, F, dt, params):
     for ii in range(vec_len(u)):
         x_i = rk4_step(x[-1], u[ii], F, dt, params)
         x.append(x_i)
-    return x
+    return array(x)
 
 
+@coherent_dimensions
 def integrate_trapz(x_0, u, F, dt, params):
     x = [
         x_0,
@@ -255,9 +330,10 @@ def integrate_trapz(x_0, u, F, dt, params):
         x.append(x_i)
     x_i = trapz_step(x[-1], u[-1], u[-1], F, dt, params)
     x.append(x_i)
-    return x
+    return array(x)
 
 
+@coherent_dimensions
 def integrate_trapz_mod(x_0, u, F, dt, params):
     x = [
         x_0,
@@ -267,9 +343,10 @@ def integrate_trapz_mod(x_0, u, F, dt, params):
         x.append(x_i)
     x_i = trapz_mod_step(x[-1], u[-1], u[-1], F, dt, params)
     x.append(x_i)
-    return x
+    return array(x)
 
 
+@coherent_dimensions
 def integrate_hs(x_0, u, F, dt, params):
     x = [
         x_0,
@@ -279,9 +356,10 @@ def integrate_hs(x_0, u, F, dt, params):
         x.append(x_i)
     x_i = hs_step(x[-1], u[-1], u[-1], F, dt, params)
     x.append(x_i)
-    return x
+    return array(x)
 
 
+@coherent_dimensions
 def integrate_hs_mod(x_0, u, F, dt, params):
     x = [
         x_0,
@@ -291,7 +369,7 @@ def integrate_hs_mod(x_0, u, F, dt, params):
         x.append(x_i)
     x_i = hs_mod_step(x[-1], u[-1], u[-1], F, dt, params)
     x.append(x_i)
-    return x
+    return array(x)
 
 
 # --- Schemes as Restrictions ---
@@ -500,11 +578,6 @@ def newpoint(X, U, F, h, t, params, scheme):
         else:
             raise NameError(f"scheme {scheme} not recognized")
     return x_interp
-
-
-def extend_array(x):
-    apppendix = expand_dims(x[-1], axis=0)
-    return append(x, apppendix, 0)
 
 
 def interpolated_array(X, U, F, h, t_array, params, scheme="hs_scipy"):
