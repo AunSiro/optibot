@@ -18,6 +18,8 @@ def is_iterable(x):
         return True
     except TypeError:
         return False
+    except Exception:
+        return False
 
 
 def is2d(x):

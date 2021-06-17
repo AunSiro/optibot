@@ -8,6 +8,7 @@ Created on Tue Jun 15 16:15:30 2021
 import pytest
 
 import numpy as np
+import casadi as cas
 from optibot import schemes as sch
 
 
@@ -19,6 +20,7 @@ from optibot import schemes as sch
         (np.array([1, 2]), True),
         (3, False),
         (2.5, False),
+        (cas.DM([1, 2]), False),
     ],
 )
 def test_things_are_iterable(maybe_iterable, expected):
@@ -34,6 +36,7 @@ def test_things_are_iterable(maybe_iterable, expected):
         ((2.5, 45), False),
         (np.array([1, 2]), False),
         (np.array([[1, 2], [2, 1]]), True),
+        (cas.DM([[1, 2], [2, 1]]), True),
         (np.array([[[1, 2], [2, 1]], [[1, 2], [2, 1]]]), False),
     ],
 )
@@ -47,6 +50,7 @@ def test_things_are_2D(maybe_2d, expected):
         ([1, 2], 2),
         ((2.5, 45), 2),
         (np.array([1, 2]), 2),
+        (cas.DM([1, 2]), 2),
         (np.array([[1, 2, 3], [2, 1, 3]]), 2),
         ([[1, 2, 3], [2, 1, 3]], 2),
     ],
