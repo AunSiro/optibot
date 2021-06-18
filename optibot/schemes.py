@@ -7,7 +7,7 @@ Created on Mon May 31 14:52:34 2021
 """
 
 from scipy.optimize import root
-from numpy import zeros, append, linspace, expand_dims, interp, array
+from numpy import zeros, append, concatenate, linspace, expand_dims, interp, array
 from scipy.interpolate import CubicHermiteSpline as hermite
 from copy import copy
 import functools
@@ -87,7 +87,6 @@ def expand_F(F, mode="numpy"):
     if not mode in ["numpy", "casadi"]:
         raise NameError(f"Unrecognized mode: {mode}")
     if mode == "numpy":
-        from numpy import concatenate
 
         def new_F(x, u, params):
             x = array(x)
@@ -458,7 +457,7 @@ def trap_mod_interp(x, x_n, u, u_n, tau, F, h, params):
     f_n = F(x_n, u_n, params)[dim:]
     q_interp = q + v * tau + 1 / 2 * f * tau ** 2 + 1 / (6 * h) * tau ** 3 * (f_n - f)
     v_interp = v + tau * f + tau ** 2 / (2 * h) * (f_n - f)
-    return q_interp, v_interp
+    return concatenate([q_interp, v_interp])
 
 
 def trap_interp(x, x_n, u, u_n, tau, F, h, params):
@@ -471,7 +470,7 @@ def trap_interp(x, x_n, u, u_n, tau, F, h, params):
     f_n = F(x_n, u_n, params)[dim:]
     q_interp = q + v * tau + 1 / (2 * h) * tau ** 2 * (v_n - v)
     v_interp = v + f * tau + 1 / (2 * h) * tau ** 2 * (f_n - f)
-    return q_interp, v_interp
+    return concatenate([q_interp, v_interp])
 
 
 def hs_midpoint(x, x_n, u, u_n, tau, F, h, params):
@@ -484,7 +483,7 @@ def hs_midpoint(x, x_n, u, u_n, tau, F, h, params):
     f_n = F(x_n, u_n, params)[dim:]
     v_c = (v + v_n) / 2 + h / 8 * (f - f_n)
     q_c = (q + q_n) / 2 + h / 8 * (v - v_n)
-    return q_c, v_c
+    return concatenate([q_c, v_c])
 
 
 def hs_mod_midpoint(x, x_n, u, u_n, tau, F, h, params):
@@ -497,7 +496,7 @@ def hs_mod_midpoint(x, x_n, u, u_n, tau, F, h, params):
     f_n = F(x_n, u_n, params)[dim:]
     v_c = (v + v_n) / 2 + h / 8 * (f - f_n)
     q_c = (13 * q + 3 * q_n + 5 * v * h) / 16 + h ** 2 / 96 * (4 * f - f_n)
-    return q_c, v_c
+    return concatenate([q_c, v_c])
 
 
 def hs_interp(x, x_n, u, u_n, tau, F, h, params):
@@ -525,7 +524,7 @@ def hs_interp(x, x_n, u, u_n, tau, F, h, params):
         + 1 / 2 * (-3 * f + 4 * f_c - f_n) * tau ** 2 / h
         + 1 / 3 * (2 * f - 4 * f_c + 2 * f_n) * tau ** 3 / (h ** 2)
     )
-    return q_interp, v_interp
+    return concatenate([q_interp, v_interp])
 
 
 def hs_mod_interp(x, x_n, u, u_n, tau, F, h, params):
@@ -554,12 +553,14 @@ def hs_mod_interp(x, x_n, u, u_n, tau, F, h, params):
         + 1 / 2 * (-3 * f + 4 * f_c - f_n) * tau ** 2 / h
         + 1 / 3 * (2 * f - 4 * f_c + 2 * f_n) * tau ** 3 / (h ** 2)
     )
-    return q_interp, v_interp
+    return concatenate([q_interp, v_interp])
 
 
 def newpoint(X, U, F, h, t, params, scheme):
     n = int(t // h)
     tau = t % h
+    if (n + 1) > X.shape[0]:
+        raise ValueError(f"Value of time {t} detected outside interpolation limits")
     # print(f't = {t} , tau = {tau} , n = {n} , h = {h}')
     if abs(tau) < h * 1e-8:
         x_interp = X[n]

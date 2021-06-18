@@ -525,3 +525,58 @@ def test_schemes_as_restrictions(func_test, func_int, x_0, u):
     x_n = func_int(x_0, u, F, dt, params)[1]
     residue = func_test(x_0, x_n, u[0], u[1], F, dt, params)
     assert np.all(np.abs(residue) < 1e-12)
+
+
+# --- Interpolation steps ---
+
+
+def generate_interpolation_step_parameters():
+    funcs = [
+        sch.trap_interp,
+        sch.trap_mod_interp,
+        sch.hs_interp,
+        sch.hs_mod_interp,
+    ]
+    integrate_funcs = [
+        sch.integrate_trapz,
+        sch.integrate_trapz_mod,
+        sch.integrate_hs,
+        sch.integrate_hs_mod,
+    ]
+    x_0 = [np.array([0.0, 1.0]), np.array([0.0, 1.0, 2.0, 3.0])]
+    u = [np.array([3.0, 4.0]), np.array([[4.0, 5.0], [6.0, 7.0]])]
+
+    results = [
+        [np.array([0.4575, 1.99]), np.array([0.825, 2.17, 3.38, 4.68]),],
+        [np.array([0.444, 1.99]), np.array([0.798, 2.143, 3.38, 4.68]),],
+        [np.array([0.444, 1.99]), np.array([0.798, 2.143, 3.38, 4.68]),],
+        [np.array([0.444, 1.99]), np.array([0.798, 2.143, 3.38, 4.68]),],
+    ]
+
+    test_cases = []
+    for ii in range(len(funcs)):
+        fun = funcs[ii]
+        int_fun = integrate_funcs[ii]
+        for jj in range(len(x_0)):
+            x_0_case = x_0[jj]
+            u_case = u[jj]
+            test_cases.append((fun, int_fun, x_0_case, u_case, results[ii][jj]))
+    return test_cases
+
+
+@pytest.mark.parametrize(
+    "func_test, func_int, x_0, u, expected_result",
+    generate_interpolation_step_parameters(),
+)
+def test_interpolation_steps(func_test, func_int, x_0, u, expected_result):
+    F = sch.expand_F(lambda x, u, params: u)
+    dt = 0.5
+    tau = 0.3
+    params = []
+    x_n = func_int(x_0, u, F, dt, params)[1]
+    int_point = func_test(x_0, x_n, u[0], u[1], tau, F, dt, params)
+    assert np.all(np.abs(int_point - expected_result) < 1e-12)
+
+    tau_2 = dt
+    next_point = func_test(x_0, x_n, u[0], u[1], tau_2, F, dt, params)
+    assert np.all(np.abs(x_n - next_point) < 1e-12)
