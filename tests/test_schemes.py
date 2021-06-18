@@ -479,3 +479,49 @@ def test_integrate_hs_mod(x_0, u, expected_result):
     params = []
     result = sch.integrate_hs_mod(x_0, u, F, dt, params)
     assert np.all((result - expected_result) < 0.0002)
+
+
+# --- Schemes as Restrictions ---
+
+
+def generate_restrictions_parameters():
+    funcs = [
+        sch.euler_restr,
+        sch.rk4_restr,
+        sch.trapz_restr,
+        sch.trapz_mod_restr,
+        sch.hs_restr,
+        sch.hs_mod_restr,
+    ]
+    integrate_funcs = [
+        sch.integrate_euler,
+        sch.integrate_rk4,
+        sch.integrate_trapz,
+        sch.integrate_trapz_mod,
+        sch.integrate_hs,
+        sch.integrate_hs_mod,
+    ]
+    x_0 = [np.array([0.0, 1.0]), np.array([0.0, 1.0, 2.0, 3.0])]
+    u = [np.array([3.0, 4.0]), np.array([[4.0, 5.0], [6.0, 7.0]])]
+
+    test_cases = []
+    for ii in range(len(funcs)):
+        fun = funcs[ii]
+        int_fun = integrate_funcs[ii]
+        for jj in range(len(x_0)):
+            x_0_case = x_0[jj]
+            u_case = u[jj]
+            test_cases.append((fun, int_fun, x_0_case, u_case))
+    return test_cases
+
+
+@pytest.mark.parametrize(
+    "func_test, func_int, x_0, u", generate_restrictions_parameters(),
+)
+def test_schemes_as_restrictions(func_test, func_int, x_0, u):
+    F = sch.expand_F(lambda x, u, params: u)
+    dt = 0.5
+    params = []
+    x_n = func_int(x_0, u, F, dt, params)[1]
+    residue = func_test(x_0, x_n, u[0], u[1], F, dt, params)
+    assert np.all(np.abs(residue) < 1e-12)

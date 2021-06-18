@@ -415,10 +415,10 @@ def hs_restr(x, x_n, u, u_n, F, dt, params):
     x_c = (x + x_n) / 2 + dt / 8 * (f - f_n)
     u_c = (u + u_n) / 2
     f_c = F(x_c, u_c, params)
-    return x + (dt / 6 * (f + 4 * f_c + f_n) - x_n)
+    return x + dt / 6 * (f + 4 * f_c + f_n) - x_n
 
 
-def hs_mod_restr(x_n, x, u, u_n, F, dt, params):
+def hs_mod_restr(x, x_n, u, u_n, F, dt, params):
     dim = vec_len(x) // 2
     x_c = copy(x)
     res = copy(x)
@@ -440,8 +440,8 @@ def hs_mod_restr(x_n, x, u, u_n, F, dt, params):
     x_c[first_ind] = q_c
     x_c[last_ind] = v_c
     f_c = F(x_c, u_c, params)[last_ind]
-    res[last_ind] = v + dt / 6 * (f + 4 * f_c + f_n) - v_n
-    res[first_ind] = q + dt * v + dt ** 2 / 6 * (f + 2 * f_c) - q_n
+    res[last_ind] = v + dt / 6 * (f + 4 * f_c + f_n)
+    res[first_ind] = q + dt * v + dt ** 2 / 6 * (f + 2 * f_c)
     return x_n - res
 
 
