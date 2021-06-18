@@ -580,3 +580,57 @@ def test_interpolation_steps(func_test, func_int, x_0, u, expected_result):
     tau_2 = dt
     next_point = func_test(x_0, x_n, u[0], u[1], tau_2, F, dt, params)
     assert np.all(np.abs(x_n - next_point) < 1e-12)
+
+
+# --- Interpolation Arrays ---
+
+
+def generate_interpolation_array_parameters():
+    schemes = ["trapz", "trapz_mod", "hs", "hs_mod", "hs_scipy"]
+    integrate_funcs = [
+        sch.integrate_trapz,
+        sch.integrate_trapz_mod,
+        sch.integrate_hs,
+        sch.integrate_hs_mod,
+        sch.integrate_hs,
+    ]
+    x_0 = [np.array([0.0, 1.0]), np.array([0.0, 1.0, 2.0, 3.0])]
+    u = [np.array([3.0, 4.0]), np.array([[4.0, 5.0], [6.0, 7.0]])]
+
+    results = [
+        [np.array([1.7500, 3.75]), np.array([2.9375, 4.9687, 6.0, 7.75]),],
+        [np.array([1.7291, 3.75]), np.array([2.8958, 4.9270, 6.0, 7.75]),],
+        [np.array([1.7291, 3.75]), np.array([2.8958, 4.9270, 6.0, 7.75]),],
+        [np.array([1.7291, 3.75]), np.array([2.8958, 4.9270, 6.0, 7.75]),],
+        [np.array([1.7291, 3.75]), np.array([2.8958, 4.9270, 6.0, 7.75]),],
+    ]
+
+    test_cases = []
+    for ii in range(len(schemes)):
+        fun = schemes[ii]
+        int_fun = integrate_funcs[ii]
+        for jj in range(len(x_0)):
+            x_0_case = x_0[jj]
+            u_case = u[jj]
+            test_cases.append((fun, int_fun, x_0_case, u_case, results[ii][jj]))
+    return test_cases
+
+
+@pytest.mark.parametrize(
+    "scheme, func_int, x_0, U, expected_result",
+    generate_interpolation_array_parameters(),
+)
+def test_interpolation_arrays(scheme, func_int, x_0, U, expected_result):
+    F = sch.expand_F(lambda x, u, params: u)
+    h = 0.5
+    t_array = np.array([h, h * 1.5, (2 * h) - 1e-10])
+    params = []
+    X = func_int(x_0, U, F, h, params)
+    interp_X, interp_U = sch.interpolated_array(X, U, F, h, t_array, params, scheme)
+    assert np.all(np.abs(interp_X[0] - X[1]) < 1e-12)
+    assert np.all(np.abs(interp_X[1] - expected_result) < 1e-4)
+    if scheme == "hs_scipy":
+        epsilon = 1e-9
+    else:
+        epsilon = 1e-12
+    assert np.all(np.abs(interp_X[2] - X[2]) < epsilon)

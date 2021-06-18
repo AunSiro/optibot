@@ -591,7 +591,9 @@ def interpolated_array(X, U, F, h, t_array, params, scheme="hs_scipy"):
         raise ValueError("X and U have incompatible sizes")
     old_t_array = linspace(0, (X.shape[0] - 1) * h, X.shape[0])
     if t_array[-1] - old_t_array[-1] > h * 1e-9:
-        raise ValueError("Proposed time array extends outside interpolation")
+        raise ValueError(
+            f"Proposed time array{t_array[-1]} extends outside interpolation{old_t_array[-1]}"
+        )
 
     if len(U.shape) == 1:
         new_U = interp(t_array, old_t_array, U)
