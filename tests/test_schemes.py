@@ -153,6 +153,24 @@ def test_expand_F_keeps_doc(mode):
     assert F.__doc__ in new_F.__doc__
 
 
+def test_expand_F_unrecognized_mode():
+    with pytest.raises(NameError):
+        F = sch.expand_F(lambda x, u, params: u, mode="non existing mode")
+
+
+def test_expand_F_numpy_dimensions_error():
+    F = sch.expand_F(lambda x, u, params: u, mode="numpy")
+    params = []
+    with pytest.raises(ValueError):
+        x_test = np.array([[[1, 2], [1, 2]], [[1, 2], [1, 2]],])
+        u_test = np.array([1, 2])
+        F(x_test, u_test, params)
+    with pytest.raises(ValueError):
+        u_test = np.array([[[1, 2], [1, 2]], [[1, 2], [1, 2]],])
+        x_test = np.array([1, 2])
+        F(x_test, u_test, params)
+
+
 # --- Integration Steps ---
 
 
@@ -479,6 +497,16 @@ def test_integrate_hs_mod(x_0, u, expected_result):
     params = []
     result = sch.integrate_hs_mod(x_0, u, F, dt, params)
     assert np.all((result - expected_result) < 0.0002)
+
+
+def test_integration_wrapper_catches_wrong_dimension_of_x_0():
+    F = sch.expand_F(lambda x, u, params: u, mode="numpy")
+    params = []
+    dt = 0.5
+    x_0 = np.array([[1, 2], [1, 2]])
+    u = np.array([1, 2])
+    with pytest.raises(ValueError):
+        sch.integrate_euler(x_0, u, F, dt, params)
 
 
 # --- Schemes as Restrictions ---
