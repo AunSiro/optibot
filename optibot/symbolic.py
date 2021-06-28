@@ -26,6 +26,7 @@ from sympy import (
 )
 from sympy.physics.mechanics import dynamicsymbols
 from sympy.functions import sign
+from sympy.physics.mechanics import LagrangesMethod
 
 
 def get_str(x):
@@ -174,6 +175,123 @@ def lagr_to_RHS(lagr_eqs, output_msgs=True):
         print("Simplifying result expressions")
     RHS = simplify(coeff_mat_inv @ (u_mat - c_mat))
     return RHS
+
+
+class SimpLagrangesMethod:
+    def __init__(
+        self,
+        Lagrangian,
+        qs,
+        forcelist=None,
+        bodies=None,
+        frame=None,
+        hol_coneqs=None,
+        nonhol_coneqs=None,
+        simplif=True,
+        print_status=True,
+    ):
+
+        self.print_status = print_status
+        self.LM = LagrangesMethod(
+            Lagrangian, qs, forcelist, bodies, frame, hol_coneqs, nonhol_coneqs
+        )
+        if print_status:
+            print("Generating Lagrange Equations")
+        self.LM.form_lagranges_equations()
+
+        n = len(qs)
+        t = symbols("t")
+        self.M = self.LM.mass_matrix[:, :n]
+        self.Q = self.LM.forcing
+        self.q_dot = self.LM.q.diff(t)
+        self.forcelist = forcelist
+        self.coneqs = self.LM.coneqs
+
+        # print(self.coneqs,len(self.coneqs))
+        if len(self.coneqs) > 0:
+            m = len(self.coneqs)
+            n_ind = n - m
+
+            self.M = self.LM.mass_matrix[:, :n]
+            self.M_in = self.M[:n_ind, :n_ind]
+            self.M_de = self.M[n_ind:, n_ind:]
+
+            self.phi_q = self.LM.lam_coeffs
+            self.phi_q_in = self.phi_q[:, :n_ind]
+            self.phi_q_de = self.phi_q[:, n_ind:]
+
+            self.Q_in = Matrix(self.Q[:n_ind])
+            self.Q_de = Matrix(self.Q[n_ind:])
+
+            self.q_dot_in = Matrix(self.q_dot[:n_ind])
+
+            if print_status:
+                print("Generating and simplifiying Phi_q_de_inv")
+            self.phi_q_de_inv = simplify(self.phi_q_de.pinv())
+            if print_status:
+                print("Generating and simplifiying R")
+            self.R = simplify(-self.phi_q_de_inv @ self.phi_q_in)
+            self.R_dot = self.R.diff(t)
+            self.q_dot_de = self.R @ self.q_dot_in
+            if print_status:
+                print("Generating and simplifiying H")
+            self.H = simplify(self.M_in + self.R.T @ self.M_de @ self.R)
+            if print_status:
+                print("Generating and simplifiying K")
+            self.K = simplify(self.R.T @ self.M_de @ self.R_dot)
+            if print_status:
+                print("Generating and simplifiying Fa")
+            self.Fa = simplify(self.Q_in + self.R.T @ self.Q_de)
+            if print_status:
+                print("Generating and simplifiying reduced q_dot_dot")
+            self.q_dotdot_in_expr = simplify(
+                self.H.pinv() @ (self.Fa - self.K @ self.q_dot_in)
+            )
+            if print_status:
+                print("Reduced model completed")
+            self.RHS_reduced = Matrix(list(self.q_dot_in) + list(self.q_dotdot_in_expr))
+        else:
+            if print_status:
+                print("Generating and simplifiying reduced q_dot_dot")
+            self.q_dotdot_expr = simplify(self.M.pinv() @ self.Q)
+            if print_status:
+                print("Reduced model completed")
+            self.RHS = Matrix(list(self.q_dot) + list(self.q_dotdot_expr))
+
+    def calculate_RHS(self):
+        if not hasattr(self, "RHS"):
+            if self.print_status:
+                print("Generating and simplifiying Right Hand Side")
+            self.q_dotdot_de_expr = simplify(
+                self.R_dot @ self.q_dot_in + self.R @ self.q_dotdot_in_expr
+            )
+            self.RHS = Matrix(
+                list(self.q_dot)
+                + list(self.q_dotdot_in_expr)
+                + list(self.q_dotdot_de_expr)
+            )
+        return self.RHS
+
+    def calculate_lambda_vec(self):
+        if not hasattr(self, "lambda_vec"):
+            if len(self.coneqs) == 0:
+                self.lambda_vec = []
+            else:
+                if self.print_status:
+                    print("Generating and simplifiying Lambdas vector")
+                self.lambda_vec = simplify(
+                    self.phi_q_de_inv @ (self.Q_de - self.M_de @ self.q_dotdot_de_expr)
+                )
+        return self.lambda_vec
+
+    def calculate_RHS_full(self):
+        if not hasattr(self, "RHS_full"):
+            if not hasattr(self, "RHS"):
+                self.calculate_RHS()
+            if not hasattr(self, "lambda_vec"):
+                self.calculate_lambda_vec()
+            self.RHS_full = Matrix(list(self.RHS) + list(self.lambda_vec))
+        return self.RHS_full
 
 
 def print_funcs_RHS(RHS, n_var, flavour="numpy"):
