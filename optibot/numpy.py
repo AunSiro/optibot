@@ -53,40 +53,24 @@ def num_derivative(X, h):
     return X_dot
 
 
-def RHS2numpy(RHS, n_var):
-    from sympy import symbols, Symbol, lambdify
+def RHS2numpy(
+    RHS, q_vars, u_vars=None,
+):
+    from sympy import lambdify
+    from .symbolic import find_arguments, standard_notation, diff_to_symb_expr
 
     RHS = list(RHS)
-    q_args = []
-    v_args = []
-    u_args = []
-    param_list = []
-    args = []
-    funcs = []
-    for jj in range(n_var):
-        q = symbols(f"q_{jj}")
-        q_args.append(q)
-        v = symbols(f"v_{jj}")
-        v_args.append(v)
-        u = symbols(f"u_{jj}")
-        u_args.append(u)
-        args += [q, v, u]
+    RHS = [standard_notation(diff_to_symb_expr(expr)) for expr in RHS]
+    arguments = find_arguments(RHS, q_vars, u_vars)
+    q_args, v_args, x_args_found, u_args, u_args_found, params = arguments
     x_args = q_args + v_args
-    for ii in range(len(RHS)):
-        expr = RHS[ii]
-        var_set = expr.atoms(Symbol)
-        for symb in var_set:
-            if not symb in args:
-                if not symb in param_list:
-                    param_list.append(symb)
-        funcs.append(expr)
-    param_list = sorted(param_list, key=get_str)
-    funcs = v_args + funcs
-    all_vars = x_args + u_args + param_list
+
+    funcs = v_args + RHS
+    all_vars = x_args + u_args_found + params
     msg = "Function Arguments:\n"
     msg += f"\tx: {x_args}\n"
-    msg += f"\tu: {u_args}\n"
-    msg += f"\tparams: {param_list}\n"
+    msg += f"\tu: {u_args_found}\n"
+    msg += f"\tparams: {params}\n"
     print(msg)
     np_funcs = []
     for function in funcs:

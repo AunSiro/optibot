@@ -369,42 +369,14 @@ class SimpLagrangesMethod:
         return self.RHS_full
 
 
-def print_funcs_RHS(RHS, q_vars, u_vars=None, flavour="numpy"):
-    """
-    Prints the Right Hand Side of the control ecuations, formatted
-    to be used as a python function to solve a system like:
-        x' = F(x, u, params)
+def find_arguments(expr_list, q_vars, u_vars=None):
 
-    Parameters
-    ----------
-    RHS : Matrix or list of symbolic expressions
-        
-    q_vars : int or list of symbols
-        Number of q variables or list of q variables as symbols.
-        If int, will search variables of form q_i
-        
-    u_vars : None or list of symbols
-        Number of u variables or list of q variables as symbols.
-        If None, will search variables of form u_i
-    
-    flavour : str in ["numpy", "casadi"], default = "numpy"
-        experimental feature, converts common functions like sin(x)
-        to np.sin(x) or cas.sin(x) respectively
-
-    Returns
-    -------
-    string
-        when outputted by print(), can be copypasted to define a function
-        associated with RHS: x' = F(x, u, params)
-
-    """
-    RHS = list(RHS)
-    RHS = [standard_notation(diff_to_symb_expr(expr)) for expr in RHS]
-    max_n_var = max([len(expr.atoms(Symbol)) for expr in RHS])
+    expr_list = list(expr_list)
+    expr_list = [standard_notation(diff_to_symb_expr(expr)) for expr in expr_list]
+    max_n_var = max([len(expr.atoms(Symbol)) for expr in expr_list])
     u_args = []
     params = []
     args = []
-    funcs = []
     u_args_found = []
     x_args_found = []
 
@@ -437,8 +409,8 @@ def print_funcs_RHS(RHS, q_vars, u_vars=None, flavour="numpy"):
 
     x_args = q_args + v_args
     args = x_args + u_args
-    for ii in range(len(RHS)):
-        expr = RHS[ii]
+    for ii in range(len(expr_list)):
+        expr = expr_list[ii]
         var_set = expr.atoms(Symbol)
         for symb in var_set:
             if not symb in args:
@@ -450,19 +422,56 @@ def print_funcs_RHS(RHS, q_vars, u_vars=None, flavour="numpy"):
             elif symb in x_args:
                 if not symb in x_args_found:
                     x_args_found.append(symb)
-        funcs.append(expr)
 
     params = sorted(params, key=get_str)
     if u_vars is None:
         u_args_found = sorted(u_args_found, key=get_str)
     else:
         u_args_found = u_vars
+
+    return q_args, v_args, x_args_found, u_args, u_args_found, params
+
+
+def print_funcs_RHS(RHS, q_vars, u_vars=None, flavour="numpy"):
+    """
+    Prints the Right Hand Side of the control ecuations, formatted
+    to be used as a python function to solve a system like:
+        x' = F(x, u, params)
+
+    Parameters
+    ----------
+    RHS : Matrix or list of symbolic expressions
+        
+    q_vars : int or list of symbols
+        Number of q variables or list of q variables as symbols.
+        If int, will search variables of form q_i
+        
+    u_vars : None or list of symbols
+        Number of u variables or list of q variables as symbols.
+        If None, will search variables of form u_i
+    
+    flavour : str in ["numpy", "casadi"], default = "numpy"
+        experimental feature, converts common functions like sin(x)
+        to np.sin(x) or cas.sin(x) respectively
+
+    Returns
+    -------
+    string
+        when outputted by print(), can be copypasted to define a function
+        associated with RHS: x' = F(x, u, params)
+
+    """
+    RHS = list(RHS)
+    RHS = [standard_notation(diff_to_symb_expr(expr)) for expr in RHS]
+    arguments = find_arguments(RHS, q_vars, u_vars)
+    q_args, v_args, x_args_found, u_args, u_args_found, params = arguments
+    x_args = q_args + v_args
     msg = "def F(x, u, params):\n"
     msg += f"    {x_args.__str__()[1:-1]} = unpack(x)\n"
     msg += f"    {u_args_found.__str__()[1:-1]} = unpack(u)\n"
     msg += f"    {params.__str__()[1:-1]} = params\n"
     msg += f"    result = [{v_args.__str__()[1:-1]},]\n"
-    for expr in funcs:
+    for expr in RHS:
         msg += "    result.append(" + expr.__str__() + ")\n"
     msg += "\n    return result\n"
 
@@ -470,15 +479,18 @@ def print_funcs_RHS(RHS, q_vars, u_vars=None, flavour="numpy"):
     return msg
 
 
-def print_funcs(expr_list, n_var=0, flavour="numpy"):
+def print_funcs(expr_list, q_vars=0, flavour="numpy"):
     """
-    Prints the given expression list or matrix as a function
+    Prints the given expression list or matrix as a function of x-variables,
+    u-variables and parameters. X-variables are either the dynamic symbols
+    of q_vars and their derivatives, or variables of the form q_i or v_i 
+    detected in the expressions up until i = q_vars if q_vars is an integer.
 
     Parameters
     ----------
     expr_list : Matrix or list of Sympy symbolic expressions
         
-    n_var : int or list of symbols, default = 0
+    q_vars : int or list of symbols, default = 0
         Number of q variables or list of q variables as symbols.
         If int, will search variables of form q_i and qi
         If set to 0, all detected variables will be considered parameters
@@ -496,55 +508,9 @@ def print_funcs(expr_list, n_var=0, flavour="numpy"):
     """
     expr_list = list(expr_list)
     expr_list = [standard_notation(diff_to_symb_expr(expr)) for expr in expr_list]
-    max_n_var = max([len(expr.atoms(Symbol)) for expr in expr_list])
-    q_args = []
-    v_args = []
-    u_args = []
-    u_args_found = []
-    x_args_found = []
-    params = []
-    args = []
-    funcs = []
-    if type(n_var) == int:
-        q_args = []
-        v_args = []
-        for jj in range(n_var):
-            q = symbols(f"q_{jj}")
-            q_args.append(q)
-            v = symbols(f"v_{jj}")
-            v_args.append(v)
-    elif type(n_var) == list:
-        q_args = [diff_to_symb(var) for var in n_var]
-        v_args = [diff_to_symb(var.diff()) for var in n_var]
-    else:
-        raise TypeError(
-            "data type not undersood for q_vars, must be an integer or list of symbols"
-        )
-
-    for jj in range(max_n_var):
-        u = symbols(f"u_{jj}")
-        u_args.append(u)
-
+    arguments = find_arguments(expr_list, q_vars)
+    q_args, v_args, x_args_found, u_args, u_args_found, params = arguments
     x_args = q_args + v_args
-    args = x_args + u_args
-
-    for ii in range(len(expr_list)):
-        expr = expr_list[ii]
-        var_set = expr.atoms(Symbol)
-        for symb in var_set:
-            if not symb in args:
-                if not symb in params:
-                    params.append(symb)
-            elif symb in u_args:
-                if not symb in u_args_found:
-                    u_args_found.append(symb)
-            elif symb in x_args:
-                if not symb in x_args_found:
-                    x_args_found.append(symb)
-        funcs.append(expr)
-
-    params = sorted(params, key=get_str)
-    u_args_found = sorted(u_args_found, key=get_str)
 
     msg = "def F("
     if len(x_args_found) > 0:
@@ -560,11 +526,11 @@ def print_funcs(expr_list, n_var=0, flavour="numpy"):
         msg += f"    {u_args_found.__str__()[1:-1]} = unpack(u)\n"
     if len(params) > 0:
         msg += f"    {params.__str__()[1:-1]} = params\n"
-    if len(funcs) == 1:
-        msg += "    result = " + expr.__str__() + "\n"
+    if len(expr_list) == 1:
+        msg += "    result = " + expr_list[0].__str__() + "\n"
     else:
         msg += "    result = []\n"
-        for expr in funcs:
+        for expr in expr_list:
             msg += "    result.append(" + expr.__str__() + ")\n"
     msg += "\n    return result\n"
 

@@ -62,46 +62,29 @@ def symlist2cas(symlist):
     return caslist
 
 
-def RHS2casF(RHS, n_var):
-    from sympy import symbols, Symbol
+def RHS2casF(
+    RHS, q_vars, u_vars=None,
+):
+    from .symbolic import find_arguments, standard_notation, diff_to_symb_expr
 
     RHS = list(RHS)
-    q_args = []
-    v_args = []
-    u_args = []
-    params = []
-    args = []
-    funcs = []
-    for jj in range(n_var):
-        q = symbols(f"q_{jj}")
-        q_args.append(q)
-        v = symbols(f"v_{jj}")
-        v_args.append(v)
-        u = symbols(f"u_{jj}")
-        u_args.append(u)
-        args += [q, v, u]
+    RHS = [standard_notation(diff_to_symb_expr(expr)) for expr in RHS]
+    arguments = find_arguments(RHS, q_vars, u_vars)
+    q_args, v_args, x_args_found, u_args, u_args_found, params = arguments
     x_args = q_args + v_args
-    for ii in range(len(RHS)):
-        expr = RHS[ii]
-        var_set = expr.atoms(Symbol)
-        for symb in var_set:
-            if not symb in args:
-                if not symb in params:
-                    params.append(symb)
-        funcs.append(expr)
-    funcs = v_args + funcs
-    params = sorted(params, key=get_str)
-    all_vars = x_args + u_args + params
+
+    funcs = v_args + RHS
+    all_vars = x_args + u_args_found + params
     msg = "Function Arguments:\n"
     msg += f"\tx: {x_args}\n"
-    msg += f"\tu: {u_args}\n"
+    msg += f"\tu: {u_args_found}\n"
     msg += f"\tparams: {params}\n"
     print(msg)
     cas_x_args = cas.MX.sym("x", len(x_args))
-    cas_u_args = cas.MX.sym("u", len(u_args))
+    cas_u_args = cas.MX.sym("u", len(u_args_found))
     cas_params = cas.MX.sym("p", len(params))
-    cas_all_vars = [cas_x_args[ii] for ii in range(n_var * 2)]
-    cas_all_vars += [cas_u_args[ii] for ii in range(n_var)]
+    cas_all_vars = [cas_x_args[ii] for ii in range(len(x_args))]
+    cas_all_vars += [cas_u_args[ii] for ii in range(len(u_args_found))]
     cas_all_vars += [cas_params[ii] for ii in range(len(params))]
     cas_funcs = []
     for function in funcs:
@@ -125,7 +108,7 @@ def unpack(arr):
     return res
 
 
-def restriction2casadi(F_scheme, F, n_vars, n_params):
+def restriction2casadi(F_scheme, F, n_vars, n_u, n_params):
     """
     Converts a restriction funtion F to a casadi function that can be
     more efficiently used in casadi
@@ -137,7 +120,10 @@ def restriction2casadi(F_scheme, F, n_vars, n_params):
     F : Function of the form F(x, u, p)
         Physics function that describes the system
     n_vars : int
-        Number of q variables or coordinates in the problem
+        Number of q variables or coordinates in the problem, x variables
+        will be then twice this amount as they include velocities.
+    n_u : int
+        Number of u variables or actions in the problem
     n_params : int
         Number of parameters in the problem
 
@@ -150,8 +136,8 @@ def restriction2casadi(F_scheme, F, n_vars, n_params):
     """
     x = cas.MX.sym("x", 2 * n_vars).T
     x_n = cas.MX.sym("x_n", 2 * n_vars).T
-    u = cas.MX.sym("u", n_vars).T
-    u_n = cas.MX.sym("u_n", n_vars).T
+    u = cas.MX.sym("u", n_u).T
+    u_n = cas.MX.sym("u_n", n_u).T
     p = cas.MX.sym("p", n_params)
     dt = cas.MX.sym("dt")
     result = F_scheme(x, x_n, u, u_n, F, dt, p)
