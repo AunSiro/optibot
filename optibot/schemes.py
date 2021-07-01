@@ -43,7 +43,10 @@ def vec_len(x):
         if x.size == 1:
             return 1
         else:
-            return x.shape[0]
+            if x.shape[0] == 1 and len(x.shape) == 2:
+                return x.shape[1]
+            else:
+                return x.shape[0]
 
 
 def interp_2d(t_array, old_t_array, Y):

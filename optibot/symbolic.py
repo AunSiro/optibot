@@ -302,7 +302,7 @@ class SimpLagrangesMethod:
 
             if print_status:
                 print("Generating and simplifiying Phi_q_de_inv")
-            self.phi_q_de_inv = simplify(self.phi_q_de.pinv())
+            self.phi_q_de_inv = simplify(self.phi_q_de.inv())
             if print_status:
                 print("Generating and simplifiying R")
             self.R = simplify(-self.phi_q_de_inv @ self.phi_q_in)
@@ -320,7 +320,7 @@ class SimpLagrangesMethod:
             if print_status:
                 print("Generating and simplifiying reduced q_dot_dot")
             self.q_dotdot_in_expr = simplify(
-                self.H.pinv() @ (self.Fa - self.K @ self.q_dot_in)
+                self.H.inv() @ (self.Fa - self.K @ self.q_dot_in)
             )
             if print_status:
                 print("Reduced model completed")
@@ -328,9 +328,9 @@ class SimpLagrangesMethod:
         else:
             if print_status:
                 print("Generating and simplifiying reduced q_dot_dot")
-            self.q_dotdot_expr = simplify(self.M.pinv() @ self.Q)
+            self.q_dotdot_expr = simplify(self.M.inv() @ self.Q)
             if print_status:
-                print("Reduced model completed")
+                print("Model completed")
             self.RHS = Matrix(list(self.q_dot) + list(self.q_dotdot_expr))
 
     def calculate_RHS(self):

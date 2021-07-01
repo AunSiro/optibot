@@ -134,12 +134,12 @@ def restriction2casadi(F_scheme, F, n_vars, n_u, n_params):
         Restriction function that each step has to be equal to zero
 
     """
-    x = cas.MX.sym("x", 2 * n_vars).T
-    x_n = cas.MX.sym("x_n", 2 * n_vars).T
-    u = cas.MX.sym("u", n_u).T
-    u_n = cas.MX.sym("u_n", n_u).T
-    p = cas.MX.sym("p", n_params)
-    dt = cas.MX.sym("dt")
+    x = cas.SX.sym("x", 2 * n_vars).T
+    x_n = cas.SX.sym("x_n", 2 * n_vars).T
+    u = cas.SX.sym("u", n_u).T
+    u_n = cas.SX.sym("u_n", n_u).T
+    p = cas.SX.sym("p", n_params)
+    dt = cas.SX.sym("dt")
     result = F_scheme(x, x_n, u, u_n, F, dt, p)
     return cas.Function(
         "Restriction",
