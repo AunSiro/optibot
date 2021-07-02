@@ -28,7 +28,7 @@ from sympy import (
 )
 from sympy.physics.mechanics import dynamicsymbols
 from sympy.functions import sign
-from sympy.physics.mechanics import LagrangesMethod
+from sympy.physics.mechanics import LagrangesMethod, find_dynamicsymbols
 
 
 def get_str(x):
@@ -49,10 +49,20 @@ def deriv_base(symb):
     return symb
 
 
+def find_dyn_dependencies(expr):
+    sym_list = find_dynamicsymbols(expr)
+    sym_base_list = []
+    for sym in sym_list:
+        base = deriv_base(sym)
+        if not base in sym_base_list:
+            sym_base_list.append(base)
+    return sym_base_list
+
+
 def sorted_dynamic_symbols(expr):
     """
-    In a given expression, finds dynamic symbols, understanding them as either
-    functions that only depend on t or derivatives of such functions.
+    In a given expression, finds dynamic symbols, and returns them in a
+    list ordered from higher to lower derivation order.
 
     Parameters
     ----------
@@ -62,20 +72,12 @@ def sorted_dynamic_symbols(expr):
     Returns
     -------
     dyn_vars : list
-        List of found dynamic symbols, ordered from biggest to smallest
+        List of found dynamic symbols, ordered from higher to lower
         derivation order
 
     """
-    t = symbols("t")
-    dyn_vars = []
-    func_set = expr.atoms(Function)
-    deriv_set = expr.atoms(Derivative)
-    for func in func_set:
-        if func.args == (t,):
-            dyn_vars.append(func)
-    for deriv in deriv_set:
-        if deriv_base(deriv).args == (t,):
-            dyn_vars.append(deriv)
+
+    dyn_vars = find_dynamicsymbols(expr)
     dyn_vars = sorted(dyn_vars, key=derivative_level, reverse=True)
     return dyn_vars
 
