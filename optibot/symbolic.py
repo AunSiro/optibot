@@ -254,7 +254,7 @@ def lagr_to_RHS(lagr_eqs, output_msgs=True):
     return RHS
 
 
-class SimpLagrangesMethod:
+class SimpLagrangesMethod(LagrangesMethod):
     def __init__(
         self,
         Lagrangian,
@@ -265,35 +265,79 @@ class SimpLagrangesMethod:
         hol_coneqs=None,
         nonhol_coneqs=None,
         simplif=True,
-        print_status=True,
+        verbose=True,
     ):
-
-        self.print_status = print_status
-        self.LM = LagrangesMethod(
-            Lagrangian, qs, forcelist, bodies, frame, hol_coneqs, nonhol_coneqs
+        super().__init__(
+            Lagrangian, qs, forcelist, bodies, frame, hol_coneqs, nonhol_coneqs,
         )
-        if print_status:
-            print("Generating Lagrange Equations")
-        self.LM.form_lagranges_equations()
+        self._verbose = verbose
+        self._simplif = simplif
+        self._rhs = None
+        self._rhs_reduced = None
+        self._rhs_full = None
+        self.R = None
+        self._lambda_vec = None
 
-        n = len(qs)
-        t = symbols("t")
-        self.M = self.LM.mass_matrix[:, :n]
-        self.Q = self.LM.forcing
-        self.q_dot = self.LM.q.diff(t)
-        self.forcelist = forcelist
-        self.coneqs = self.LM.coneqs
+    def _simplyprint(self, expr, verbose=True, simplif=True, name=""):
+        if simplif:
+            if verbose:
+                print("simplifying " + name)
+            return simplify(expr)
+        else:
+            return expr
+
+    def _invsimplyprint(self, expr, verbose=True, simplif=True, name=""):
+        if verbose:
+            print("Generating " + name)
+        expr = expr.inv()
+        return self._simplyprint(expr, verbose, simplif, name)
+
+    @property
+    def mass_matrix(self):
+        """Returns the mass matrix.
+        Explanation
+        ===========
+        If the system is described by 'n' generalized coordinates
+        then an n X n matrix is returned.
+        """
+
+        if self.eom is None:
+            raise ValueError("Need to compute the equations of motion first")
+        return self._m_d
+
+    @property
+    def rhs(self):
+        """Returns equations that can be solved numerically.
+        Parameters
+        ==========
+        
+        """
+        if self.eom is None:
+            raise ValueError("Need to compute the equations of motion first")
+        if not self._rhs is None:
+            return self._rhs
+
+        n = len(self.q)
+        t = dynamicsymbols._t
+        M = self._m_d
+        self.Q = self.forcing
+        self.q_dot = self._qdots
+        coneqs = self.coneqs
+        _invsimplyprint = self._invsimplyprint
+        _simplyprint = self._simplyprint
+        verbose = self._verbose
+        simplif = self._simplif
 
         # print(self.coneqs,len(self.coneqs))
-        if len(self.coneqs) > 0:
-            m = len(self.coneqs)
+        if len(coneqs) > 0:
+            m = len(coneqs)
             n_ind = n - m
 
-            self.M = self.LM.mass_matrix[:, :n]
-            self.M_in = self.M[:n_ind, :n_ind]
-            self.M_de = self.M[n_ind:, n_ind:]
+            self.M_in = M[:n_ind, :n_ind]
+            self.M_de = M[n_ind:, n_ind:]
+            self.M_con = M[:n_ind, n_ind:]
 
-            self.phi_q = self.LM.lam_coeffs
+            self.phi_q = self.lam_coeffs
             self.phi_q_in = self.phi_q[:, :n_ind]
             self.phi_q_de = self.phi_q[:, n_ind:]
 
@@ -302,73 +346,121 @@ class SimpLagrangesMethod:
 
             self.q_dot_in = Matrix(self.q_dot[:n_ind])
 
-            if print_status:
-                print("Generating and simplifiying Phi_q_de_inv")
-            self.phi_q_de_inv = simplify(self.phi_q_de.inv())
-            if print_status:
-                print("Generating and simplifiying R")
-            self.R = simplify(-self.phi_q_de_inv @ self.phi_q_in)
+            self.phi_q_de_inv = _invsimplyprint(
+                self.phi_q_de, verbose, simplif, name="Phi_q_de_inv"
+            )
+
+            self.R = _simplyprint(
+                -self.phi_q_de_inv @ self.phi_q_in, verbose, simplif, name="R"
+            )
             self.R_dot = self.R.diff(t)
             self.q_dot_de = self.R @ self.q_dot_in
-            if print_status:
-                print("Generating and simplifiying H")
-            self.H = simplify(self.M_in + self.R.T @ self.M_de @ self.R)
-            if print_status:
-                print("Generating and simplifiying K")
-            self.K = simplify(self.R.T @ self.M_de @ self.R_dot)
-            if print_status:
-                print("Generating and simplifiying Fa")
-            self.Fa = simplify(self.Q_in + self.R.T @ self.Q_de)
-            if print_status:
-                print("Generating and simplifiying reduced q_dot_dot")
-            self.q_dotdot_in_expr = simplify(
-                self.H.inv() @ (self.Fa - self.K @ self.q_dot_in)
-            )
-            if print_status:
-                print("Reduced model completed")
-            self.RHS_reduced = Matrix(list(self.q_dot_in) + list(self.q_dotdot_in_expr))
-        else:
-            if print_status:
-                print("Generating and simplifiying reduced q_dot_dot")
-            self.q_dotdot_expr = simplify(self.M.inv() @ self.Q)
-            if print_status:
-                print("Model completed")
-            self.RHS = Matrix(list(self.q_dot) + list(self.q_dotdot_expr))
+            H_con = self.M_con @ self.R
+            H = self.M_in + H_con + H_con.T + self.R.T @ self.M_de @ self.R
+            self.H = _simplyprint(H, verbose, simplif, name="H")
+            K = self.R.T @ self.M_de @ self.R_dot + self.M_con @ self.R_dot
+            self.K = _simplyprint(K, verbose, simplif, name="K")
+            Fa = self.Q_in + self.R.T @ self.Q_de
+            self.Fa = _simplyprint(Fa, verbose, simplif, name="Fa")
 
-    def calculate_RHS(self):
-        if not hasattr(self, "RHS"):
-            if self.print_status:
-                print("Generating and simplifiying Right Hand Side")
-            self.q_dotdot_de_expr = simplify(
-                self.R_dot @ self.q_dot_in + self.R @ self.q_dotdot_in_expr
+            h_inv = _invsimplyprint(self.H, verbose, simplif, name="H_inv")
+            q_dotdot_in = h_inv @ (self.Fa - self.K @ self.q_dot_in)
+            self.q_dotdot_in = _simplyprint(
+                q_dotdot_in, verbose, simplif, name="RHS_in"
             )
-            self.RHS = Matrix(
-                list(self.q_dot)
-                + list(self.q_dotdot_in_expr)
-                + list(self.q_dotdot_de_expr)
-            )
-        return self.RHS
 
-    def calculate_lambda_vec(self):
-        if not hasattr(self, "lambda_vec"):
-            if len(self.coneqs) == 0:
-                self.lambda_vec = []
+            dyn_deps = sum(
+                [find_dyn_dependencies(expr) for expr in self.q_dotdot_in], start=[]
+            )
+            q_de = self.q[n_ind:]
+
+            if all([not symb in dyn_deps for symb in q_de]):
+                if verbose:
+                    print("Reduced model found and completed")
+                self._rhs_reduced = Matrix(list(self.q_dot_in) + list(self.q_dotdot_in))
+                self._rhs = self._rhs_reduced
+                return self._rhs
             else:
-                if self.print_status:
-                    print("Generating and simplifiying Lambdas vector")
-                self.lambda_vec = simplify(
-                    self.phi_q_de_inv @ (self.Q_de - self.M_de @ self.q_dotdot_de_expr)
-                )
-        return self.lambda_vec
+                if verbose:
+                    print(
+                        "Dependencies found in simplified model on dependent coordinates,"
+                    )
+                    print("Calculating complete model.")
+                self.calculate_RHS_complete()
+                return self._rhs
+        else:
+            M_inv = _invsimplyprint(self._m_d, verbose, simplif, name="M_inv")
+            self.q_dotdot = _simplyprint(M_inv @ self.Q, verbose, simplif, name="RHS")
+            if verbose:
+                print("Model completed")
+            self._rhs = Matrix(list(self.q_dot) + list(self.q_dotdot))
+            return self._rhs
 
-    def calculate_RHS_full(self):
-        if not hasattr(self, "RHS_full"):
-            if not hasattr(self, "RHS"):
-                self.calculate_RHS()
-            if not hasattr(self, "lambda_vec"):
-                self.calculate_lambda_vec()
-            self.RHS_full = Matrix(list(self.RHS) + list(self.lambda_vec))
-        return self.RHS_full
+    def calculate_RHS_complete(self):
+        verbose = self._verbose
+        simplif = self._simplif
+        _simplyprint = self._simplyprint
+
+        if self.R is None:
+            self.rhs
+
+        if (self._rhs is None) or (len(self.coneqs) > 0):
+            q_dotdot_de = self.R_dot @ self.q_dot_in + self.R @ self.q_dotdot_in
+
+            self.q_dotdot_de = _simplyprint(
+                q_dotdot_de, verbose, simplif, name="Dependent Variables"
+            )
+            self._rhs = Matrix(
+                list(self.q_dot) + list(self.q_dotdot_in) + list(self.q_dotdot_de)
+            )
+
+        return self._rhs
+
+    @property
+    def rhs_reduced(self):
+        """Returns equations that can be solved numerically.
+        Parameters
+        ==========
+        
+        """
+        if self.eom is None:
+            raise ValueError("Need to compute the equations of motion first")
+        if self._rhs is None:
+            self.rhs
+        if self._rhs_reduced is None:
+            raise ValueError(
+                "System could not be reduced to a lower number of variables, use rhs instead"
+            )
+        else:
+            return self._rhs_reduced
+
+    @property
+    def lambda_vector(self):
+        if self._lambda_vec is None:
+            if len(self.coneqs) == 0:
+                self._lambda_vec = []
+            else:
+                if self._verbose:
+                    print("Generating and simplifiying Lambdas vector")
+                self._lambda_vec = simplify(
+                    self.phi_q_de_inv @ (self.Q_de - self.M_de @ self.q_dotdot_de)
+                )
+        return self._lambda_vec
+
+    @property
+    def rhs_full(self):
+        """Returns equations that can be solved numerically.
+        Parameters
+        ==========
+        
+        """
+        if self.eom is None:
+            raise ValueError("Need to compute the equations of motion first")
+        if self._rhs_full is None:
+            self.calculate_RHS_complete()
+
+            self._rhs_full = Matrix(list(self.rhs) + list(self.lambda_vector))
+        return self._rhs_full
 
 
 def find_arguments(expr_list, q_vars, u_vars=None):
