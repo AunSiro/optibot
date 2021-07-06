@@ -22,7 +22,7 @@ def unpack(arr):
     elif axnum == 2:
         res = [arr[:, ii] for ii in range(dim)]
     else:
-        raise ValueError("The array has too many values to unpack")
+        raise ValueError("The array has too many dimensions to unpack")
     return res
 
 

@@ -35,6 +35,25 @@ def get_str(x):
     return x.__str__()
 
 
+def is_iterable(x):
+    try:
+        iter(x)
+        return True
+    except TypeError:
+        return False
+    except Exception:
+        return False
+
+
+def make_list(x):
+    if is_iterable(x):
+        return list(x)
+    else:
+        return [
+            x,
+        ]
+
+
 def derivative_level(symb):
     dot_level = 0
     while type(symb) == Derivative:
@@ -182,13 +201,19 @@ def diff_to_symb_expr(expr):
 
 def standard_notation(expr):
     var_set = expr.atoms(Symbol)
-    n_vars_max = len(var_set)
     subs_list = []
-    for jj in range(n_vars_max):
-        subs_list.append([symbols(f"q{jj}"), symbols(f"q_{jj}")])
-        subs_list.append([symbols(f"v{jj}"), symbols(f"v_{jj}")])
-        subs_list.append([symbols(f"a{jj}"), symbols(f"a_{jj}")])
-        subs_list.append([symbols(f"u{jj}"), symbols(f"u_{jj}")])
+    for var in var_set:
+        varname = str(var)
+        tail = varname[1:]
+        if tail.isnumeric():
+            if varname[0] == "q":
+                subs_list.append([var, symbols(f"q_{tail}")])
+            elif varname[0] == "v":
+                subs_list.append([var, symbols(f"v_{tail}")])
+            elif varname[0] == "a":
+                subs_list.append([var, symbols(f"a_{tail}")])
+            elif varname[0] == "u":
+                subs_list.append([var, symbols(f"u_{tail}")])
     expr = expr.subs(subs_list)
     return expr
 
@@ -467,7 +492,7 @@ def find_arguments(expr_list, q_vars, u_vars=None):
 
     expr_list = list(expr_list)
     expr_list = [standard_notation(diff_to_symb_expr(expr)) for expr in expr_list]
-    max_n_var = max([len(expr.atoms(Symbol)) for expr in expr_list])
+    max_n_var = sum([len(expr.atoms(Symbol)) for expr in expr_list])
     u_args = []
     params = []
     args = []
@@ -526,7 +551,40 @@ def find_arguments(expr_list, q_vars, u_vars=None):
     return q_args, v_args, x_args_found, u_args, u_args_found, params
 
 
-def print_funcs_RHS(RHS, q_vars, u_vars=None, flavour="numpy"):
+def printer_function(flavour):
+    if flavour == "numpy":
+        from sympy.printing.numpy import NumPyPrinter
+
+        def printer(x):
+            np_printer = NumPyPrinter()
+            return np_printer.doprint(x)
+
+        return printer
+    elif flavour == "np":
+        from sympy.printing.numpy import NumPyPrinter
+        from re import sub
+
+        def printer(x):
+            np_printer = NumPyPrinter()
+            x_out = np_printer.doprint(x)
+            return sub("numpy", "np", x_out)
+
+        return printer
+    elif flavour == "casadi":
+        from sympy.printing.numpy import NumPyPrinter
+        from re import sub
+
+        def printer(x):
+            np_printer = NumPyPrinter()
+            x_out = np_printer.doprint(x)
+            return sub("numpy", "cas", x_out)
+
+        return printer
+    else:
+        return str
+
+
+def print_funcs_RHS(RHS, q_vars, u_vars=None, flavour="np"):
     """
     Prints the Right Hand Side of the control ecuations, formatted
     to be used as a python function to solve a system like:
@@ -544,9 +602,9 @@ def print_funcs_RHS(RHS, q_vars, u_vars=None, flavour="numpy"):
         Number of u variables or list of q variables as symbols.
         If None, will search variables of form u_i
     
-    flavour : str in ["numpy", "casadi"], default = "numpy"
+    flavour : str in ["numpy", "np", "casadi"], default = "np"
         experimental feature, converts common functions like sin(x)
-        to np.sin(x) or cas.sin(x) respectively
+        to numpy.sin(x), np.sin(x) or cas.sin(x) respectively
 
     Returns
     -------
@@ -555,25 +613,28 @@ def print_funcs_RHS(RHS, q_vars, u_vars=None, flavour="numpy"):
         associated with RHS: x' = F(x, u, params)
 
     """
-    RHS = list(RHS)
+    RHS = make_list(RHS)
     RHS = [standard_notation(diff_to_symb_expr(expr)) for expr in RHS]
     arguments = find_arguments(RHS, q_vars, u_vars)
     q_args, v_args, x_args_found, u_args, u_args_found, params = arguments
     x_args = q_args + v_args
+
+    printer = printer_function(flavour)
+
     msg = "def F(x, u, params):\n"
     msg += f"    {x_args.__str__()[1:-1]} = unpack(x)\n"
     msg += f"    {u_args_found.__str__()[1:-1]} = unpack(u)\n"
     msg += f"    {params.__str__()[1:-1]} = params\n"
     msg += f"    result = [{v_args.__str__()[1:-1]},]\n"
     for expr in RHS:
-        msg += "    result.append(" + expr.__str__() + ")\n"
+        msg += "    result.append(" + printer(expr) + ")\n"
     msg += "\n    return result\n"
 
     print(msg)
     return msg
 
 
-def print_funcs(expr_list, q_vars=0, flavour="numpy"):
+def print_funcs(expr_list, q_vars=0, flavour="np"):
     """
     Prints the given expression list or matrix as a function of x-variables,
     u-variables and parameters. X-variables are either the dynamic symbols
@@ -589,9 +650,9 @@ def print_funcs(expr_list, q_vars=0, flavour="numpy"):
         If int, will search variables of form q_i and qi
         If set to 0, all detected variables will be considered parameters
     
-    flavour : str in ["numpy", "casadi"], default = "numpy"
+    flavour : str in ["numpy", "np", "casadi"], default = "np"
         experimental feature, converts common functions like sin(x)
-        to np.sin(x) or cas.sin(x) respectively
+        to numpy.sin(x), np.sin(x) or cas.sin(x) respectively
 
     Returns
     -------
@@ -600,11 +661,13 @@ def print_funcs(expr_list, q_vars=0, flavour="numpy"):
         associated with RHS: x' = F(x, u, params)
 
     """
-    expr_list = list(expr_list)
+    expr_list = make_list(expr_list)
     expr_list = [standard_notation(diff_to_symb_expr(expr)) for expr in expr_list]
     arguments = find_arguments(expr_list, q_vars)
     q_args, v_args, x_args_found, u_args, u_args_found, params = arguments
     x_args = q_args + v_args
+
+    printer = printer_function(flavour)
 
     msg = "def F("
     if len(x_args_found) > 0:
@@ -621,11 +684,11 @@ def print_funcs(expr_list, q_vars=0, flavour="numpy"):
     if len(params) > 0:
         msg += f"    {params.__str__()[1:-1]} = params\n"
     if len(expr_list) == 1:
-        msg += "    result = " + expr_list[0].__str__() + "\n"
+        msg += "    result = " + printer(expr_list[0]) + "\n"
     else:
         msg += "    result = []\n"
         for expr in expr_list:
-            msg += "    result.append(" + expr.__str__() + ")\n"
+            msg += "    result.append(" + printer(expr) + ")\n"
     msg += "\n    return result\n"
 
     print(msg)
