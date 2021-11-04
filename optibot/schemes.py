@@ -291,9 +291,15 @@ def coherent_dimensions(func):
         if len(x_0.shape) == 2:
             x_0 = x_0[0]
         # If u is 1D but the problem has more than 1 q,
-        # it means that it corresponds to only one step
+        # If u is 1D but the problem has more than 1 q,
+        # it can mean that it corresponds to only one step
         if len(u.shape) == 1 and x_0.shape[0] != 2:
-            u = expand_dims(u, axis=0)
+            try:
+                F(x_0, u, params)
+            except TypeError:
+                pass
+            else:
+                u = expand_dims(u, axis=0)
         value = func(x_0, u, F, dt, params)
         return value
 

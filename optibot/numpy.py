@@ -6,7 +6,7 @@ Created on Mon May 31 12:52:22 2021
 """
 
 import numpy as np
-from numpy import sin, cos
+from numpy import sin, cos, expand_dims
 
 
 def get_str(x):
@@ -15,6 +15,11 @@ def get_str(x):
 
 def unpack(arr):
     arr = np.array(arr)
+    # If arr was a number, it will produce errors later
+    # We have to to convert it
+    # into a 1D array of lenght 1
+    if arr.size == 1 and arr.shape == ():
+        arr = expand_dims(arr, axis=0)
     dim = arr.shape[-1]
     axnum = len(arr.shape)
     if axnum == 1:
@@ -65,7 +70,15 @@ def RHS2numpy(
     q_args, v_args, x_args_found, u_args, u_args_found, params = arguments
     x_args = q_args + v_args
 
-    funcs = v_args + RHS
+    if len(q_args) == len(RHS):
+        funcs = v_args + RHS
+    elif len(RHS) == len(v_args):
+        funcs = RHS
+    else:
+        raise ValueError(
+            f"Unrecognized RHS shape, detected elements = {len(RHS)}, expected {len(q_args)} or {len(v_args)}"
+        )
+
     all_vars = x_args + u_args_found + params
     msg = "Function Arguments:\n"
     msg += f"\tx: {x_args}\n"
