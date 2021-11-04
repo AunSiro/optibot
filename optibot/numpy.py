@@ -72,11 +72,11 @@ def RHS2numpy(
 
     if len(q_args) == len(RHS):
         funcs = v_args + RHS
-    elif len(RHS) == len(v_args):
+    elif len(RHS) == len(x_args):
         funcs = RHS
     else:
         raise ValueError(
-            f"Unrecognized RHS shape, detected elements = {len(RHS)}, expected {len(q_args)} or {len(v_args)}"
+            f"Unrecognized RHS shape, detected elements = {len(RHS)}, expected {len(q_args)} or {len(x_args)}"
         )
 
     all_vars = x_args + u_args_found + params
