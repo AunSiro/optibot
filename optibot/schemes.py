@@ -453,6 +453,45 @@ def hs_mod_restr(x, x_n, u, u_n, F, dt, params):
     return x_n - res
 
 
+def hs_parab_restr(x, x_n, u, u_n, F, dt, params, scheme_params):
+    f = F(x, u, params)
+    f_n = F(x_n, u_n, params)
+    x_c = (x + x_n) / 2 + dt / 8 * (f - f_n)
+    u_c = scheme_params[0]
+    f_c = F(x_c, u_c, params)
+    return x + dt / 6 * (f + 4 * f_c + f_n) - x_n
+
+
+def hs_mod_parab_restr(x, x_n, u, u_n, F, dt, params, scheme_params):
+    from optibot.schemes import vec_len, is2d
+    from copy import copy
+
+    dim = vec_len(x) // 2
+    x_c = copy(x)
+    res = copy(x)
+    if is2d(x):
+        first_ind = slice(None, None), slice(None, dim)
+        last_ind = slice(None, None), slice(dim, None)
+    else:
+        first_ind = slice(None, dim)
+        last_ind = slice(dim, None)
+    f = F(x, u, params)[last_ind]
+    f_n = F(x_n, u_n, params)[last_ind]
+    q = x[first_ind]
+    v = x[last_ind]
+    q_n = x_n[first_ind]
+    v_n = x_n[last_ind]
+    u_c = scheme_params[0]
+    q_c = (13 * q + 3 * q_n) / 16 + 5 * dt / 16 * v + dt ** 2 / 96 * (4 * f - f_n)
+    v_c = (v + v_n) / 2 + dt / 8 * (f - f_n)
+    x_c[first_ind] = q_c
+    x_c[last_ind] = v_c
+    f_c = F(x_c, u_c, params)[last_ind]
+    res[last_ind] = v + dt / 6 * (f + 4 * f_c + f_n)
+    res[first_ind] = q + dt * v + dt ** 2 / 6 * (f + 2 * f_c)
+    return x_n - res
+
+
 # --- Interpolations ---
 
 

@@ -108,15 +108,16 @@ def unpack(arr):
     return res
 
 
-def restriction2casadi(F_scheme, F, n_vars, n_u, n_params):
+def restriction2casadi(F_scheme, F, n_vars, n_u, n_params, n_scheme_params=0):
     """
     Converts a restriction funtion F to a casadi function that can be
     more efficiently used in casadi
 
     Parameters
     ----------
-    F_scheme : Function of the form F(x, x_n, u, u_n, F, dt, p)
-        Restriction function that each step has to be equal to zero
+    F_scheme : Function of the form F(x, x_n, u, u_n, F, dt, p, [sch_p])
+        Restriction function that each step has to be equal to zero,
+        argument sch_p is only mandatory if n_scheme_params != 0
     F : Function of the form F(x, u, p)
         Physics function that describes the system
     n_vars : int
@@ -126,28 +127,47 @@ def restriction2casadi(F_scheme, F, n_vars, n_u, n_params):
         Number of u variables or actions in the problem
     n_params : int
         Number of parameters in the problem
+    n_scheme_params : int, default 0
+        Number of scheme parameters, not passed to F(x, u, p)
 
     Returns
     -------
     Casadi Function
-        A casadi function of the form F(x, x_n, u, u_n, dt, p)
+        A casadi function of the form F(x, x_n, u, u_n, dt, p, sch_p)
         Restriction function that each step has to be equal to zero
 
     """
+    from inspect import signature
+
+    if n_scheme_params != 0 and len(signature(F_scheme).parameters) == 7:
+        raise ValueError(
+            "Detected a value of n_scheme_params larger than zero in a function F_scheme that does not contain sch_p argument"
+        )
     x = cas.SX.sym("x", 2 * n_vars).T
     x_n = cas.SX.sym("x_n", 2 * n_vars).T
     u = cas.SX.sym("u", n_u).T
     u_n = cas.SX.sym("u_n", n_u).T
     p = cas.SX.sym("p", n_params)
     dt = cas.SX.sym("dt")
-    result = F_scheme(x, x_n, u, u_n, F, dt, p)
-    return cas.Function(
-        "Restriction",
-        [x, x_n, u, u_n, dt, p],
-        [result,],
-        ["x", "x_n", "u", "u_n", "dt", "params"],
-        ["residue"],
-    )
+    if n_scheme_params == 0:
+        result = F_scheme(x, x_n, u, u_n, F, dt, p)
+        return cas.Function(
+            "Restriction",
+            [x, x_n, u, u_n, dt, p],
+            [result,],
+            ["x", "x_n", "u", "u_n", "dt", "params"],
+            ["residue"],
+        )
+    else:
+        sch_p = cas.SX.sym("sch_p", n_scheme_params)
+        result = F_scheme(x, x_n, u, u_n, F, dt, p, sch_p)
+        return cas.Function(
+            "Restriction",
+            [x, x_n, u, u_n, dt, p, sch_p],
+            [result,],
+            ["x", "x_n", "u", "u_n", "dt", "params", "scheme_params"],
+            ["residue"],
+        )
 
 
 # --- Double Pendulum ---
