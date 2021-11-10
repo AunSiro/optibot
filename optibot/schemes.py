@@ -249,6 +249,49 @@ def hs_mod_step(x, u, u_n, F, dt, params):
     return x_n.x
 
 
+def hs_parab_opti_step(x_n, x, u, u_n, F, dt, params, scheme_params):
+    f = F(x, u, params)
+    f_n = F(x_n, u_n, params)
+    u_c = scheme_params
+    x_c = (x + x_n) / 2 + dt / 8 * (f - f_n)
+    f_c = F(x_c, u_c, params)
+    res = x + dt / 6 * (f + 4 * f_c + f_n) - x_n
+    return res
+
+
+def hs_parab_step(x, u, u_n, F, dt, params, scheme_params):
+    x_0 = euler_step(x, u, F, dt, params)
+    x_n = root(hs_opti_step, x_0, (x, u, u_n, F, dt, params, scheme_params))
+    return x_n.x
+
+
+def hs_mod_parab_opti_step(x_n, x, u, u_n, F, dt, params, scheme_params):
+    dim = vec_len(x) // 2
+    f = F(x, u, params)[dim:]
+    f_n = F(x_n, u_n, params)[dim:]
+    q = x[:dim]
+    v = x[dim:]
+    q_n = x_n[:dim]
+    v_n = x_n[dim:]
+    u_c = scheme_params
+    q_c = (13 * q + 3 * q_n) / 16 + 5 * dt / 16 * v + dt ** 2 / 96 * (4 * f - f_n)
+    v_c = (v + v_n) / 2 + dt / 8 * (f - f_n)
+    x_c = copy(x)
+    x_c[:dim] = q_c
+    x_c[dim:] = v_c
+    f_c = F(x_c, u_c, params)[dim:]
+    res = copy(x)
+    res[dim:] = v + dt / 6 * (f + 4 * f_c + f_n) - v_n
+    res[:dim] = q + dt * v + dt ** 2 / 6 * (f + 2 * f_c) - q_n
+    return res
+
+
+def hs_mod_parab_step(x, u, u_n, F, dt, params, scheme_params):
+    x_0 = euler_step(x, u, F, dt, params)
+    x_n = root(hs_mod_opti_step, x_0, (x, u, u_n, F, dt, params, scheme_params))
+    return x_n.x
+
+
 # --- Integrations ---
 # These functions are expected to work with numpy arrays, and will
 # convert other formats for X and U into them
@@ -374,6 +417,34 @@ def integrate_hs_mod(x_0, u, F, dt, params):
     ]
     for ii in range(0, vec_len(u) - 1):
         x_i = hs_mod_step(x[-1], u[ii], u[ii + 1], F, dt, params)
+        x.append(x_i)
+    x_i = hs_mod_step(x[-1], u[-1], u[-1], F, dt, params)
+    x.append(x_i)
+    return array(x)
+
+
+@coherent_dimensions
+def integrate_hs_parab(x_0, u, F, dt, params, scheme_params):
+    x = [
+        x_0,
+    ]
+    u_c = scheme_params[0]
+    for ii in range(0, vec_len(u) - 1):
+        x_i = hs_parab_step(x[-1], u[ii], u[ii + 1], F, dt, params, u_c[ii])
+        x.append(x_i)
+    x_i = hs_step(x[-1], u[-1], u[-1], F, dt, params)
+    x.append(x_i)
+    return array(x)
+
+
+@coherent_dimensions
+def integrate_hs_mod_parab(x_0, u, F, dt, params, scheme_params):
+    x = [
+        x_0,
+    ]
+    u_c = scheme_params[0]
+    for ii in range(0, vec_len(u) - 1):
+        x_i = hs_mod_parab_step(x[-1], u[ii], u[ii + 1], F, dt, params, u_c[ii])
         x.append(x_i)
     x_i = hs_mod_step(x[-1], u[-1], u[-1], F, dt, params)
     x.append(x_i)
@@ -639,7 +710,7 @@ def hs_parab_interp(x, x_n, u, u_n, tau, F, h, params, scheme_params):
 
 def hs_mod_parab_interp(x, x_n, u, u_n, tau, F, h, params, scheme_params):
     x_c = hs_mod_midpoint(x, x_n, u, u_n, tau, F, h, params)
-    u_c = (u + u_n) / 2
+    u_c = scheme_params
     dim = vec_len(x) // 2
     q = x[:dim]
     v = x[dim:]
@@ -711,6 +782,10 @@ def _newpoint(X, U, F, h, t, params, scheme, scheme_params=0):
             U_c = scheme_params[0]
             u_c = U_c[n]
             x_interp = hs_parab_interp(x, x_n, u, u_n, tau, F, h, params, u_c)
+        elif scheme == "hs_mod_parab":
+            U_c = scheme_params[0]
+            u_c = U_c[n]
+            x_interp = hs_mod_parab_interp(x, x_n, u, u_n, tau, F, h, params, u_c)
         else:
             raise NameError(f"scheme {scheme} not recognized")
     return x_interp
@@ -759,7 +834,15 @@ def interpolate_u(U, old_t_array, t_array, u_scheme="lin", scheme_params=0):
 def interpolated_array(
     X, U, F, h, t_array, params, scheme="hs_scipy", u_scheme="lin", scheme_params=0
 ):
-    supported_schemes = ["trapz", "trapz_mod", "hs", "hs_scipy", "hs_mod", "hs_parab"]
+    supported_schemes = [
+        "trapz",
+        "trapz_mod",
+        "hs",
+        "hs_scipy",
+        "hs_mod",
+        "hs_parab",
+        "hs_mod_parab",
+    ]
     if scheme not in supported_schemes:
         raise ValueError(
             f"Unsupported scheme {scheme}, supported schemes are{supported_schemes}"
@@ -815,9 +898,62 @@ def hs_dot_interp(x, x_n, u, u_n, tau, F, h, params):
     return concatenate([q_interp, v_interp])
 
 
+def hs_parab_dot_interp(x, x_n, u, u_n, tau, F, h, params, scheme_params):
+    x_c = hs_midpoint(x, x_n, u, u_n, tau, F, h, params)
+    u_c = scheme_params
+    dim = vec_len(x) // 2
+    q = x[:dim]
+    v = x[dim:]
+    q_n = x_n[:dim]
+    v_n = x_n[dim:]
+    q_c = x_c[:dim]
+    v_c = x_c[dim:]
+    f = F(x, u, params)[dim:]
+    f_n = F(x_n, u_n, params)[dim:]
+    f_c = F(x_c, u_c, params)[dim:]
+    q_interp = (
+        v
+        + tau * (-3 * v + 4 * v_c - v_n) / h
+        + tau ** 2 * (2 * v - 4 * v_c + 2 * v_n) / h ** 2
+    )
+    v_interp = (
+        f
+        + tau * (-3 * f + 4 * f_c - f_n) / h
+        + tau ** 2 * (2 * f - 4 * f_c + 2 * f_n) / h ** 2
+    )
+    return concatenate([q_interp, v_interp])
+
+
 def hs_mod_dot_interp(x, x_n, u, u_n, tau, F, h, params):
     x_c = hs_mod_midpoint(x, x_n, u, u_n, tau, F, h, params)
     u_c = (u + u_n) / 2
+    dim = vec_len(x) // 2
+    q = x[:dim]
+    v = x[dim:]
+    q_n = x_n[:dim]
+    v_n = x_n[dim:]
+    q_c = x_c[:dim]
+    v_c = x_c[dim:]
+    f = F(x, u, params)[dim:]
+    f_n = F(x_n, u_n, params)[dim:]
+    f_c = F(x_c, u_c, params)[dim:]
+    q_interp = (
+        v
+        + f * tau
+        + 1 / 2 * (-3 * f + 4 * f_c - f_n) * tau ** 2 / h
+        + 1 / 3 * (2 * f - 4 * f_c + 2 * f_n) * tau ** 3 / (h ** 2)
+    )
+    v_interp = (
+        f
+        + tau * (-3 * f + 4 * f_c - f_n) / h
+        + tau ** 2 * (2 * f - 4 * f_c + 2 * f_n) / h ** 2
+    )
+    return concatenate([q_interp, v_interp])
+
+
+def hs_mod_parab_dot_interp(x, x_n, u, u_n, tau, F, h, params, scheme_params):
+    x_c = hs_mod_midpoint(x, x_n, u, u_n, tau, F, h, params)
+    u_c = scheme_params
     dim = vec_len(x) // 2
     q = x[:dim]
     v = x[dim:]
@@ -888,7 +1024,53 @@ def hs_mod_dot_dot_interp(x, x_n, u, u_n, tau, F, h, params):
     return concatenate([q_interp, v_interp])
 
 
-def _newpoint_der(X, U, F, h, t, params, scheme, order):
+def hs_parab_dot_dot_interp(x, x_n, u, u_n, tau, F, h, params, scheme_params):
+    x_c = hs_midpoint(x, x_n, u, u_n, tau, F, h, params)
+    u_c = scheme_params
+    dim = vec_len(x) // 2
+    q = x[:dim]
+    v = x[dim:]
+    q_n = x_n[:dim]
+    v_n = x_n[dim:]
+    q_c = x_c[:dim]
+    v_c = x_c[dim:]
+    f = F(x, u, params)[dim:]
+    f_n = F(x_n, u_n, params)[dim:]
+    f_c = F(x_c, u_c, params)[dim:]
+    q_interp = (-3 * v + 4 * v_c - v_n) / h + 2 * tau * (
+        2 * v - 4 * v_c + 2 * v_n
+    ) / h ** 2
+    v_interp = (-3 * f + 4 * f_c - f_n) / h + 2 * tau * (
+        2 * f - 4 * f_c + 2 * f_n
+    ) / h ** 2
+    return concatenate([q_interp, v_interp])
+
+
+def hs_mod_parab_dot_dot_interp(x, x_n, u, u_n, tau, F, h, params, scheme_params):
+    x_c = hs_mod_midpoint(x, x_n, u, u_n, tau, F, h, params)
+    u_c = scheme_params
+    dim = vec_len(x) // 2
+    q = x[:dim]
+    v = x[dim:]
+    q_n = x_n[:dim]
+    v_n = x_n[dim:]
+    q_c = x_c[:dim]
+    v_c = x_c[dim:]
+    f = F(x, u, params)[dim:]
+    f_n = F(x_n, u_n, params)[dim:]
+    f_c = F(x_c, u_c, params)[dim:]
+    q_interp = (
+        f
+        + tau * (-3 * f + 4 * f_c - f_n) / h
+        + tau ** 2 * (2 * f - 4 * f_c + 2 * f_n) / h ** 2
+    )
+    v_interp = (-3 * f + 4 * f_c - f_n) / h + 2 * tau * (
+        2 * f - 4 * f_c + 2 * f_n
+    ) / h ** 2
+    return concatenate([q_interp, v_interp])
+
+
+def _newpoint_der(X, U, F, h, t, params, scheme, order, scheme_params=0):
     n = int(t // h)
     tau = t % h
     if (n + 1) > X.shape[0]:
@@ -910,20 +1092,40 @@ def _newpoint_der(X, U, F, h, t, params, scheme, order):
                 x_interp = hs_mod_dot_interp(x, x_n, u, u_n, tau, F, h, params)
             elif order == 2:
                 x_interp = hs_mod_dot_dot_interp(x, x_n, u, u_n, tau, F, h, params)
+        elif scheme == "hs_parab":
+            U_c = scheme_params[0]
+            u_c = U_c[n]
+            if order == 1:
+                x_interp = hs_parab_dot_interp(x, x_n, u, u_n, tau, F, h, params, u_c)
+            elif order == 2:
+                x_interp = hs_parab_dot_dot_interp(
+                    x, x_n, u, u_n, tau, F, h, params, u_c
+                )
+        elif scheme == "hs_mod_parab":
+            U_c = scheme_params[0]
+            u_c = U_c[n]
+            if order == 1:
+                x_interp = hs_mod_parab_dot_interp(
+                    x, x_n, u, u_n, tau, F, h, params, u_c
+                )
+            elif order == 2:
+                x_interp = hs_mod_parab_dot_dot_interp(
+                    x, x_n, u, u_n, tau, F, h, params, u_c
+                )
         else:
             raise NameError(f"scheme {scheme} not recognized")
     return x_interp
 
 
 def interpolated_array_derivative(
-    X, U, F, h, t_array, params, scheme="hs_scipy", order=1
+    X, U, F, h, t_array, params, scheme="hs_scipy", order=1, scheme_params=0
 ):
     supported_order = [1, 2]
     if order not in supported_order:
         raise ValueError(
             f"Unsupported derivation order, supported order are{supported_order}"
         )
-    supported_schemes = ["hs", "hs_scipy", "hs_mod"]
+    supported_schemes = ["hs", "hs_scipy", "hs_mod", "hs_parab", "hs_mod_parab"]
     if scheme not in supported_schemes:
         raise ValueError(
             f"Unsupported scheme, supported schemes are{supported_schemes}"
@@ -940,7 +1142,9 @@ def interpolated_array_derivative(
     else:
         for ii in range(N):
             new_X[ii] = array(
-                _newpoint_der(X, U, F, h, t_array[ii], params, scheme, order)
+                _newpoint_der(
+                    X, U, F, h, t_array[ii], params, scheme, order, scheme_params
+                )
             ).flatten()
     return new_X
 
@@ -949,21 +1153,30 @@ def interpolated_array_derivative(
 
 
 def dynamic_error(
-    x_arr, u_arr, t_end, F, params, scheme="hs_scipy", n_interp=2000, t_start=0
+    x_arr,
+    u_arr,
+    t_end,
+    F,
+    params,
+    scheme="hs_scipy",
+    u_scheme="lin",
+    scheme_params=0,
+    n_interp=2000,
+    t_start=0,
 ):
     N = x_arr.shape[0] - 1
     dim = x_arr.shape[1] // 2
     h = t_end / N
     t_interp = linspace(t_start, t_end, n_interp)
     x_interp, u_interp = interpolated_array(
-        x_arr, u_arr, F, h, t_interp, params, scheme
+        x_arr, u_arr, F, h, t_interp, params, scheme, u_scheme, scheme_params
     )
     x_dot_interp = interpolated_array_derivative(
-        x_arr, u_arr, F, h, t_interp, params, scheme, order=1
-    )[0]
+        x_arr, u_arr, F, h, t_interp, params, scheme, 1, scheme_params
+    )
     x_dot_dot_interp = interpolated_array_derivative(
-        x_arr, u_arr, F, h, t_interp, params, scheme, order=2
-    )[0]
+        x_arr, u_arr, F, h, t_interp, params, scheme, 2, scheme_params
+    )
     f_arr = zeros([n_interp, dim])
     for ii in range(n_interp):
         f_arr[ii, :] = F(x_interp[ii], u_interp[ii], params)[dim:]
