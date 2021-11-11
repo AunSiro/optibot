@@ -6,3 +6,108 @@ Created on Thu Nov 11 12:11:43 2021
 @author: Siro Moreno
 """
 
+from sympy import legendre_poly
+from functools import lru_cache
+
+# --- Generating Collocation Points
+@lru_cache
+def LG(N, precission = 20):
+    return [ii.evalf(n = precission) for ii in legendre_poly(N, polys = True).real_roots()]
+@lru_cache
+def LGR(N, precission = 20):
+    pol = legendre_poly(N, polys = True) + legendre_poly(N-1, polys = True)
+    return [ii.evalf(n = precission) for ii in pol.real_roots()]
+@lru_cache
+def LGL(N, precission = 20):
+    root_list = [ii.evalf(n = precission) for ii in legendre_poly(N-1, polys = True).diff().real_roots()]
+    return [-1.,] + root_list + [1.,]
+@lru_cache
+def LGLm(N, precission = 20):
+    return LGL(N+2, precission)[1:-1]
+@lru_cache
+def LG2(N, precission = 20):
+    return [-1]+LG(N-2, precission)+[1]
+
+@lru_cache
+def coll_points(N, scheme, precission = 20):
+    '''
+    Generates a list of len N with values of tau for collocation points
+
+    Parameters
+    ----------
+    N : int
+        Number of collocation points.
+    scheme : str
+        Scheme name. Supported values are:
+            'LG'
+            'LGR'
+            'LGR_inv'
+            'LGL'
+            'LGLm'
+            'LG2'
+    precission: int, default 20
+        number of decimal places of precission
+
+    Returns
+    -------
+    coll_points : list
+        list of collocation points
+    '''
+    if scheme == 'LG':
+        return LG(N, precission)
+    elif scheme == 'LGR':
+        return LGR(N, precission)
+    elif scheme == 'LGR_inv':
+        return [-ii for ii in LGR(N, precission)[::-1]]
+    elif scheme == 'LGL':
+        return LGL(N, precission)
+    elif scheme == 'LGLm':
+        return LGLm(N, precission)
+    elif scheme == 'LG2':
+        return LG(N, precission)
+    else:
+        raise ValueError(f'Unsupported scheme {scheme}, valid schemes are: LG, LGR, LGR_inv, LGL, LGLm, LG2')
+        
+
+@lru_cache
+def base_points(N, scheme, precission = 20):
+    '''
+    Generates a list of len N with values of tau for lagrange base points
+
+    Parameters
+    ----------
+    N : int
+        Number of collocation points.
+    scheme : str
+        Scheme name. Supported values are:
+            'LG'
+            'LG_inv'
+            'LGR'
+            'LGR_inv'
+            'LGL'
+            'LGLm'
+            'LG2'
+    precission: int, default 20
+        number of decimal places of precission
+
+    Returns
+    -------
+    base_points : list
+        list of base points
+    '''
+    if scheme == 'LG':
+        return [-1.] + LG(N, precission)
+    elif scheme == 'LG_inv':
+        return LG(N, precission) + [1.]
+    elif scheme == 'LGR':
+        return LGR(N, precission) + [1.]
+    elif scheme == 'LGR_inv':
+        return [-1.] + [-ii for ii in LGR(N, precission)[::-1]]
+    elif scheme == 'LGL':
+        return LGL(N, precission)
+    elif scheme == 'LGLm':
+        return [-1.] + LGLm(N, precission) + [1.]
+    elif scheme == 'LG2':
+        return [-1.] + LG(N, precission) + [1.]
+    else:
+        raise ValueError(f'Unsupported scheme {scheme}, valid schemes are: LG, LG_inv LGR, LGR_inv, LGL, LGLm, LG2')
