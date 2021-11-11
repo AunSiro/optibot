@@ -50,6 +50,24 @@ def vec_len(x):
 
 
 def interp_2d(t_array, old_t_array, Y):
+    """
+    Interpolates a 2D array 'Y' in dimension 0th
+
+    Parameters
+    ----------
+    t_array : Numpy Array or List,
+        shape = (X)
+    old_t_array : Numpy Array or List,
+        shape = (Y)
+    Y : Numpy Array,
+        shape = (Y, Z)
+
+    Returns
+    -------
+    new_Y : Numpy Array,
+        shape = (X, Z)
+
+    """
     new_Y_len = t_array.shape[0]
     new_Y_width = Y.shape[-1]
     new_Y = zeros([new_Y_len, new_Y_width])
@@ -59,6 +77,20 @@ def interp_2d(t_array, old_t_array, Y):
 
 
 def extend_array(x):
+    """
+    Extends an array in dimension 0th by duplicating the last value/s
+
+    Parameters
+    ----------
+    x : Numpy Array
+        Shape = (Y, [...])
+
+    Returns
+    -------
+    new_x : Numpy Array
+        Shape = (Y+1, [...])
+
+    """
     apppendix = expand_dims(x[-1], axis=0)
     return append(x, apppendix, 0)
 
@@ -207,6 +239,15 @@ def trapz_mod_step(x, u, u_n, F, dt, params):
 
 
 def hs_opti_step(x_n, x, u, u_n, F, dt, params):
+    """
+    Must be equal to zero in order to fulfill the implicit scheme
+
+    Returns
+    -------
+    res : Numpy array or Casadi array
+        Residue to minimize
+
+    """
     f = F(x, u, params)
     f_n = F(x_n, u_n, params)
     u_c = (u + u_n) / 2
@@ -223,6 +264,15 @@ def hs_step(x, u, u_n, F, dt, params):
 
 
 def hs_mod_opti_step(x_n, x, u, u_n, F, dt, params):
+    """
+    Must be equal to zero in order to fulfill the implicit scheme
+
+    Returns
+    -------
+    res : Numpy array or Casadi array
+        Residue to minimize
+
+    """
     dim = vec_len(x) // 2
     f = F(x, u, params)[dim:]
     f_n = F(x_n, u_n, params)[dim:]
@@ -250,6 +300,15 @@ def hs_mod_step(x, u, u_n, F, dt, params):
 
 
 def hs_parab_opti_step(x_n, x, u, u_n, F, dt, params, scheme_params):
+    """
+    Must be equal to zero in order to fulfill the implicit scheme
+
+    Returns
+    -------
+    res : Numpy array or Casadi array
+        Residue to minimize
+
+    """
     f = F(x, u, params)
     f_n = F(x_n, u_n, params)
     u_c = scheme_params
@@ -266,6 +325,15 @@ def hs_parab_step(x, u, u_n, F, dt, params, scheme_params):
 
 
 def hs_mod_parab_opti_step(x_n, x, u, u_n, F, dt, params, scheme_params):
+    """
+    Must be equal to zero in order to fulfill the implicit scheme
+
+    Returns
+    -------
+    res : Numpy array or Casadi array
+        Residue to minimize
+
+    """
     dim = vec_len(x) // 2
     f = F(x, u, params)[dim:]
     f_n = F(x_n, u_n, params)[dim:]
@@ -566,6 +634,16 @@ def hs_mod_parab_restr(x, x_n, u, u_n, F, dt, params, scheme_params):
 # --- Interpolations ---
 
 
+def _gen_basic_values(dim, x, x_n, u, u_n, F, params):
+    q = x[:dim]
+    v = x[dim:]
+    q_n = x_n[:dim]
+    v_n = x_n[dim:]
+    f = F(x, u, params)[dim:]
+    f_n = F(x_n, u_n, params)[dim:]
+    return q, q_n, v, v_n, f, f_n
+
+
 def interp_parab(tau, h, y_0, y_c, y_n):
     xi = tau / h
     return y_0 + xi * (-3 * y_0 + 4 * y_c - y_n) + 2 * xi ** 2 * (y_0 - 2 * y_c + y_n)
@@ -573,12 +651,7 @@ def interp_parab(tau, h, y_0, y_c, y_n):
 
 def trap_mod_interp(x, x_n, u, u_n, tau, F, h, params):
     dim = vec_len(x) // 2
-    q = x[:dim]
-    v = x[dim:]
-    q_n = x_n[:dim]
-    v_n = x_n[dim:]
-    f = F(x, u, params)[dim:]
-    f_n = F(x_n, u_n, params)[dim:]
+    q, q_n, v, v_n, f, f_n = _gen_basic_values(dim, x, x_n, u, u_n, F, params)
     q_interp = q + v * tau + 1 / 2 * f * tau ** 2 + 1 / (6 * h) * tau ** 3 * (f_n - f)
     v_interp = v + tau * f + tau ** 2 / (2 * h) * (f_n - f)
     return concatenate([q_interp, v_interp])
@@ -586,12 +659,7 @@ def trap_mod_interp(x, x_n, u, u_n, tau, F, h, params):
 
 def trap_interp(x, x_n, u, u_n, tau, F, h, params):
     dim = vec_len(x) // 2
-    q = x[:dim]
-    v = x[dim:]
-    q_n = x_n[:dim]
-    v_n = x_n[dim:]
-    f = F(x, u, params)[dim:]
-    f_n = F(x_n, u_n, params)[dim:]
+    q, q_n, v, v_n, f, f_n = _gen_basic_values(dim, x, x_n, u, u_n, F, params)
     q_interp = q + v * tau + 1 / (2 * h) * tau ** 2 * (v_n - v)
     v_interp = v + f * tau + 1 / (2 * h) * tau ** 2 * (f_n - f)
     return concatenate([q_interp, v_interp])
@@ -599,12 +667,7 @@ def trap_interp(x, x_n, u, u_n, tau, F, h, params):
 
 def hs_midpoint(x, x_n, u, u_n, tau, F, h, params):
     dim = vec_len(x) // 2
-    q = x[:dim]
-    v = x[dim:]
-    q_n = x_n[:dim]
-    v_n = x_n[dim:]
-    f = F(x, u, params)[dim:]
-    f_n = F(x_n, u_n, params)[dim:]
+    q, q_n, v, v_n, f, f_n = _gen_basic_values(dim, x, x_n, u, u_n, F, params)
     v_c = (v + v_n) / 2 + h / 8 * (f - f_n)
     q_c = (q + q_n) / 2 + h / 8 * (v - v_n)
     return concatenate([q_c, v_c])
@@ -612,12 +675,7 @@ def hs_midpoint(x, x_n, u, u_n, tau, F, h, params):
 
 def hs_mod_midpoint(x, x_n, u, u_n, tau, F, h, params):
     dim = vec_len(x) // 2
-    q = x[:dim]
-    v = x[dim:]
-    q_n = x_n[:dim]
-    v_n = x_n[dim:]
-    f = F(x, u, params)[dim:]
-    f_n = F(x_n, u_n, params)[dim:]
+    q, q_n, v, v_n, f, f_n = _gen_basic_values(dim, x, x_n, u, u_n, F, params)
     v_c = (v + v_n) / 2 + h / 8 * (f - f_n)
     q_c = (13 * q + 3 * q_n + 5 * v * h) / 16 + h ** 2 / 96 * (4 * f - f_n)
     return concatenate([q_c, v_c])
@@ -627,14 +685,9 @@ def hs_interp(x, x_n, u, u_n, tau, F, h, params):
     x_c = hs_midpoint(x, x_n, u, u_n, tau, F, h, params)
     u_c = (u + u_n) / 2
     dim = vec_len(x) // 2
-    q = x[:dim]
-    v = x[dim:]
-    q_n = x_n[:dim]
-    v_n = x_n[dim:]
-    q_c = x_c[:dim]
+    q, q_n, v, v_n, f, f_n = _gen_basic_values(dim, x, x_n, u, u_n, F, params)
+    # q_c = x_c[:dim]
     v_c = x_c[dim:]
-    f = F(x, u, params)[dim:]
-    f_n = F(x_n, u_n, params)[dim:]
     f_c = F(x_c, u_c, params)[dim:]
     q_interp = (
         q
@@ -655,14 +708,9 @@ def hs_mod_interp(x, x_n, u, u_n, tau, F, h, params):
     x_c = hs_mod_midpoint(x, x_n, u, u_n, tau, F, h, params)
     u_c = (u + u_n) / 2
     dim = vec_len(x) // 2
-    q = x[:dim]
-    v = x[dim:]
-    q_n = x_n[:dim]
-    v_n = x_n[dim:]
-    q_c = x_c[:dim]
-    v_c = x_c[dim:]
-    f = F(x, u, params)[dim:]
-    f_n = F(x_n, u_n, params)[dim:]
+    q, q_n, v, v_n, f, f_n = _gen_basic_values(dim, x, x_n, u, u_n, F, params)
+    # q_c = x_c[:dim]
+    # v_c = x_c[dim:]
     f_c = F(x_c, u_c, params)[dim:]
     q_interp = (
         q
@@ -685,13 +733,9 @@ def hs_parab_interp(x, x_n, u, u_n, tau, F, h, params, scheme_params):
     u_c = scheme_params
     dim = vec_len(x) // 2
     q = x[:dim]
-    v = x[dim:]
-    q_n = x_n[:dim]
-    v_n = x_n[dim:]
-    q_c = x_c[:dim]
+    q, q_n, v, v_n, f, f_n = _gen_basic_values(dim, x, x_n, u, u_n, F, params)
+    # q_c = x_c[:dim]
     v_c = x_c[dim:]
-    f = F(x, u, params)[dim:]
-    f_n = F(x_n, u_n, params)[dim:]
     f_c = F(x_c, u_c, params)[dim:]
     q_interp = (
         q
@@ -712,14 +756,9 @@ def hs_mod_parab_interp(x, x_n, u, u_n, tau, F, h, params, scheme_params):
     x_c = hs_mod_midpoint(x, x_n, u, u_n, tau, F, h, params)
     u_c = scheme_params
     dim = vec_len(x) // 2
-    q = x[:dim]
-    v = x[dim:]
-    q_n = x_n[:dim]
-    v_n = x_n[dim:]
-    q_c = x_c[:dim]
-    v_c = x_c[dim:]
-    f = F(x, u, params)[dim:]
-    f_n = F(x_n, u_n, params)[dim:]
+    q, q_n, v, v_n, f, f_n = _gen_basic_values(dim, x, x_n, u, u_n, F, params)
+    # q_c = x_c[:dim]
+    # v_c = x_c[dim:]
     f_c = F(x_c, u_c, params)[dim:]
     q_interp = (
         q
@@ -737,7 +776,7 @@ def hs_mod_parab_interp(x, x_n, u, u_n, tau, F, h, params, scheme_params):
     return concatenate([q_interp, v_interp])
 
 
-def _newpoint_u(U, h, t, u_scheme, scheme_params=0):
+def _newpoint_u(U, h, t, u_scheme, scheme_params=[]):
     n = int(t // h)
     tau = t % h
     if (n + 1) > U.shape[0]:
@@ -758,7 +797,7 @@ def _newpoint_u(U, h, t, u_scheme, scheme_params=0):
     return u_interp
 
 
-def _newpoint(X, U, F, h, t, params, scheme, scheme_params=0):
+def _newpoint(X, U, F, h, t, params, scheme, scheme_params=[]):
     n = int(t // h)
     tau = t % h
     if (n + 1) > X.shape[0]:
@@ -808,7 +847,39 @@ def _prepare_interp(X, U, F, h, t_array):
     return N, new_X, U, old_t_array
 
 
-def interpolate_u(U, old_t_array, t_array, u_scheme="lin", scheme_params=0):
+def interpolate_u(U, old_t_array, t_array, u_scheme="lin", scheme_params=[]):
+    """
+    Interpolates values of U using the appropiate form function
+
+    Parameters
+    ----------
+    U : Numpy Array, shape = (X, [Y])
+        Values of U at 'old_t_array'
+    old_t_array : Numpy Array, shape = (X,)
+        Values of time where U is known.
+    t_array : Numpy Array, shape = (Z,)
+        Values of time where U is to be interpolated.
+    u_scheme : string, optional
+        Model of the interpolation that must be used. The default is "lin".
+        Acceptable values are:
+            "lin": lineal interpolation
+            "parab": parabolic interpolation, requires central points array
+            as scheme params[0]
+    scheme_params : list, optional
+        Aditional parameters of the scheme. The default is [].
+
+    Raises
+    ------
+    ValueError
+        If the array U has a shape with a number of dimensions different
+        of 1 or 2.
+
+    Returns
+    -------
+    new_U : Numpy Array, shape = (Z, [Y])
+        interpolated values of U.
+
+    """
     if u_scheme == "lin":
         if len(U.shape) == 1:
             new_U = interp(t_array, old_t_array, U)
@@ -832,8 +903,61 @@ def interpolate_u(U, old_t_array, t_array, u_scheme="lin", scheme_params=0):
 
 
 def interpolated_array(
-    X, U, F, h, t_array, params, scheme="hs_scipy", u_scheme="lin", scheme_params=0
+    X, U, F, h, t_array, params, scheme="hs_scipy", u_scheme="lin", scheme_params=[]
 ):
+    """
+    Interpolates values of X and U using the appropiate form functions.
+    It is assumed that X and U start at t = 0 and are equispaced in time
+    with a dt = h.
+    
+
+    Parameters
+    ----------
+    X : Numpy Array, shape = (W, 2N)
+        Known values of X
+    U : Numpy Array, shape = (W, [Y])
+        Known Values of U
+    F : Function of (x, u, params)
+        A function of a dynamic sistem, so that
+            x' = F(x, u, params)
+    h : float
+        Time step between points
+    t_array : Numpy array, shape = (Z,)
+        Values of time where X and U are to be interpolated.
+    params : list
+        Physical problem parameters to be passed to F
+    scheme : str, optional
+        Scheme to be used in the X interpolation. The default is "hs_scipy".
+        Acceptable values are:
+            "trapz" : trapezoidal scheme compatible interpolation (not lineal!)
+            "trapz_mod": modified trapezoidal scheme compatible interpolation (not lineal!)
+            "hs_scipy": 3d order polynomial that satisfies continuity in x(t) and x'(t)
+            "hs": Hermite-Simpson scheme compatible interpolation
+            "hs_mod": modified Hermite-Simpson scheme compatible interpolation
+            "hs_parab": Hermite-Simpson scheme compatible interpolation with parabolic U
+        "hs_mod_parab": modified Hermite-Simpson scheme compatible interpolation with parabolic U
+    u_scheme : string, optional
+        Model of the interpolation that must be used. The default is "lin".
+        Acceptable values are:
+            "lin": lineal interpolation
+            "parab": parabolic interpolation, requires central points array
+            as scheme params[0]
+    scheme_params :list, optional
+        Aditional parameters of the scheme. The default is [].
+
+    Raises
+    ------
+    ValueError
+        When either 'scheme' or 'u_scheme' are given unsupported values
+
+    Returns
+    -------
+    new_X : Numpy Array, shape = (Z, 2N)
+        Interpolated X array
+    new_U : Numpy Array, shape = (Z, [Y])
+        interpolated values of U.
+
+    """
     supported_schemes = [
         "trapz",
         "trapz_mod",
@@ -876,14 +1000,9 @@ def hs_dot_interp(x, x_n, u, u_n, tau, F, h, params):
     x_c = hs_midpoint(x, x_n, u, u_n, tau, F, h, params)
     u_c = (u + u_n) / 2
     dim = vec_len(x) // 2
-    q = x[:dim]
-    v = x[dim:]
-    q_n = x_n[:dim]
-    v_n = x_n[dim:]
-    q_c = x_c[:dim]
+    q, q_n, v, v_n, f, f_n = _gen_basic_values(dim, x, x_n, u, u_n, F, params)
+    # q_c = x_c[:dim]
     v_c = x_c[dim:]
-    f = F(x, u, params)[dim:]
-    f_n = F(x_n, u_n, params)[dim:]
     f_c = F(x_c, u_c, params)[dim:]
     q_interp = (
         v
@@ -902,14 +1021,9 @@ def hs_parab_dot_interp(x, x_n, u, u_n, tau, F, h, params, scheme_params):
     x_c = hs_midpoint(x, x_n, u, u_n, tau, F, h, params)
     u_c = scheme_params
     dim = vec_len(x) // 2
-    q = x[:dim]
-    v = x[dim:]
-    q_n = x_n[:dim]
-    v_n = x_n[dim:]
-    q_c = x_c[:dim]
+    q, q_n, v, v_n, f, f_n = _gen_basic_values(dim, x, x_n, u, u_n, F, params)
+    # q_c = x_c[:dim]
     v_c = x_c[dim:]
-    f = F(x, u, params)[dim:]
-    f_n = F(x_n, u_n, params)[dim:]
     f_c = F(x_c, u_c, params)[dim:]
     q_interp = (
         v
@@ -928,14 +1042,9 @@ def hs_mod_dot_interp(x, x_n, u, u_n, tau, F, h, params):
     x_c = hs_mod_midpoint(x, x_n, u, u_n, tau, F, h, params)
     u_c = (u + u_n) / 2
     dim = vec_len(x) // 2
-    q = x[:dim]
-    v = x[dim:]
-    q_n = x_n[:dim]
-    v_n = x_n[dim:]
-    q_c = x_c[:dim]
-    v_c = x_c[dim:]
-    f = F(x, u, params)[dim:]
-    f_n = F(x_n, u_n, params)[dim:]
+    q, q_n, v, v_n, f, f_n = _gen_basic_values(dim, x, x_n, u, u_n, F, params)
+    # q_c = x_c[:dim]
+    # v_c = x_c[dim:]
     f_c = F(x_c, u_c, params)[dim:]
     q_interp = (
         v
@@ -955,14 +1064,9 @@ def hs_mod_parab_dot_interp(x, x_n, u, u_n, tau, F, h, params, scheme_params):
     x_c = hs_mod_midpoint(x, x_n, u, u_n, tau, F, h, params)
     u_c = scheme_params
     dim = vec_len(x) // 2
-    q = x[:dim]
-    v = x[dim:]
-    q_n = x_n[:dim]
-    v_n = x_n[dim:]
-    q_c = x_c[:dim]
-    v_c = x_c[dim:]
-    f = F(x, u, params)[dim:]
-    f_n = F(x_n, u_n, params)[dim:]
+    q, q_n, v, v_n, f, f_n = _gen_basic_values(dim, x, x_n, u, u_n, F, params)
+    # q_c = x_c[:dim]
+    # v_c = x_c[dim:]
     f_c = F(x_c, u_c, params)[dim:]
     q_interp = (
         v
@@ -982,14 +1086,9 @@ def hs_dot_dot_interp(x, x_n, u, u_n, tau, F, h, params):
     x_c = hs_midpoint(x, x_n, u, u_n, tau, F, h, params)
     u_c = (u + u_n) / 2
     dim = vec_len(x) // 2
-    q = x[:dim]
-    v = x[dim:]
-    q_n = x_n[:dim]
-    v_n = x_n[dim:]
-    q_c = x_c[:dim]
+    q, q_n, v, v_n, f, f_n = _gen_basic_values(dim, x, x_n, u, u_n, F, params)
+    # q_c = x_c[:dim]
     v_c = x_c[dim:]
-    f = F(x, u, params)[dim:]
-    f_n = F(x_n, u_n, params)[dim:]
     f_c = F(x_c, u_c, params)[dim:]
     q_interp = (-3 * v + 4 * v_c - v_n) / h + 2 * tau * (
         2 * v - 4 * v_c + 2 * v_n
@@ -1004,13 +1103,9 @@ def hs_mod_dot_dot_interp(x, x_n, u, u_n, tau, F, h, params):
     x_c = hs_mod_midpoint(x, x_n, u, u_n, tau, F, h, params)
     u_c = (u + u_n) / 2
     dim = vec_len(x) // 2
-    q = x[:dim]
-    v = x[dim:]
-    q_n = x_n[:dim]
-    v_n = x_n[dim:]
-    q_c = x_c[:dim]
-    v_c = x_c[dim:]
-    f = F(x, u, params)[dim:]
+    q, q_n, v, v_n, f, f_n = _gen_basic_values(dim, x, x_n, u, u_n, F, params)
+    # q_c = x_c[:dim]
+    # v_c = x_c[dim:]
     f_n = F(x_n, u_n, params)[dim:]
     f_c = F(x_c, u_c, params)[dim:]
     q_interp = (
@@ -1028,14 +1123,9 @@ def hs_parab_dot_dot_interp(x, x_n, u, u_n, tau, F, h, params, scheme_params):
     x_c = hs_midpoint(x, x_n, u, u_n, tau, F, h, params)
     u_c = scheme_params
     dim = vec_len(x) // 2
-    q = x[:dim]
-    v = x[dim:]
-    q_n = x_n[:dim]
-    v_n = x_n[dim:]
-    q_c = x_c[:dim]
+    q, q_n, v, v_n, f, f_n = _gen_basic_values(dim, x, x_n, u, u_n, F, params)
+    # q_c = x_c[:dim]
     v_c = x_c[dim:]
-    f = F(x, u, params)[dim:]
-    f_n = F(x_n, u_n, params)[dim:]
     f_c = F(x_c, u_c, params)[dim:]
     q_interp = (-3 * v + 4 * v_c - v_n) / h + 2 * tau * (
         2 * v - 4 * v_c + 2 * v_n
@@ -1050,14 +1140,9 @@ def hs_mod_parab_dot_dot_interp(x, x_n, u, u_n, tau, F, h, params, scheme_params
     x_c = hs_mod_midpoint(x, x_n, u, u_n, tau, F, h, params)
     u_c = scheme_params
     dim = vec_len(x) // 2
-    q = x[:dim]
-    v = x[dim:]
-    q_n = x_n[:dim]
-    v_n = x_n[dim:]
-    q_c = x_c[:dim]
-    v_c = x_c[dim:]
-    f = F(x, u, params)[dim:]
-    f_n = F(x_n, u_n, params)[dim:]
+    q, q_n, v, v_n, f, f_n = _gen_basic_values(dim, x, x_n, u, u_n, F, params)
+    # q_c = x_c[:dim]
+    # v_c = x_c[dim:]
     f_c = F(x_c, u_c, params)[dim:]
     q_interp = (
         f
@@ -1070,7 +1155,7 @@ def hs_mod_parab_dot_dot_interp(x, x_n, u, u_n, tau, F, h, params, scheme_params
     return concatenate([q_interp, v_interp])
 
 
-def _newpoint_der(X, U, F, h, t, params, scheme, order, scheme_params=0):
+def _newpoint_der(X, U, F, h, t, params, scheme, order, scheme_params=[]):
     n = int(t // h)
     tau = t % h
     if (n + 1) > X.shape[0]:
@@ -1118,8 +1203,55 @@ def _newpoint_der(X, U, F, h, t, params, scheme, order, scheme_params=0):
 
 
 def interpolated_array_derivative(
-    X, U, F, h, t_array, params, scheme="hs_scipy", order=1, scheme_params=0
+    X, U, F, h, t_array, params, scheme="hs_scipy", order=1, scheme_params=[]
 ):
+    """
+    Calculates the n-th order derivatives of an interpolation of X using 
+    the appropiate form functions and returns its values at 't_array'.
+    It is assumed that X and U start at t = 0 and are equispaced in time
+    with a dt = h.
+     
+    
+
+    Parameters
+    ----------
+    X : Numpy Array, shape = (W, 2N)
+        Known values of X
+    U : Numpy Array, shape = (W, [Y])
+        Known Values of U
+    F : Function of (x, u, params)
+        A function of a dynamic sistem, so that
+            x' = F(x, u, params)
+    h : float
+        Time step between points
+    t_array : Numpy array, shape = (Z,)
+        Values of time where X and U are to be interpolated.
+    params : list
+        Physical problem parameters to be passed to F
+    scheme : str, optional
+        Scheme to be used in the X interpolation. The default is "hs_scipy".
+        Acceptable values are:
+            "hs_scipy": 3d order polynomial that satisfies continuity in x(t) and x'(t)
+            "hs": Hermite-Simpson scheme compatible interpolation
+            "hs_mod": modified Hermite-Simpson scheme compatible interpolation
+            "hs_parab": Hermite-Simpson scheme compatible interpolation with parabolic U
+        "hs_mod_parab": modified Hermite-Simpson scheme compatible interpolation with parabolic U
+    order : int, optional
+        Derivation order. The default is 1. Acceptable values are 1 and 2.
+    scheme_params :list, optional
+        Aditional parameters of the scheme. The default is [].
+
+    Raises
+    ------
+    ValueError
+        When either 'scheme' or 'u_scheme' are given unsupported values
+
+    Returns
+    -------
+    new_X : Numpy Array, shape = (Z, 2N)
+        Interpolated X derivative array
+
+    """
     supported_order = [1, 2]
     if order not in supported_order:
         raise ValueError(
@@ -1160,14 +1292,73 @@ def dynamic_error(
     params,
     scheme="hs_scipy",
     u_scheme="lin",
-    scheme_params=0,
+    scheme_params=[],
     n_interp=2000,
-    t_start=0,
 ):
+    """
+    Generates arrays of equispaced points with values of dynamic error.
+    
+    If x(t) = [q(t), v(t)], and the physics equation states that x' = F(x, u),
+    which is equivalent to [q', v'] = [v , G(q, v, u)] we can define the 
+    dynamic errors at a point t as:
+        dyn_q_err = q'(t) - v(t)
+        dyn_v_err = v'(t) - G(q(t), v(t), u(t))
+        dyn_2_err = q''(t) - G(q(t), v(t), u(t))
+        
+    'scheme' and 'u_scheme' define the way in which we interpolate the values
+    of q, v and u between the given points.
+        
+    It is assumed that X and U start at t = 0 and are equispaced in time
+    in the interval (0, t_end).
+
+    Parameters
+    ----------
+    x_arr : Numpy Array, shape = (W, 2N)
+        Values known of x(t)
+    u_arr : Numpy Array, shape = (W, [Y])
+        Values known of u(t)
+    t_end : float
+        ending time of interval of analysis
+    F : Function of (x, u, params)
+        A function of a dynamic sistem, so that
+            x' = F(x, u, params)
+    params : list
+        Physical problem parameters to be passed to F
+    scheme : str, optional
+        Scheme to be used in the X interpolation. The default is "hs_scipy".
+        Acceptable values are:
+            "trapz" : trapezoidal scheme compatible interpolation (not lineal!)
+            "trapz_mod": modified trapezoidal scheme compatible interpolation (not lineal!)
+            "hs_scipy": 3d order polynomial that satisfies continuity in x(t) and x'(t)
+            "hs": Hermite-Simpson scheme compatible interpolation
+            "hs_mod": modified Hermite-Simpson scheme compatible interpolation
+            "hs_parab": Hermite-Simpson scheme compatible interpolation with parabolic U
+        "hs_mod_parab": modified Hermite-Simpson scheme compatible interpolation with parabolic U
+    u_scheme : string, optional
+        Model of the interpolation that must be used. The default is "lin".
+        Acceptable values are:
+            "lin": lineal interpolation
+            "parab": parabolic interpolation, requires central points array
+            as scheme params[0]
+    scheme_params :list, optional
+        Aditional parameters of the scheme. The default is [].
+    n_interp : int, optional
+        Number of interpolation points. The default is 2000.
+
+    Returns
+    -------
+    dyn_err_q : Numpy array, shape = (n_interp, N)
+        equispaced values of dynamic error q'(t) - v(t).
+    dyn_err_v : Numpy array, shape = (n_interp, N)
+        equispaced values of dynamic error v'(t) - G(q(t), v(t), u(t)).
+    dyn_err_2 : Numpy array, shape = (n_interp, N)
+        equispaced values of dynamic error q''(t) - G(q(t), v(t), u(t)).
+
+    """
     N = x_arr.shape[0] - 1
     dim = x_arr.shape[1] // 2
     h = t_end / N
-    t_interp = linspace(t_start, t_end, n_interp)
+    t_interp = linspace(0, t_end, n_interp)
     x_interp, u_interp = interpolated_array(
         x_arr, u_arr, F, h, t_interp, params, scheme, u_scheme, scheme_params
     )
