@@ -10,7 +10,10 @@ from sympy import legendre_poly, symbols, expand, zeros, lambdify
 from functools import lru_cache
 from numpy import array, piecewise
 
-# --- Generating Collocation Points
+
+# --- Generating Collocation Points ---
+
+
 @lru_cache
 def LG(N, precission=20):
     return [ii.evalf(n=precission) for ii in legendre_poly(N, polys=True).real_roots()]
@@ -135,6 +138,7 @@ def base_points(N, scheme, precission=20):
 
 
 # --- Symbolic Lagrange Polynomials ---
+
 
 #### CREDIT: https://gist.github.com/folkertdev/084c53887c49a6248839 ####
 #### Snippet adapted from Folkert de Vries ###
@@ -335,3 +339,106 @@ def bary_poly(t_arr, y_arr):
         return piecewise(t, cond_list, func_list)
 
     return new_poly
+
+
+# --- Extreme points of LG scheme ---
+
+
+@lru_cache
+def LG_end_p_fun(N, precission=20):
+    coefs = symbols(f"c_0:{N}")
+    taus = base_points(N, "LG", precission)
+    x = symbols("x")
+    pol_lag = lagrangePolynomial(taus, coefs)
+    res = pol_lag.subs(x, 1)
+    return lambdify(coefs, res)
+
+
+@lru_cache
+def LG_diff_end_p_fun(N, precission=20):
+    coefs = symbols(f"c_0:{N}")
+    taus = base_points(N, "LG", precission)
+    x = symbols("x")
+    pol_lag = lagrangePolynomial(taus, coefs)
+    res = pol_lag.diff(x).subs(x, 1)
+    return lambdify(coefs, res)
+
+
+@lru_cache
+def LG_inv_start_p_fun(N, precission=20):
+    coefs = symbols(f"c_0:{N}")
+    taus = base_points(N, "LG_inv", precission)
+    x = symbols("x")
+    pol_lag = lagrangePolynomial(taus, coefs)
+    res = pol_lag.subs(x, 0)
+    return lambdify(coefs, res)
+
+
+@lru_cache
+def LG_inv_diff_start_p_fun(N, precission=20):
+    coefs = symbols(f"c_0:{N}")
+    taus = base_points(N, "LG_inv", precission)
+    x = symbols("x")
+    pol_lag = lagrangePolynomial(taus, coefs)
+    res = pol_lag.diff(x).subs(x, 0)
+    return lambdify(coefs, res)
+
+
+@lru_cache
+def LG_end_p_fun_cas(N, precission=20):
+    from casadi import SX, vertsplit, Function
+    from .casadi import sympy2casadi
+
+    coefs = symbols(f"c_0:{N}")
+    taus = base_points(N, "LG", precission)
+    pol_lag = lagrangePolynomial(taus, coefs)
+    x = symbols("x")
+    res = pol_lag.subs(x, 1)
+    x_cas = SX.sym("x", N)
+    res_cas = sympy2casadi(res, coefs, vertsplit(x_cas))
+    return Function("dynamics_x", [x_cas], [res_cas])
+
+
+@lru_cache
+def LG_diff_end_p_fun_cas(N, precission=20):
+    from casadi import SX, vertsplit, Function
+    from .casadi import sympy2casadi
+
+    coefs = symbols(f"c_0:{N}")
+    taus = base_points(N, "LG", precission)
+    pol_lag = lagrangePolynomial(taus, coefs)
+    x = symbols("x")
+    res = pol_lag.diff(x).subs(x, 1)
+    x_cas = SX.sym("x", N)
+    res_cas = sympy2casadi(res, coefs, vertsplit(x_cas))
+    return Function("dynamics_x", [x_cas], [res_cas])
+
+
+@lru_cache
+def LG_inv_start_p_fun_cas(N, precission=20):
+    from casadi import SX, vertsplit, Function
+    from .casadi import sympy2casadi
+
+    coefs = symbols(f"c_0:{N}")
+    taus = base_points(N, "LG_inv", precission)
+    pol_lag = lagrangePolynomial(taus, coefs)
+    x = symbols("x")
+    res = pol_lag.subs(x, 0)
+    x_cas = SX.sym("x", N)
+    res_cas = sympy2casadi(res, coefs, vertsplit(x_cas))
+    return Function("dynamics_x", [x_cas], [res_cas])
+
+
+@lru_cache
+def LG_inv_diff_start_p_fun_cas(N, precission=20):
+    from casadi import SX, vertsplit, Function
+    from .casadi import sympy2casadi
+
+    coefs = symbols(f"c_0:{N}")
+    taus = base_points(N, "LG_inv", precission)
+    pol_lag = lagrangePolynomial(taus, coefs)
+    x = symbols("x")
+    res = pol_lag.diff(x).subs(x, 0)
+    x_cas = SX.sym("x", N)
+    res_cas = sympy2casadi(res, coefs, vertsplit(x_cas))
+    return Function("dynamics_x", [x_cas], [res_cas])
