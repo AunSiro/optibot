@@ -448,6 +448,10 @@ def LG_inv_diff_start_p_fun_cas(N, precission=20):
 
 
 def find_der_polyline(x_n, xp, yp):
+    """
+    Generates a lineal interpolation that passes through  points xp,yp
+    Then returns values of slope at points x_n
+    """
     from numpy import searchsorted, where
 
     n = searchsorted(xp, x_n)
@@ -457,6 +461,10 @@ def find_der_polyline(x_n, xp, yp):
 
 
 def get_pol_u(scheme, uu):
+    """
+    Generates a numerical function of a polynomial for interpolating
+    u, valid in tau = (-1, 1)
+    """
     N = len(uu)
     taus = coll_points(N, scheme)
     pol_u = bary_poly(taus, uu)
@@ -464,6 +472,46 @@ def get_pol_u(scheme, uu):
 
 
 def get_pol_x(scheme, qq, vv, t0, t1):
+    """
+    Generates numerical functions of polynomials for interpolating
+    x and its derivatives, valid in tau = (-1, 1)
+
+    Parameters
+    ----------
+    scheme : str
+        Pseudospectral cheme used in the optimization.
+        Acceptable values are:
+            'LG'
+            'LG_inv'
+            'LGR'
+            'LGR_inv'
+            'LGL'
+            'LGLm'
+            'LG2'
+            'D2'
+    qq : Numpy Array
+        Values known of q(t)
+    vv : Numpy Array
+        Values known of v(t)
+    t0 : float
+        starting time of interval of analysis
+    t1 : float
+        ending time of interval of analysis
+
+    Returns
+    -------
+    pol_q : function(tau)
+       polynomial interpolation of q(tau)
+    pol_v : function(tau)
+       polynomial interpolation of v(tau)
+    pol_q_d : function(tau)
+       polynomial interpolation of q'(tau)
+    pol_v_d : function(tau)
+       polynomial interpolation of v'(tau)
+    pol_q_d_d : function(tau)
+       polynomial interpolation of q''(tau)
+
+    """
     N = len(qq)
     tau_x = base_points(N, scheme)
     qq_d = 2 / (t1 - t0) * matrix_D_bary(N, scheme) @ qq
@@ -479,42 +527,117 @@ def get_pol_x(scheme, qq, vv, t0, t1):
 
 
 def extend_x_arrays(qq, vv, scheme):
+    """
+    In the case that the scheme doesn't consider either extreme point as a base point,
+    the value of q and v at said point is calculated and added to the arrays.
+    A modified tau list compatible is also calculated.
+    If both extremes are base points for the given scheme, unmodified arrays
+    of q and v are returned along with the usual tau list.
+
+    Parameters
+    ----------
+    qq : Numpy Array
+        Values known of q(t)
+    vv : Numpy Array
+        Values known of v(t)
+    scheme : str
+        Pseudospectral cheme used in the optimization.
+        Acceptable values are:
+            'LG'
+            'LG_inv'
+            'LGR'
+            'LGR_inv'
+            'LGL'
+            'LGLm'
+            'LG2'
+            'D2'
+
+    Returns
+    -------
+    tau_x : list
+        Tau values coherent with the new q and v arrays
+    new_qq : Numpy Array
+        Values known of q(t)
+    new_vv : Numpy Array
+        Values known of v(t)
+
+    """
     N = len(qq)
     if scheme == "LG":
         tau_x = base_points(N, scheme) + [1]
         endp_f = LG_end_p_fun(N)
         qq_1 = float(endp_f(*qq))
         vv_1 = float(endp_f(*vv))
-        qq = array(list(qq) + [qq_1,], dtype="float64")
-        vv = array(list(vv) + [vv_1,], dtype="float64")
+        new_qq = array(list(qq) + [qq_1,], dtype="float64")
+        new_vv = array(list(vv) + [vv_1,], dtype="float64")
     elif scheme == "LG_inv":
         tau_x = [-1] + base_points(N, scheme)
         startp_f = LG_inv_start_p_fun(N)
         qq_1 = float(startp_f(*qq))
         vv_1 = float(startp_f(*vv))
-        qq = array(list(qq) + [qq_1,], dtype="float64")
-        vv = array(list(vv) + [vv_1,], dtype="float64")
+        new_qq = array(list(qq) + [qq_1,], dtype="float64")
+        new_vv = array(list(vv) + [vv_1,], dtype="float64")
     else:
         tau_x = base_points(N, scheme)
-    return tau_x, qq, vv
+        new_qq = qq
+        new_vv = vv
+    return tau_x, new_qq, new_vv
 
 
 def extend_u_array(uu, scheme, N):
+    """
+    In the case that the scheme doesn't consider either extreme point as a 
+    collocation point, the value of u at said points is extrapolated by
+    duplicating the nearest known value and added to the array.
+    A modified tau list compatible is also calculated.
+    If both extremes are collocation points for the given scheme, unmodified 
+    array of u are returned along with the usual tau list.
+
+    Parameters
+    ----------
+    uu : Numpy Array
+        Values known of u(t)
+    scheme : str
+        Pseudospectral cheme used in the optimization.
+        Acceptable values are:
+            'LG'
+            'LG_inv'
+            'LGR'
+            'LGR_inv'
+            'LGL'
+            'LGLm'
+            'LG2'
+            'D2'
+
+    Returns
+    -------
+    tau_x : list
+        Tau values coherent with the new q and v arrays
+    new_uu : Numpy Array
+        Values known of u(t)
+
+    """
     tau_u = base_points(N, scheme)
     if scheme == "LG2":
-        uu = array([uu[0]] + list(uu) + [uu[-1]], dtype="float64")
+        new_uu = array([uu[0]] + list(uu) + [uu[-1]], dtype="float64")
     elif scheme == "LG":
         tau_u = tau_u + [1]
-        uu = array([uu[0]] + list(uu) + [uu[-1]], dtype="float64")
+        new_uu = array([uu[0]] + list(uu) + [uu[-1]], dtype="float64")
     elif scheme == "LG_inv":
         tau_u = [-1] + tau_u
-        uu = array([uu[0]] + list(uu) + [uu[-1]], dtype="float64")
+        new_uu = array([uu[0]] + list(uu) + [uu[-1]], dtype="float64")
     elif scheme == "LGLm":
-        uu = array([uu[0]] + list(uu) + [uu[-1]], dtype="float64")
-    return tau_u, uu
+        new_uu = array([uu[0]] + list(uu) + [uu[-1]], dtype="float64")
+    else:
+        new_uu = uu
+    return tau_u, new_uu
 
 
 def get_hermite_x(qq, vv, aa, tau_x, t0, t1):
+    """
+    Returns Scipy hermite functions that interpolate q, v, q', v', q'' in
+    the interval t = (t0, t1)
+    """
     from scipy.interpolate import CubicHermiteSpline as hermite
 
     coll_p = t0 + (1 + array(tau_x, dtype="float64")) * (t1 - t0) / 2
@@ -558,7 +681,7 @@ def dynamic_error_pseudospectral(
         Values known of v(t)
     uu : Numpy Array, shape = (Y, [Z])
         Values known of x(t)
-    scheme : str, optional
+    scheme : str
         Pseudospectral cheme used in the optimization.
         Acceptable values are:
             'LG'
@@ -611,17 +734,17 @@ def dynamic_error_pseudospectral(
     scheme_opts = ["LG", "LG_inv", "LGR", "LGR_inv", "LGL", "D2", "LG2", "LGLm"]
     if scheme not in scheme_opts:
         NameError(f"Invalid scheme.\n valid options are {scheme_opts}")
-    t_arr = linspace(-1, 1, 1000)
+    tau_arr = linspace(-1, 1, 1000)
     if u_interp == "pol":
         pol_u = get_pol_u(scheme, N, uu)
-        u_arr = pol_u(t_arr)
+        u_arr = pol_u(tau_arr)
     elif u_interp == "lin":
         tau_u, uu = extend_u_array(uu, scheme, N)
-        u_arr = interp(t_arr, tau_u, uu)
+        u_arr = interp(tau_arr, tau_u, uu)
     elif u_interp == "smooth":
         tau_u, uu = extend_u_array(uu, scheme, N)
         uu_dot = gradient(uu, tau_u)
-        u_arr = hermite(tau_u, uu, uu_dot)(t_arr)
+        u_arr = hermite(tau_u, uu, uu_dot)(tau_arr)
     else:
         raise NameError(
             'Invalid interpolation method for u.\n valid options are "pol", "lin", "smooth"'
@@ -630,15 +753,15 @@ def dynamic_error_pseudospectral(
     if x_interp == "pol":
         tau_x = base_points(N, scheme)
         pol_q, pol_v, pol_q_d, pol_v_d, pol_q_d_d = get_pol_x(scheme, qq, vv, t0, t1)
-        q_arr = pol_q(t_arr)
-        v_arr = pol_v(t_arr)
-        q_arr_d = pol_q_d(t_arr)
-        v_arr_d = pol_v_d(t_arr)
-        q_arr_d_d = pol_q_d_d(t_arr)
+        q_arr = pol_q(tau_arr)
+        v_arr = pol_v(tau_arr)
+        q_arr_d = pol_q_d(tau_arr)
+        v_arr_d = pol_v_d(tau_arr)
+        q_arr_d_d = pol_q_d_d(tau_arr)
     elif x_interp == "lin":
         tau_x, qq, vv = extend_x_arrays(qq, vv, scheme)
-        q_arr = interp(t_arr, tau_x, qq)
-        v_arr = interp(t_arr, tau_x, vv)
+        q_arr = interp(tau_arr, tau_x, qq)
+        v_arr = interp(tau_arr, tau_x, vv)
         coll_p = t0 + (1 + array(tau_x, dtype="float64")) * (t1 - t0) / 2
         t_arr_lin = linspace(t0, t1, 1000)
         q_arr_d = find_der_polyline(t_arr_lin, coll_p, qq)
