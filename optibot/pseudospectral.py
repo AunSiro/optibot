@@ -8,7 +8,7 @@ Created on Thu Nov 11 12:11:43 2021
 
 from sympy import legendre_poly, symbols, expand, zeros, lambdify
 from functools import lru_cache
-from numpy import array, piecewise
+from numpy import array, piecewise, linspace
 
 
 # --- Generating Collocation Points ---
@@ -442,3 +442,227 @@ def LG_inv_diff_start_p_fun_cas(N, precission=20):
     x_cas = SX.sym("x", N)
     res_cas = sympy2casadi(res, coefs, vertsplit(x_cas))
     return Function("dynamics_x", [x_cas], [res_cas])
+
+
+# --- Interpolations and dynamic errors ---
+
+
+def find_der_polyline(x_n, xp, yp):
+    from numpy import searchsorted, where
+
+    n = searchsorted(xp, x_n)
+    n = where(n - 1 > 0, n - 1, 0)
+    deriv_arr = (yp[1:] - yp[:-1]) / (xp[1:] - xp[:-1])
+    return deriv_arr[n]
+
+
+def get_pol_u(scheme, uu):
+    N = len(uu)
+    taus = coll_points(N, scheme)
+    pol_u = bary_poly(taus, uu)
+    return pol_u
+
+
+def get_pol_x(scheme, qq, vv, t0, t1):
+    N = len(qq)
+    tau_x = base_points(N, scheme)
+    qq_d = 2 / (t1 - t0) * matrix_D_bary(N, scheme) @ qq
+    vv_d = 2 / (t1 - t0) * matrix_D_bary(N, scheme) @ vv
+    qq_d_d = 2 / (t1 - t0) * matrix_D_bary(N, scheme) @ qq_d
+
+    pol_q = bary_poly(tau_x, qq)
+    pol_v = bary_poly(tau_x, vv)
+    pol_q_d = bary_poly(tau_x, qq_d)
+    pol_v_d = bary_poly(tau_x, vv_d)
+    pol_q_d_d = bary_poly(tau_x, qq_d_d)
+    return pol_q, pol_v, pol_q_d, pol_v_d, pol_q_d_d
+
+
+def extend_x_arrays(qq, vv, scheme):
+    N = len(qq)
+    if scheme == "LG":
+        tau_x = base_points(N, scheme) + [1]
+        endp_f = LG_end_p_fun(N)
+        qq_1 = float(endp_f(*qq))
+        vv_1 = float(endp_f(*vv))
+        qq = array(list(qq) + [qq_1,], dtype="float64")
+        vv = array(list(vv) + [vv_1,], dtype="float64")
+    elif scheme == "LG_inv":
+        tau_x = [-1] + base_points(N, scheme)
+        startp_f = LG_inv_start_p_fun(N)
+        qq_1 = float(startp_f(*qq))
+        vv_1 = float(startp_f(*vv))
+        qq = array(list(qq) + [qq_1,], dtype="float64")
+        vv = array(list(vv) + [vv_1,], dtype="float64")
+    else:
+        tau_x = base_points(N, scheme)
+    return tau_x, qq, vv
+
+
+def extend_u_array(uu, scheme, N):
+    tau_u = base_points(N, scheme)
+    if scheme == "LG2":
+        uu = array([uu[0]] + list(uu) + [uu[-1]], dtype="float64")
+    elif scheme == "LG":
+        tau_u = tau_u + [1]
+        uu = array([uu[0]] + list(uu) + [uu[-1]], dtype="float64")
+    elif scheme == "LG_inv":
+        tau_u = [-1] + tau_u
+        uu = array([uu[0]] + list(uu) + [uu[-1]], dtype="float64")
+    elif scheme == "LGLm":
+        uu = array([uu[0]] + list(uu) + [uu[-1]], dtype="float64")
+    return tau_u, uu
+
+
+def get_hermite_x(qq, vv, aa, tau_x, t0, t1):
+    from scipy.interpolate import CubicHermiteSpline as hermite
+
+    coll_p = t0 + (1 + array(tau_x, dtype="float64")) * (t1 - t0) / 2
+    her_q = hermite(coll_p, qq, vv)
+    her_v = hermite(coll_p, vv, aa)
+    her_q_d = her_q.derivative()
+    her_v_d = her_v.derivative()
+    her_q_d_d = her_q_d.derivative()
+    return her_q, her_v, her_q_d, her_v_d, her_q_d_d
+
+
+def dynamic_error_pseudospectral(
+    qq,
+    vv,
+    uu,
+    scheme,
+    t0,
+    t1,
+    u_interp="pol",
+    x_interp="pol",
+    g_func=lambda q, v, u, p: u,
+):
+    """
+    Generates arrays of equispaced points with values of dynamic error.
+    
+    If x(t) = [q(t), v(t)], and the physics equation states that x' = F(x, u),
+    which is equivalent to [q', v'] = [v , G(q, v, u)] we can define the 
+    dynamic errors at a point t as:
+        dyn_q_err = q'(t) - v(t)
+        dyn_v_err = v'(t) - G(q(t), v(t), u(t))
+        dyn_2_err = q''(t) - G(q(t), v(t), u(t))
+        
+    'x_interp' and 'u_interp' define the way in which we interpolate the values
+    of q, v and u between the given points.
+
+    Parameters
+    ----------
+    qq : Numpy Array, shape = (W, N)
+        Values known of q(t)
+    vv : Numpy Array, shape = (W, N)
+        Values known of v(t)
+    uu : Numpy Array, shape = (Y, [Z])
+        Values known of x(t)
+    scheme : str, optional
+        Pseudospectral cheme used in the optimization.
+        Acceptable values are:
+            'LG'
+            'LG_inv'
+            'LGR'
+            'LGR_inv'
+            'LGL'
+            'LGLm'
+            'LG2'
+            'D2'
+    t0 : float
+        starting time of interval of analysis
+    t1 : float
+        ending time of interval of analysis
+    u_interp :  string, optional
+        Model of the interpolation that must be used. The default is "pol".
+        Acceptable values are:
+            "pol": corresponding polynomial interpolation
+            "lin": lineal interpolation
+            "smooth": 3d order spline interpolation
+    x_interp : string, optional
+        Model of the interpolation that must be used. The default is "pol".
+        Acceptable values are:
+            "pol": corresponding polynomial interpolation
+            "lin": lineal interpolation
+            "Hermite": Hermite's 3d order spline interpolation
+    g_func : Function of (q, v, u, params)
+        A function of a dynamic sistem, so that
+            v' = g(q, v, u, params)
+
+    Raises
+    ------
+    NameError
+        When an unsupported value for scheme, x_interp or u_interp is used.
+
+    Returns
+    -------
+    err_q : Numpy array, shape = (n_interp, N)
+        equispaced values of dynamic error q'(t) - v(t).
+    err_v : Numpy array, shape = (n_interp, N)
+        equispaced values of dynamic error v'(t) - G(q(t), v(t), u(t)).
+    err_2 : Numpy array, shape = (n_interp, N)
+        equispaced values of dynamic error q''(t) - G(q(t), v(t), u(t)).
+
+    """
+    from scipy.interpolate import CubicHermiteSpline as hermite
+    from numpy import interp, gradient, zeros_like
+
+    N = len(qq)
+    scheme_opts = ["LG", "LG_inv", "LGR", "LGR_inv", "LGL", "D2", "LG2", "LGLm"]
+    if scheme not in scheme_opts:
+        NameError(f"Invalid scheme.\n valid options are {scheme_opts}")
+    t_arr = linspace(-1, 1, 1000)
+    if u_interp == "pol":
+        pol_u = get_pol_u(scheme, N, uu)
+        u_arr = pol_u(t_arr)
+    elif u_interp == "lin":
+        tau_u, uu = extend_u_array(uu, scheme, N)
+        u_arr = interp(t_arr, tau_u, uu)
+    elif u_interp == "smooth":
+        tau_u, uu = extend_u_array(uu, scheme, N)
+        uu_dot = gradient(uu, tau_u)
+        u_arr = hermite(tau_u, uu, uu_dot)(t_arr)
+    else:
+        raise NameError(
+            'Invalid interpolation method for u.\n valid options are "pol", "lin", "smooth"'
+        )
+
+    if x_interp == "pol":
+        tau_x = base_points(N, scheme)
+        pol_q, pol_v, pol_q_d, pol_v_d, pol_q_d_d = get_pol_x(scheme, qq, vv, t0, t1)
+        q_arr = pol_q(t_arr)
+        v_arr = pol_v(t_arr)
+        q_arr_d = pol_q_d(t_arr)
+        v_arr_d = pol_v_d(t_arr)
+        q_arr_d_d = pol_q_d_d(t_arr)
+    elif x_interp == "lin":
+        tau_x, qq, vv = extend_x_arrays(qq, vv, scheme)
+        q_arr = interp(t_arr, tau_x, qq)
+        v_arr = interp(t_arr, tau_x, vv)
+        coll_p = t0 + (1 + array(tau_x, dtype="float64")) * (t1 - t0) / 2
+        t_arr_lin = linspace(t0, t1, 1000)
+        q_arr_d = find_der_polyline(t_arr_lin, coll_p, qq)
+        v_arr_d = find_der_polyline(t_arr_lin, coll_p, vv)
+        q_arr_d_d = zeros_like(q_arr)
+    elif x_interp == "Hermite":
+        tau_x, qq, vv = extend_x_arrays(qq, vv, scheme)
+        aa = g_func(qq, vv, uu)
+        her_q, her_v, her_q_d, her_v_d, her_q_d_d = get_hermite_x(
+            qq, vv, aa, tau_x, t0, t1
+        )
+        t_arr_lin = linspace(t0, t1, 1000)
+        q_arr = her_q(t_arr_lin)
+        v_arr = her_v(t_arr_lin)
+        q_arr_d = her_q_d(t_arr_lin)
+        v_arr_d = her_v_d(t_arr_lin)
+        q_arr_d_d = her_q_d_d(t_arr_lin)
+    else:
+        raise NameError(
+            'Invalid interpolation method for x.\n valid options are "pol", "lin", "Hermite"'
+        )
+
+    err_q = q_arr_d - v_arr
+    err_v = v_arr_d - g_func(q_arr, v_arr, u_arr)
+    err_2 = q_arr_d_d - g_func(q_arr, v_arr, u_arr)
+
+    return err_q, err_v, err_2

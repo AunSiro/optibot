@@ -1235,7 +1235,7 @@ def interpolated_array_derivative(
             "hs": Hermite-Simpson scheme compatible interpolation
             "hs_mod": modified Hermite-Simpson scheme compatible interpolation
             "hs_parab": Hermite-Simpson scheme compatible interpolation with parabolic U
-        "hs_mod_parab": modified Hermite-Simpson scheme compatible interpolation with parabolic U
+            "hs_mod_parab": modified Hermite-Simpson scheme compatible interpolation with parabolic U
     order : int, optional
         Derivation order. The default is 1. Acceptable values are 1 and 2.
     scheme_params :list, optional
@@ -1333,7 +1333,7 @@ def dynamic_error(
             "hs": Hermite-Simpson scheme compatible interpolation
             "hs_mod": modified Hermite-Simpson scheme compatible interpolation
             "hs_parab": Hermite-Simpson scheme compatible interpolation with parabolic U
-        "hs_mod_parab": modified Hermite-Simpson scheme compatible interpolation with parabolic U
+            "hs_mod_parab": modified Hermite-Simpson scheme compatible interpolation with parabolic U
     u_scheme : string, optional
         Model of the interpolation that must be used. The default is "lin".
         Acceptable values are:
