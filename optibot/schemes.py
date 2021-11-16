@@ -194,6 +194,46 @@ def expand_F(F, mode="numpy"):
     return new_F
 
 
+def reduce_F(F):
+    """
+    Extract a function G(q, v, u, params) such that v' = G(q, v, u, params)
+    from a function F(x, u, params) such that x' = F(x, u, params)
+
+    Parameters
+    ----------
+    F : Function
+        function F(x, u, params) such that x' = F(x, u, params)
+
+    Returns
+    -------
+    G : Function
+        function G(q, v, u, params) such that v' = G(q, v, u, params)
+
+    """
+    old_docstring = str(F.__doc__)
+    old_f_name = str(F.__name__)
+
+    def G(q, v, u, params):
+        dim = q.shape[-1]
+        axnum = len(q.shape) - 1
+        x = concatenate((q, v), axnum)
+        res = F(x, u, params)
+        aa = res[:, dim:]
+        return aa
+
+    new_docstring = f"""
+    This is an reduced version of function {old_f_name}.
+    This reduced function is designed to describe a dinamic sistem so that:
+        v' = F(q, v, u, params)
+    While the old function was:
+        x' = F(x, u, params)
+    Old function documentation:
+    """
+    new_docstring += old_docstring
+    G.__doc__ = new_docstring
+    return G
+
+
 # --- Integration Steps ---
 
 
