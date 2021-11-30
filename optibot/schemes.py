@@ -11,6 +11,7 @@ from numpy import zeros, append, concatenate, linspace, expand_dims, interp, arr
 from scipy.interpolate import CubicHermiteSpline as hermite
 from copy import copy
 import functools
+import warnings
 
 
 def is_iterable(x):
@@ -1196,15 +1197,19 @@ def hs_mod_parab_dot_dot_interp(x, x_n, u, u_n, tau, F, h, params, scheme_params
 
 
 def _newpoint_der(X, U, F, h, t, params, scheme, order, scheme_params=[]):
-    n = int(t // h)
-    tau = t % h
-    if (n + 1) > X.shape[0]:
-        raise ValueError(f"Value of time {t} detected outside interpolation limits")
-    # print(f't = {t} , tau = {tau} , n = {n} , h = {h}')
+    # Avoid out of interpolation error when t == t_final
+    if abs(t - h * (X.shape[0] - 1)) < h * 1e-8:
+        n = X.shape[0] - 2
+        tau = h
+    else:
+        n = int(t // h)
+        tau = t % h
     # if abs(tau) < h * 1e-8:
     #    x_interp = X[n]
     # elif abs(tau - h) < h * 1e-8:
     #    x_interp = X[n + 1]
+    if (n + 1) >= X.shape[0]:
+        raise ValueError(f"Value of time {t} detected outside interpolation limits")
     else:
         x, x_n, u, u_n = X[n], X[n + 1], U[n], U[n + 1]
         if scheme == "hs":
@@ -1343,7 +1348,8 @@ def dynamic_error(
     dynamic errors at a point t as:
         dyn_q_err = q'(t) - v(t)
         dyn_v_err = v'(t) - G(q(t), v(t), u(t))
-        dyn_2_err = q''(t) - G(q(t), v(t), u(t))
+        dyn_2_err_a = q''(t) - G(q(t), v(t), u(t))
+        dyn_2_err_b = q''(t) - G(q(t), q'(t), u(t))
         
     'scheme' and 'u_scheme' define the way in which we interpolate the values
     of q, v and u between the given points.
@@ -1391,10 +1397,20 @@ def dynamic_error(
         equispaced values of dynamic error q'(t) - v(t).
     dyn_err_v : Numpy array, shape = (n_interp, N)
         equispaced values of dynamic error v'(t) - G(q(t), v(t), u(t)).
-    dyn_err_2 : Numpy array, shape = (n_interp, N)
+    dyn_err_2_a : Numpy array, shape = (n_interp, N)
         equispaced values of dynamic error q''(t) - G(q(t), v(t), u(t)).
+    dyn_err_2_b : Numpy array, shape = (n_interp, N)
+        equispaced values of dynamic error q''(t) - G(q(t), q'(t), u(t)).
 
     """
+    if "parab" in scheme and u_scheme != "parab":
+        warnings.warn(
+            "You are currently using a u-parabolic interpolation for x with a lineal interpolation of u"
+        )
+    if "parab" in u_scheme and "parab" not in scheme:
+        warnings.warn(
+            "You are currently using a parabolic interpolation for u with a non u-parabolic interpolation of x"
+        )
     N = x_arr.shape[0] - 1
     dim = x_arr.shape[1] // 2
     h = t_end / N
@@ -1408,10 +1424,15 @@ def dynamic_error(
     x_dot_dot_interp = interpolated_array_derivative(
         x_arr, u_arr, F, h, t_interp, params, scheme, 2, scheme_params
     )
-    f_arr = zeros([n_interp, dim])
+    f_arr_a = zeros([n_interp, dim])
+    f_arr_b = zeros([n_interp, dim])
     for ii in range(n_interp):
-        f_arr[ii, :] = F(x_interp[ii], u_interp[ii], params)[dim:]
+        f_arr_a[ii, :] = F(x_interp[ii], u_interp[ii], params)[dim:]
+        x_q = x_interp[ii].copy()
+        x_q[dim:] = x_dot_interp[ii, :dim]
+        f_arr_b[ii, :] = F(x_q, u_interp[ii], params)[dim:]
     dyn_err_q = x_dot_interp[:, :dim] - x_interp[:, dim:]
-    dyn_err_v = x_dot_interp[:, dim:] - f_arr
-    dyn_err_2 = x_dot_dot_interp[:, :dim] - f_arr
-    return dyn_err_q, dyn_err_v, dyn_err_2
+    dyn_err_v = x_dot_interp[:, dim:] - f_arr_a
+    dyn_err_2_a = x_dot_dot_interp[:, :dim] - f_arr_a
+    dyn_err_2_b = x_dot_dot_interp[:, :dim] - f_arr_b
+    return dyn_err_q, dyn_err_v, dyn_err_2_a, dyn_err_2_b

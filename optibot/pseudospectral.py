@@ -118,17 +118,17 @@ def base_points(N, scheme, precission=20):
         list of base points
     """
     if scheme == "LG":
-        return [-1.0] + LG(N, precission)
+        return [-1.0] + LG(N - 1, precission)
     elif scheme == "LG_inv":
-        return LG(N, precission) + [1.0]
+        return LG(N - 1, precission) + [1.0]
     elif scheme == "LGR":
-        return LGR(N, precission) + [1.0]
+        return LGR(N - 1, precission) + [1.0]
     elif scheme == "LGR_inv":
-        return [-1.0] + [-ii for ii in LGR(N, precission)[::-1]]
+        return [-1.0] + [-ii for ii in LGR(N - 1, precission)[::-1]]
     elif scheme in ["LGL", "D2"]:
         return LGL(N, precission)
     elif scheme == "LGLm":
-        return [-1.0] + LGLm(N, precission) + [1.0]
+        return LGL(N, precission)
     elif scheme == "LG2":
         return LG2(N, precission)
     else:
@@ -659,6 +659,7 @@ def dynamic_error_pseudospectral(
     u_interp="pol",
     x_interp="pol",
     g_func=lambda q, v, u, p: u,
+    params=[],
 ):
     """
     Generates arrays of equispaced points with values of dynamic error.
@@ -711,6 +712,8 @@ def dynamic_error_pseudospectral(
     g_func : Function of (q, v, u, params)
         A function of a dynamic sistem, so that
             v' = g(q, v, u, params)
+    params : list
+        Physical problem parameters to be passed to F
 
     Raises
     ------
@@ -736,7 +739,7 @@ def dynamic_error_pseudospectral(
         NameError(f"Invalid scheme.\n valid options are {scheme_opts}")
     tau_arr = linspace(-1, 1, 1000)
     if u_interp == "pol":
-        pol_u = get_pol_u(scheme, N, uu)
+        pol_u = get_pol_u(scheme, uu)
         u_arr = pol_u(tau_arr)
     elif u_interp == "lin":
         tau_u, uu = extend_u_array(uu, scheme, N)
@@ -769,7 +772,7 @@ def dynamic_error_pseudospectral(
         q_arr_d_d = zeros_like(q_arr)
     elif x_interp == "Hermite":
         tau_x, qq, vv = extend_x_arrays(qq, vv, scheme)
-        aa = g_func(qq, vv, uu)
+        aa = g_func(qq, vv, uu, params)
         her_q, her_v, her_q_d, her_v_d, her_q_d_d = get_hermite_x(
             qq, vv, aa, tau_x, t0, t1
         )
@@ -785,7 +788,7 @@ def dynamic_error_pseudospectral(
         )
 
     err_q = q_arr_d - v_arr
-    err_v = v_arr_d - g_func(q_arr, v_arr, u_arr)
-    err_2 = q_arr_d_d - g_func(q_arr, v_arr, u_arr)
+    err_v = v_arr_d - g_func(q_arr, v_arr, u_arr, params)
+    err_2 = q_arr_d_d - g_func(q_arr, v_arr, u_arr, params)
 
     return err_q, err_v, err_2
