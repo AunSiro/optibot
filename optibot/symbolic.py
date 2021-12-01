@@ -488,6 +488,53 @@ class SimpLagrangesMethod(LagrangesMethod):
         return self._rhs_full
 
 
+class ImplicitLagrangesMethod(LagrangesMethod):
+    @property
+    def mass_matrix_square(self):
+        """Augments the coefficients of restrictions to the mass_matrix."""
+
+        if self.eom is None:
+            raise ValueError("Need to compute the equations of motion first")
+        m = len(self.coneqs)
+        row1 = self.mass_matrix
+        if self.coneqs:
+            row2 = self._m_cd.row_join(zeros(m, m))
+            return row1.col_join(row2)
+        else:
+            return row1
+
+    @property
+    def implicit_dynamics_q(self):
+        if self.eom is None:
+            raise ValueError("Need to compute the equations of motion first")
+        M = self.mass_matrix_square
+        if self.coneqs:
+            F = self.forcing.col_join(self._f_cd)
+            Q_exp = self._qdoubledots.col_join(self.lam_vec)
+        else:
+            F = self.forcing
+            Q_exp = self._qdoubledots
+
+        return M @ Q_exp - F
+
+    @property
+    def implicit_dynamics_x(self):
+        if self.eom is None:
+            raise ValueError("Need to compute the equations of motion first")
+        M = self.mass_matrix_full
+        n = len(self.q)
+        X = Matrix(dynamicsymbols("x_0:" + str(2 * n)))
+        X_dot = X.diff(dynamicsymbols._t)
+        if self.coneqs:
+            F = Matrix(X[n:]).col_join(self.forcing).col_join(self._f_cd)
+            X_exp = X_dot.col_join(self.lam_vec)
+        else:
+            F = Matrix(X[n:]).col_join(self.forcing)
+            X_exp = X_dot
+
+        return M @ X_exp - F
+
+
 def find_arguments(expr_list, q_vars, u_vars=None):
 
     expr_list = list(expr_list)
