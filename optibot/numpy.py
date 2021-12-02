@@ -58,16 +58,14 @@ def num_derivative(X, h):
     return X_dot
 
 
-def RHS2numpy(
-    RHS, q_vars, u_vars=None,
-):
+def RHS2numpy(RHS, q_vars, u_vars=None, verbose=False):
     from sympy import lambdify
     from .symbolic import find_arguments, standard_notation, diff_to_symb_expr
 
     RHS = list(RHS)
     RHS = [standard_notation(diff_to_symb_expr(expr)) for expr in RHS]
-    arguments = find_arguments(RHS, q_vars, u_vars)
-    q_args, v_args, x_args_found, u_args, u_args_found, params = arguments
+    arguments = find_arguments(RHS, q_vars, u_vars, verbose=verbose)
+    q_args, v_args, a_args, u_args, params, lambda_args = arguments
     x_args = q_args + v_args
 
     if len(q_args) == len(RHS):
@@ -79,10 +77,10 @@ def RHS2numpy(
             f"Unrecognized RHS shape, detected elements = {len(RHS)}, expected {len(q_args)} or {len(x_args)}"
         )
 
-    all_vars = x_args + u_args_found + params
+    all_vars = x_args + u_args + params
     msg = "Function Arguments:\n"
     msg += f"\tx: {x_args}\n"
-    msg += f"\tu: {u_args_found}\n"
+    msg += f"\tu: {u_args}\n"
     msg += f"\tparams: {params}\n"
     print(msg)
     np_funcs = []

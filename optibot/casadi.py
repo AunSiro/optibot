@@ -62,15 +62,43 @@ def symlist2cas(symlist):
     return caslist
 
 
-def RHS2casF(
-    RHS, q_vars, u_vars=None,
-):
+def unpack(arr):
+    arr = cas.horzcat(arr)
+    if arr.shape[-1] == 1:
+        arr = arr.T
+    dim = arr.shape[-1]
+    res = [arr[:, ii] for ii in range(dim)]
+    return res
+
+
+def rhs_to_casadi_function(RHS, q_vars, u_vars=None, verbose=False):
+    """
+    Converts an array of symbolic expressions RHS(x, u, params) to a casadi 
+    function.
+    Designed to work with systems so that
+        x' = RHS(x, u, params)
+
+    Parameters
+    ----------
+    RHS : Sympy matrix
+        Vertical symbolic matrix RHS(x, x', u, lambdas, params)
+    q_vars : TYPE
+        DESCRIPTION.
+    u_vars : TYPE, optional
+        DESCRIPTION. The default is None.
+
+    Returns
+    -------
+    TYPE
+        DESCRIPTION.
+
+    """
     from .symbolic import find_arguments, standard_notation, diff_to_symb_expr
 
     RHS = list(RHS)
     RHS = [standard_notation(diff_to_symb_expr(expr)) for expr in RHS]
-    arguments = find_arguments(RHS, q_vars, u_vars)
-    q_args, v_args, x_args_found, u_args, u_args_found, params = arguments
+    arguments = find_arguments(RHS, q_vars, u_vars, verbose=verbose)
+    q_args, v_args, _, u_args_found, params, lambda_args = arguments
     x_args = q_args + v_args
 
     funcs = v_args + RHS
@@ -99,13 +127,147 @@ def RHS2casF(
     )
 
 
-def unpack(arr):
-    arr = cas.horzcat(arr)
-    if arr.shape[-1] == 1:
-        arr = arr.T
-    dim = arr.shape[-1]
-    res = [arr[:, ii] for ii in range(dim)]
-    return res
+def implied_dynamic_x_to_casadi_function(D, x_vars, u_vars=None, verbose=False):
+    """
+    Converts an array D(x, x', u, lambdas, params) of symbolic expressions to a 
+    Casadi function.
+    
+    Symbols in the expressions not found in x_vars, x_dot_vars or u_vars
+    will be considered parameters.
+
+    Parameters
+    ----------
+    D : Sympy matrix
+        Vertical symbolic matrix D(x, x', u, lambdas, params)
+    x_vars : int or list of Sympy dynamic symbols
+        list of x symbols to look for in the expressions.
+        If int, they will be generated as 'x_i' for i in [0, x_vars]
+    u_vars : list of Sympy dynamic symbols
+        List of u symbols to look for. The default is None.
+
+    Returns
+    -------
+    Casadi Function
+        Casadi Function of x, x', u, lambdas, params.
+
+    """
+    from .symbolic import find_arguments, standard_notation, diff_to_symb_expr
+    from sympy.physics.mechanics import dynamicsymbols
+
+    D = list(D)
+    D = [standard_notation(diff_to_symb_expr(expr)) for expr in D]
+    if type(x_vars) == int:
+        x_vars = list(dynamicsymbols("x_0:" + str(x_vars)))
+    elif type(x_vars) != list:
+        raise TypeError("x_vars must be int or list of symbols")
+    arguments = find_arguments(
+        D, x_vars, u_vars, separate_lambdas=True, verbose=verbose
+    )
+    x_args, x_dot_args, _, u_args, params, lambda_args = arguments
+
+    all_vars = x_args + x_dot_args + u_args + lambda_args + params
+    msg = "Function Arguments:\n"
+    msg += f"\tx: {x_args}\n"
+    msg += f"\tx_dot: {x_dot_args}\n"
+    msg += f"\tu: {u_args}\n"
+    msg += f"\tlambdas: {lambda_args}\n"
+    msg += f"\tparams: {params}\n"
+    print(msg)
+    cas_x_args = cas.MX.sym("x", len(x_args))
+    cas_x_dot_args = cas.MX.sym("x", len(x_dot_args))
+    cas_u_args = cas.MX.sym("u", len(u_args))
+    cas_lambda_args = cas.MX.sym("u", len(lambda_args))
+    cas_params = cas.MX.sym("p", len(params))
+    cas_all_vars = [cas_x_args[ii] for ii in range(len(x_args))]
+    cas_all_vars += [cas_x_dot_args[ii] for ii in range(len(x_dot_args))]
+    cas_all_vars += [cas_u_args[ii] for ii in range(len(u_args))]
+    cas_all_vars += [cas_lambda_args[ii] for ii in range(len(lambda_args))]
+    cas_all_vars += [cas_params[ii] for ii in range(len(params))]
+
+    cas_funcs = []
+    for function in D:
+        cas_funcs.append(sympy2casadi(function, all_vars, cas_all_vars))
+    cas_funcs = cas.horzcat(*cas_funcs)
+    return cas.Function(
+        "M",
+        [cas_x_args, cas_x_dot_args, cas_u_args, cas_lambda_args, cas_params],
+        [cas_funcs,],
+        ["x", "x_dot", "u", "lambdas", "params"],
+        ["residue"],
+    )
+
+
+def implied_dynamic_q_to_casadi_function(D, q_vars, u_vars=None, verbose=False):
+    """
+    Converts an array D(q, q', q'', u, lambdas, params) of symbolic expressions to a 
+    Casadi function.
+    
+    Symbols in the expressions not found in x_vars, x_dot_vars or u_vars
+    will be considered parameters.
+
+    Parameters
+    ----------
+    D : Sympy matrix
+        Vertical symbolic matrix D(q, q', q'', u, lambdas, params)
+    q_vars : int or list of Sympy dynamic symbols
+        list of q symbols to look for in the expressions.
+        If int, they will be generated as 'q_i' for i in [0, q_vars]
+    u_vars : list of Sympy dynamic symbols
+        List of u symbols to look for. The default is None.
+
+    Returns
+    -------
+    Casadi Function
+        Casadi Function of q, q', q'', u, lambdas, params.
+
+    """
+    from .symbolic import find_arguments, standard_notation, diff_to_symb_expr
+    from sympy.physics.mechanics import dynamicsymbols
+
+    D = list(D)
+    D = [standard_notation(diff_to_symb_expr(expr)) for expr in D]
+    if type(q_vars) == int:
+        q_vars = list(dynamicsymbols("q_0:" + str(q_vars)))
+    elif type(q_vars) != list:
+        raise TypeError("q_vars must be int or list of symbols")
+
+    arguments = find_arguments(
+        D, q_vars, u_vars, separate_as=True, separate_lambdas=True, verbose=verbose
+    )
+    q_args, v_args, a_args, u_args, params, lambda_args = arguments
+
+    all_vars = q_args + v_args + a_args + u_args + lambda_args + params
+    msg = "Function Arguments:\n"
+    msg += f"\tq: {q_args}\n"
+    msg += f"\tv: {v_args}\n"
+    msg += f"\ta: {a_args}\n"
+    msg += f"\tu: {u_args}\n"
+    msg += f"\tlambda: {lambda_args}\n"
+    msg += f"\tparams: {params}\n"
+    print(msg)
+    cas_q_args = cas.MX.sym("q", len(q_args))
+    cas_v_args = cas.MX.sym("v", len(v_args))
+    cas_a_args = cas.MX.sym("a", len(a_args))
+    cas_u_args = cas.MX.sym("u", len(u_args))
+    cas_lambda_args = cas.MX.sym("lambda", len(lambda_args))
+    cas_params = cas.MX.sym("p", len(params))
+    cas_all_vars = [cas_q_args[ii] for ii in range(len(q_args))]
+    cas_all_vars += [cas_v_args[ii] for ii in range(len(v_args))]
+    cas_all_vars += [cas_a_args[ii] for ii in range(len(a_args))]
+    cas_all_vars += [cas_u_args[ii] for ii in range(len(u_args))]
+    cas_all_vars += [cas_lambda_args[ii] for ii in range(len(lambda_args))]
+    cas_all_vars += [cas_params[ii] for ii in range(len(params))]
+    cas_funcs = []
+    for function in D:
+        cas_funcs.append(sympy2casadi(function, all_vars, cas_all_vars))
+    cas_funcs = cas.horzcat(*cas_funcs)
+    return cas.Function(
+        "F",
+        [cas_q_args, cas_v_args, cas_a_args, cas_u_args, cas_lambda_args, cas_params],
+        [cas_funcs,],
+        ["q", "v", "a", "u", "lambda", "params"],
+        ["Residue"],
+    )
 
 
 def restriction2casadi(F_scheme, F, n_vars, n_u, n_params, n_scheme_params=0):

@@ -54,6 +54,19 @@ def make_list(x):
         ]
 
 
+def q_2_x(expr, qs, qdots):
+    n = len(qs)
+    subs_list = []
+    for i in range(n):
+        item = [qdots[i], dynamicsymbols("x_" + str(n + i))]
+        subs_list.append(item)
+
+    for i in range(n):
+        item = [qs[i], dynamicsymbols("x_" + str(i))]
+        subs_list.append(item)
+    return expr.subs(subs_list)
+
+
 def derivative_level(symb):
     dot_level = 0
     while type(symb) == Derivative:
@@ -200,6 +213,19 @@ def diff_to_symb_expr(expr):
 
 
 def standard_notation(expr):
+    """
+    Finds symbols formuled as "nii" and replaces them with symbols of 
+    the form n_ii, where n = [q, v, a, u, x] and ii is a number.
+
+    Parameters
+    ----------
+    expr : symbolic expression
+
+    Returns
+    -------
+    expr : updated symbolic expression.
+
+    """
     var_set = expr.atoms(Symbol)
     subs_list = []
     for var in var_set:
@@ -214,6 +240,8 @@ def standard_notation(expr):
                 subs_list.append([var, symbols(f"a_{tail}")])
             elif varname[0] == "u":
                 subs_list.append([var, symbols(f"u_{tail}")])
+            elif varname[0] == "x":
+                subs_list.append([var, symbols(f"x_{tail}")])
     expr = expr.subs(subs_list)
     return expr
 
@@ -491,7 +519,15 @@ class SimpLagrangesMethod(LagrangesMethod):
 class ImplicitLagrangesMethod(LagrangesMethod):
     @property
     def mass_matrix_square(self):
-        """Augments the coefficients of restrictions to the mass_matrix."""
+        """Augments the coefficients of restrictions to the mass_matrix.
+        Returns:
+            | M    A_c|
+            |m_cd   0 |
+        So that the dynamics can be written as 
+            | M    A_c|   | q''  |   |f_d |
+            |         | @ |      | = |    |
+            |m_cd   0 |   |lambda|   |f_dc|
+        """
 
         if self.eom is None:
             raise ValueError("Need to compute the equations of motion first")
@@ -505,6 +541,18 @@ class ImplicitLagrangesMethod(LagrangesMethod):
 
     @property
     def implicit_dynamics_q(self):
+        """Returns a vector of implicit dynamics.
+        Given that the dynamics can be written as:
+            | M    A_c|   | q''  |   |f_d |
+            |         | @ |      | = |    |
+            |m_cd   0 |   |lambda|   |f_dc|
+        Returns a vector D equal to:
+            | M    A_c|   | q''  |   |f_d |
+        D = |         | @ |      | - |    |
+            |m_cd   0 |   |lambda|   |f_dc|
+        so that the dynamics can be defined as:
+            D(q, q', q'', u, lambdas, params) = 0
+        """
         if self.eom is None:
             raise ValueError("Need to compute the equations of motion first")
         M = self.mass_matrix_square
@@ -519,83 +567,222 @@ class ImplicitLagrangesMethod(LagrangesMethod):
 
     @property
     def implicit_dynamics_x(self):
+        """Returns a vector of implicit dynamics.
+        Given that the dynamics can be written as:
+            | M    A_c|   | q''  |   |f_d |
+            |         | @ |      | = |    |
+            |m_cd   0 |   |lambda|   |f_dc|
+        And transforming the variables q and v into x:
+                | q |   | x_q |
+            x = |   | = |     |
+                | v |   | x_v |
+        Expressing the dynammics in terms of x:
+            | I   0    0 |   |      |   |x_v |
+            |            |   | x'   |   |    |
+            | 0   M   A_c| @ |      | = |f_d |
+            |            |   |      |   |    |
+            | 0  m_cd  0 |   |lambda|   |f_dc|
+            
+        Function returns a vector D equal to:
+            | I   0    0 |   |      |   |x_v |
+            |            |   | x'   |   |    |
+        D = | 0   M   A_c| @ |      | - |f_d |
+            |            |   |      |   |    |
+            | 0  m_cd  0 |   |lambda|   |f_dc|
+        so that the dynamics can be defined as:
+            D(x, x', u, lambdas, params) = 0
+        """
         if self.eom is None:
             raise ValueError("Need to compute the equations of motion first")
-        M = self.mass_matrix_full
+        M = q_2_x(self.mass_matrix_full, self.q, self._qdots)
         n = len(self.q)
         X = Matrix(dynamicsymbols("x_0:" + str(2 * n)))
         X_dot = X.diff(dynamicsymbols._t)
+        forcing = q_2_x(self.forcing, self.q, self._qdots)
         if self.coneqs:
-            F = Matrix(X[n:]).col_join(self.forcing).col_join(self._f_cd)
+            f_cd = q_2_x(self._f_cd, self.q, self._qdots)
+            F = Matrix(X[n:]).col_join(forcing).col_join(f_cd)
             X_exp = X_dot.col_join(self.lam_vec)
         else:
-            F = Matrix(X[n:]).col_join(self.forcing)
+            F = Matrix(X[n:]).col_join(forcing)
             X_exp = X_dot
 
         return M @ X_exp - F
 
 
-def find_arguments(expr_list, q_vars, u_vars=None):
+def add_if_not_there(x, container):
+    if not x in container:
+        container.append(x)
+
+
+def is_lambda(symb):
+    name = symb.__str__()
+    if name[-3:] == "(t)":
+        name = name[:-3]
+    if name[:3] == "lam" and name[3:].isdigit():
+        return True
+    else:
+        return False
+
+
+def find_arguments(
+    expr_list,
+    q_vars,
+    u_vars=None,
+    separate_lambdas=False,
+    separate_as=False,
+    verbose=False,
+):
+    """
+    Given an iterable of sympy expressions, search in it looking for 
+    certain symbols.
+    
+
+    Parameters
+    ----------
+    expr_list : iterable of sympy expressions
+        Iterable whose symbols will be extracted
+    q_vars : int or list of dynamic symbols
+        Determine the symbols that will be searched
+        if int, the program will assume q as q_i for q in [0,q_vars]
+    u_vars : None, in or list of symbols. Default is None.
+        Symbols that will be sarched and separated. 
+        If None, symbols of the form u_ii where ii is a number will be 
+        assumed
+    separate_lambdas : Bool, optional
+        Wether to separate symbols of the form "lamNN" from the rest of 
+        parameters, where NN is a number. The default is False.
+    separate_as : Bool, optional
+        Wether to separate symbols of the form "a_NN" from the rest of 
+        parameters, where NN is a number. The default is False.
+    verbose : Bool, optional
+        wether to print aditional information of expected and found variables
+        in the given expression
+
+    Raises
+    ------
+    TypeError
+        If inputs are different types than supported.
+
+    Returns
+    -------
+    q_args : list of symbols
+        symbols equal to q_vars if q_var is a list, or symbols determined from
+        q_var id q_var is an integer
+    v_args : list of symbols
+        if q_args are symbols of the form q_ii, where ii is a number, 
+        v_args will be a list o symbols of the form v_ii where ii is the same
+        numbers in q_args.
+        if not, v_args will be a list of symbols of the form "S_dot", where 
+        S is the name of each symbol in q_args.
+    a_args : list of symbols
+        if separate_as is True:
+            If elements of q_args are q_ii, will be a list of symbols a_ii where ii is 
+            a number, the same as in q_args.
+            If not, will be a list of symbols of the form "S_dot_dot", where 
+            S is the name of each symbol in q_args.
+        else, will be an empty list
+    u_args : list os symbols
+        If u_vars is a list of symbols, will be the same list.
+        If u_vars is an int, will be a list of symbols of the form u_ii where 
+        ii is a number in [0, u_vars]
+        If u_vars is None (default), will be a list of all found symbols
+        of the form u_ii where ii is a number
+    params : List of symbols
+       A list of all the symbols in the expressions that don't fit in any 
+       other category
+    lambda_args_found : list of symbols
+        If separate_lambdas is True, a list of all found symbols
+        of the form lamii where ii is a number
+        If not, will be an empty list
+
+    """
 
     expr_list = list(expr_list)
     expr_list = [standard_notation(diff_to_symb_expr(expr)) for expr in expr_list]
     max_n_var = sum([len(expr.atoms(Symbol)) for expr in expr_list])
-    u_args = []
     params = []
     args = []
     u_args_found = []
     x_args_found = []
+    a_args_found = []
+    lambda_args_found = []
 
     if type(q_vars) == int:
-        q_args = []
-        v_args = []
-        for jj in range(q_vars):
-            q = symbols(f"q_{jj}")
-            q_args.append(q)
-            v = symbols(f"v_{jj}")
-            v_args.append(v)
+        q_args = list(symbols(f"q_0:{q_vars}"))
+        v_args = list(symbols(f"v_0:{q_vars}"))
+        a_args = list(symbols(f"a_0:{q_vars}"))
     elif type(q_vars) == list:
         q_args = [diff_to_symb(var) for var in q_vars]
         v_args = [diff_to_symb(var.diff()) for var in q_vars]
+        a_args = [diff_to_symb(var.diff().diff()) for var in q_vars]
     else:
         raise TypeError(
             "data type not undersood for q_vars, must be an integer or list of symbols"
         )
 
     if u_vars is None:
-        for jj in range(max_n_var):
-            u = symbols(f"u_{jj}")
-            u_args.append(u)
+        u_args = list(symbols("u_0:" + str(max_n_var)))
     elif type(u_vars) == list:
         u_args = u_vars
+    elif type(u_vars) == int:
+        u_args = list(symbols("u_0:" + str(u_vars)))
     else:
         raise TypeError(
-            "data type not undersood for u_vars, must be an integer or list of symbols"
+            "data type not undersood for u_vars, must be None, an integer or list of symbols"
         )
 
     x_args = q_args + v_args
-    args = x_args + u_args
+    args = x_args + u_args + a_args
     for ii in range(len(expr_list)):
         expr = expr_list[ii]
         var_set = expr.atoms(Symbol)
         for symb in var_set:
             if not symb in args:
-                if not symb in params:
-                    params.append(symb)
+                if is_lambda(symb):
+                    add_if_not_there(symb, lambda_args_found)
+                else:
+                    add_if_not_there(symb, params)
             elif symb in u_args:
-                if not symb in u_args_found:
-                    u_args_found.append(symb)
+                add_if_not_there(symb, u_args_found)
             elif symb in x_args:
-                if not symb in x_args_found:
-                    x_args_found.append(symb)
+                add_if_not_there(symb, x_args_found)
+            elif symb in a_args:
+                add_if_not_there(symb, a_args_found)
 
-    params = sorted(params, key=get_str)
+    lambda_args_found = sorted(lambda_args_found, key=get_str)
+    u_args_found = sorted(u_args_found, key=get_str)
+    x_args_found = sorted(x_args_found, key=get_str)
+    a_args_found = sorted(a_args_found, key=get_str)
+
+    if verbose:
+        print("x vars expected:", x_args)
+        print("x vars found:", x_args_found)
+        print("u vars found:", u_args_found)
+        if separate_lambdas:
+            print("Lambda variables are separated from parameters")
+            print("lambda vars found:", lambda_args_found)
+        else:
+            print("Lambda variables are not separated from parameters")
+        if separate_as:
+            print("a variables are separated from parameters")
+            print("a vars expected:", a_args)
+            print("a vars found:", a_args_found)
+        else:
+            print("a variables are not separated from parameters")
     if u_vars is None:
-        u_args_found = sorted(u_args_found, key=get_str)
-    else:
-        u_args_found = u_vars
+        u_args = sorted(u_args_found, key=get_str)
+    if not separate_lambdas:
+        params += lambda_args_found
+        lambda_args_found = []
+    if not separate_as:
+        params += a_args_found
+        a_args = []
+    params = sorted(params, key=get_str)
+    if verbose:
+        print("Parameters found:", params)
 
-    return q_args, v_args, x_args_found, u_args, u_args_found, params
+    return q_args, v_args, a_args, u_args, params, lambda_args_found
 
 
 def printer_function(flavour):
@@ -631,7 +818,7 @@ def printer_function(flavour):
         return str
 
 
-def print_funcs_RHS(RHS, q_vars, u_vars=None, flavour="np"):
+def print_funcs_RHS(RHS, q_vars, u_vars=None, flavour="np", verbose=False):
     """
     Prints the Right Hand Side of the control ecuations, formatted
     to be used as a python function to solve a system like:
@@ -652,6 +839,9 @@ def print_funcs_RHS(RHS, q_vars, u_vars=None, flavour="np"):
     flavour : str in ["numpy", "np", "casadi"], default = "np"
         experimental feature, converts common functions like sin(x)
         to numpy.sin(x), np.sin(x) or cas.sin(x) respectively
+    verbose : Bool, default = False
+        wether to print aditional information of expected and found variables
+        in the given expression
 
     Returns
     -------
@@ -662,8 +852,8 @@ def print_funcs_RHS(RHS, q_vars, u_vars=None, flavour="np"):
     """
     RHS = make_list(RHS)
     RHS = [standard_notation(diff_to_symb_expr(expr)) for expr in RHS]
-    arguments = find_arguments(RHS, q_vars, u_vars)
-    q_args, v_args, x_args_found, u_args, u_args_found, params = arguments
+    arguments = find_arguments(RHS, q_vars, u_vars, verbose=verbose)
+    q_args, v_args, a_args, u_args_found, params, lambda_args = arguments
     x_args = q_args + v_args
 
     printer = printer_function(flavour)
@@ -681,7 +871,7 @@ def print_funcs_RHS(RHS, q_vars, u_vars=None, flavour="np"):
     return msg
 
 
-def print_funcs(expr_list, q_vars=0, flavour="np"):
+def print_funcs(expr_list, q_vars=0, flavour="np", verbose=False):
     """
     Prints the given expression list or matrix as a function of x-variables,
     u-variables and parameters. X-variables are either the dynamic symbols
@@ -700,6 +890,9 @@ def print_funcs(expr_list, q_vars=0, flavour="np"):
     flavour : str in ["numpy", "np", "casadi"], default = "np"
         experimental feature, converts common functions like sin(x)
         to numpy.sin(x), np.sin(x) or cas.sin(x) respectively
+    verbose : Bool, default = False
+        wether to rint aditional information of expected and found variables
+        in the given expression
 
     Returns
     -------
@@ -710,24 +903,26 @@ def print_funcs(expr_list, q_vars=0, flavour="np"):
     """
     expr_list = make_list(expr_list)
     expr_list = [standard_notation(diff_to_symb_expr(expr)) for expr in expr_list]
-    arguments = find_arguments(expr_list, q_vars)
-    q_args, v_args, x_args_found, u_args, u_args_found, params = arguments
+    arguments = find_arguments(expr_list, q_vars, verbose=verbose)
+    q_args, v_args, a_args, u_args_found, params, lambda_args = arguments
     x_args = q_args + v_args
 
     printer = printer_function(flavour)
 
     msg = "def F("
-    if len(x_args_found) > 0:
+    if len(x_args) > 0:
         msg += "x, "
     if len(u_args_found) > 0:
         msg += "u, "
     if len(params) > 0:
         msg += "params, "
     msg += "):\n"
-    if len(x_args_found) > 0:
+    if len(x_args) > 0:
         msg += f"    {x_args.__str__()[1:-1]} = unpack(x)\n"
     if len(u_args_found) > 0:
         msg += f"    {u_args_found.__str__()[1:-1]} = unpack(u)\n"
+    if len(lambda_args) > 0:
+        msg += f"    {lambda_args.__str__()[1:-1]} = unpack(lambda)\n"
     if len(params) > 0:
         msg += f"    {params.__str__()[1:-1]} = params\n"
     if len(expr_list) == 1:
