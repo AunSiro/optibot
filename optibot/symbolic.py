@@ -515,6 +515,93 @@ class SimpLagrangesMethod(LagrangesMethod):
             self._rhs_full = Matrix(list(self.rhs) + list(self.lambda_vector))
         return self._rhs_full
 
+    def sym_pinv_dyn(self, ext_forces):
+        """Symbolic pseudo-inverse dynamics. If system is fully actuated, will 
+        be the exact inverse dynamics.
+        Parameters
+        ----------
+        ext_forces : list of symbols
+            list of actuation symbols respect to which the inverse dynamics
+            should be calculated
+        """
+        if self.eom is None:
+            raise ValueError("Need to compute the equations of motion first")
+        ext_forces = Matrix(ext_forces)
+        _E = self.forcing.jacobian(ext_forces)
+        _f = self.forcing - _E @ ext_forces
+        _Z = self.mass_matrix @ self._qdoubledots - _f
+        _sym_pinv_dyn = _E.pinv() @ _Z
+        return _sym_pinv_dyn
+
+    def num_pinv_dyn(self, ext_forces):
+        """Numeric pseudo-inverse dynamics. If system is fully actuated, will 
+        be the exact inverse dynamics.
+        Parameters
+        ----------
+        ext_forces : list of symbols
+            list of actuation symbols respect to which the inverse dynamics
+            should be calculated
+        Returns
+        -------
+        Function:
+            Numerical function of q, q', q'' and params
+        """
+        if self.eom is None:
+            raise ValueError("Need to compute the equations of motion first")
+        sym_pinv_dyn = list(self.sym_pinv_dyn(ext_forces))
+        exhaustive_expr = list(
+            self.mass_matrix_full @ self.forcing_full
+        )  # Contains all parameters involved
+        param_list = set()
+        _dy_sy = set()
+        for expr in exhaustive_expr:
+            _dy_sy = _dy_sy.union(find_dynamicsymbols(expr))
+        _dy_sy = sorted(_dy_sy, key=derivative_level, reverse=True)
+        # we substitute dynamic symbols with a dummy variable in order to
+        # avoid adding t to the parameter list if it is not a parameter
+        _dumm = symbols("dummy")
+        for expr in exhaustive_expr:
+            subs_list = [[dvar, _dumm] for dvar in _dy_sy]
+            new_expr = expr.subs(subs_list)
+            param_list = param_list.union(new_expr.atoms(Symbol))
+        param_list.remove(_dumm)
+        for act_sym in ext_forces:
+            if act_sym in param_list:
+                param_list.remove(act_sym)
+
+        for ds in _dy_sy:
+            base_sym = find_dyn_dependencies(ds)[0]
+            if base_sym not in self._q and base_sym not in ext_forces:
+                param_list.addn(ds)
+        param_list = sorted(param_list, key=get_str)
+
+        _lambd_pinv_dyn = lambdify(
+            [self._q, self._qdots, self._qdoubledots, param_list], sym_pinv_dyn
+        )
+
+        def _num_pinv_dyn(q, q_dot, q_dotdot, params):
+            return _lambd_pinv_dyn(q, q_dot, q_dotdot, params)
+
+        _num_pinv_dyn.__doc__ = f"""Numeric pseudo-inverse dynamics. If system is fully actuated, will 
+            be the exact inverse dynamics.
+            Parameters
+            ----------
+            q : array of {len(list(self._q))} elements
+                coordinates of point
+            q_dot : array of {len(list(self._q))} elements
+                speeds
+            q_dotdot : array of {len(list(self._q))} elements
+                accelerations
+            params : array of {len(list(param_list))} elements
+                physical parameters of the problem:
+                    {param_list}
+            Returns
+            -------
+            u : array of actuations that produce the accelerations that least
+            diverge from the given
+            """
+        return _num_pinv_dyn
+
 
 class ImplicitLagrangesMethod(LagrangesMethod):
     @property
@@ -609,6 +696,83 @@ class ImplicitLagrangesMethod(LagrangesMethod):
 
         return M @ X_exp - F
 
+    def sym_pinv_dyn(self, ext_forces):
+        """Symbolic pseudo-inverse dynamics. If system is fully actuated, will 
+        be the exact inverse dynamics.
+        Parameters
+        ----------
+        ext_forces : list of symbols
+            list of actuation symbols respect to which the inverse dynamics
+            should be calculated
+        """
+        if self.eom is None:
+            raise ValueError("Need to compute the equations of motion first")
+        ext_forces = Matrix(ext_forces)
+        _E = self.forcing.jacobian(ext_forces)
+        _f = self.forcing - _E @ ext_forces
+        _Z = self.mass_matrix @ self._qdoubledots - _f
+        _sym_pinv_dyn = _E.pinv() @ _Z
+        return _sym_pinv_dyn
+
+    def num_pinv_dyn(self, ext_forces):
+        """Numeric pseudo-inverse dynamics. If system is fully actuated, will 
+        be the exact inverse dynamics.
+        Parameters
+        ----------
+        ext_forces : list of symbols
+            list of actuation symbols respect to which the inverse dynamics
+            should be calculated
+        Returns
+        -------
+        Function:
+            Numerical function of q, q', q'' and params
+        """
+        if self.eom is None:
+            raise ValueError("Need to compute the equations of motion first")
+        sym_pinv_dyn = list(self.sym_pinv_dyn(ext_forces))
+        param_list = set()
+        _dy_sy = sorted_dynamic_symbols(sym_pinv_dyn)
+        # we substitute dynamic symbols with a dummy variable in order to
+        # avoid adding t to the parameter list if it is not a parameter
+        _dumm = symbols("dummy")
+        for expr in sym_pinv_dyn:
+            subs_list = [[dvar, _dumm] for dvar in _dy_sy]
+            new_expr = expr.subs(subs_list)
+            param_list.union(new_expr.atoms(Symbol))
+        param_list.remove(_dumm)
+
+        for ds in _dy_sy:
+            if find_dyn_dependencies(ds)[0] not in self._q:
+                param_list.addn(ds)
+        param_list = sorted(param_list, key=get_str)
+
+        _lambd_pinv_dyn = lambdify(
+            [self._q, self._qdots, self._qdoubledots, param_list], sym_pinv_dyn
+        )
+
+        def _num_pinv_dyn(q, q_dot, q_dotdot, params):
+            return _lambd_pinv_dyn(q, q_dot, q_dotdot, params)
+
+        _num_pinv_dyn.__doc__ = f"""Numeric pseudo-inverse dynamics. If system is fully actuated, will 
+            be the exact inverse dynamics.
+            Parameters
+            ----------
+            q : array of {len(list(self._q))} elements
+                coordinates of point
+            q_dot : array of {len(list(self._q))} elements
+                speeds
+            q_dotdot : array of {len(list(self._q))} elements
+                accelerations
+            params : array of {len(list(param_list))} elements
+                physical parameters of the problem:
+                    {param_list}
+            Returns
+            -------
+            u : array of actuations that produce the accelerations that least
+            diverge from the given
+            """
+        return _num_pinv_dyn
+
 
 def add_if_not_there(x, container):
     if not x in container:
@@ -645,7 +809,7 @@ def find_arguments(
     q_vars : int or list of dynamic symbols
         Determine the symbols that will be searched
         if int, the program will assume q as q_i for q in [0,q_vars]
-    u_vars : None, in or list of symbols. Default is None.
+    u_vars : None, int or list of symbols. Default is None.
         Symbols that will be sarched and separated. 
         If None, symbols of the form u_ii where ii is a number will be 
         assumed

@@ -6,8 +6,18 @@ Created on Mon May 31 14:52:34 2021
 @author: Siro Moreno
 """
 
-from scipy.optimize import root
-from numpy import zeros, append, concatenate, linspace, expand_dims, interp, array
+from scipy.optimize import root, minimize
+from numpy import (
+    zeros,
+    append,
+    concatenate,
+    linspace,
+    expand_dims,
+    interp,
+    array,
+    sum,
+    abs,
+)
 from scipy.interpolate import CubicHermiteSpline as hermite
 from copy import copy
 import functools
@@ -340,7 +350,7 @@ def hs_mod_step(x, u, u_n, F, dt, params):
     return x_n.x
 
 
-def hs_parab_opti_step(x_n, x, u, u_n, F, dt, params, scheme_params):
+def hs_parab_opti_step(x_n, x, u, u_n, F, dt, params, u_c):
     """
     Must be equal to zero in order to fulfill the implicit scheme
 
@@ -352,20 +362,19 @@ def hs_parab_opti_step(x_n, x, u, u_n, F, dt, params, scheme_params):
     """
     f = F(x, u, params)
     f_n = F(x_n, u_n, params)
-    u_c = scheme_params
     x_c = (x + x_n) / 2 + dt / 8 * (f - f_n)
     f_c = F(x_c, u_c, params)
     res = x + dt / 6 * (f + 4 * f_c + f_n) - x_n
     return res
 
 
-def hs_parab_step(x, u, u_n, F, dt, params, scheme_params):
+def hs_parab_step(x, u, u_n, F, dt, params, u_c):
     x_0 = euler_step(x, u, F, dt, params)
-    x_n = root(hs_opti_step, x_0, (x, u, u_n, F, dt, params, scheme_params))
+    x_n = root(hs_opti_step, x_0, (x, u, u_n, F, dt, params, u_c))
     return x_n.x
 
 
-def hs_mod_parab_opti_step(x_n, x, u, u_n, F, dt, params, scheme_params):
+def hs_mod_parab_opti_step(x_n, x, u, u_n, F, dt, params, u_c):
     """
     Must be equal to zero in order to fulfill the implicit scheme
 
@@ -382,7 +391,6 @@ def hs_mod_parab_opti_step(x_n, x, u, u_n, F, dt, params, scheme_params):
     v = x[dim:]
     q_n = x_n[:dim]
     v_n = x_n[dim:]
-    u_c = scheme_params
     q_c = (13 * q + 3 * q_n) / 16 + 5 * dt / 16 * v + dt ** 2 / 96 * (4 * f - f_n)
     v_c = (v + v_n) / 2 + dt / 8 * (f - f_n)
     x_c = copy(x)
@@ -395,9 +403,9 @@ def hs_mod_parab_opti_step(x_n, x, u, u_n, F, dt, params, scheme_params):
     return res
 
 
-def hs_mod_parab_step(x, u, u_n, F, dt, params, scheme_params):
+def hs_mod_parab_step(x, u, u_n, F, dt, params, u_c):
     x_0 = euler_step(x, u, F, dt, params)
-    x_n = root(hs_mod_opti_step, x_0, (x, u, u_n, F, dt, params, scheme_params))
+    x_n = root(hs_mod_opti_step, x_0, (x, u, u_n, F, dt, params, u_c))
     return x_n.x
 
 
@@ -537,7 +545,7 @@ def integrate_hs_parab(x_0, u, F, dt, params, scheme_params):
     x = [
         x_0,
     ]
-    u_c = scheme_params[0]
+    u_c = scheme_params["u_c"]
     for ii in range(0, vec_len(u) - 1):
         x_i = hs_parab_step(x[-1], u[ii], u[ii + 1], F, dt, params, u_c[ii])
         x.append(x_i)
@@ -551,7 +559,7 @@ def integrate_hs_mod_parab(x_0, u, F, dt, params, scheme_params):
     x = [
         x_0,
     ]
-    u_c = scheme_params[0]
+    u_c = scheme_params["u_c"]
     for ii in range(0, vec_len(u) - 1):
         x_i = hs_mod_parab_step(x[-1], u[ii], u[ii + 1], F, dt, params, u_c[ii])
         x.append(x_i)
@@ -637,7 +645,7 @@ def hs_parab_restr(x, x_n, u, u_n, F, dt, params, scheme_params):
     f = F(x, u, params)
     f_n = F(x_n, u_n, params)
     x_c = (x + x_n) / 2 + dt / 8 * (f - f_n)
-    u_c = scheme_params[0]
+    u_c = scheme_params
     f_c = F(x_c, u_c, params)
     return x + dt / 6 * (f + 4 * f_c + f_n) - x_n
 
@@ -661,7 +669,7 @@ def hs_mod_parab_restr(x, x_n, u, u_n, F, dt, params, scheme_params):
     v = x[last_ind]
     q_n = x_n[first_ind]
     v_n = x_n[last_ind]
-    u_c = scheme_params[0]
+    u_c = scheme_params
     q_c = (13 * q + 3 * q_n) / 16 + 5 * dt / 16 * v + dt ** 2 / 96 * (4 * f - f_n)
     v_c = (v + v_n) / 2 + dt / 8 * (f - f_n)
     x_c[first_ind] = q_c
@@ -817,7 +825,25 @@ def hs_mod_parab_interp(x, x_n, u, u_n, tau, F, h, params, scheme_params):
     return concatenate([q_interp, v_interp])
 
 
-def _newpoint_u(U, h, t, u_scheme, scheme_params=[]):
+def _u_min_err_opti_step(u, x, x_dot, F, params):
+    """
+    Must be equal to zero in order to fulfill the implicit scheme
+
+    Returns
+    -------
+    res : Numpy array or Casadi array
+        Residue to minimize
+
+    """
+
+    dim = vec_len(x) // 2
+    f = F(x, u, params)[dim:]
+    a = x_dot[dim:]
+    res = sum(abs(f - a))
+    return res
+
+
+def _newpoint_u(U, h, t, u_scheme, scheme_params={}):
     n = int(t // h)
     tau = t % h
     if (n + 1) > U.shape[0]:
@@ -830,15 +856,48 @@ def _newpoint_u(U, h, t, u_scheme, scheme_params=[]):
     else:
         u, u_n = U[n], U[n + 1]
         if u_scheme == "parab":
-            U_c = scheme_params[0]
+            U_c = scheme_params["u_c"]
             u_c = U_c[n]
             u_interp = interp_parab(tau, h, u, u_c, u_n)
+
+        elif u_scheme == "min_err":
+            F = scheme_params["F"]
+            X = scheme_params["X"]
+            scheme = scheme_params["scheme"]
+            params = scheme_params["params"]
+            x_interp = _newpoint(X, U, F, h, t, params, scheme, scheme_params)
+            x_dot_interp = _newpoint_der(
+                X, U, F, h, t, params, scheme, 1, scheme_params
+            )
+            xi = tau / h
+            u_0 = u_n * xi + u * (1 - xi)
+            u_interp = minimize(
+                _u_min_err_opti_step, u_0, (x_interp, x_dot_interp, F, params)
+            )
+            u_interp = u_interp.x
+
+        elif u_scheme == "pinv_dyn":
+            F = scheme_params["F"]
+            X = scheme_params["X"]
+            scheme = scheme_params["scheme"]
+            params = scheme_params["params"]
+            x_interp = _newpoint(X, U, F, h, t, params, scheme, scheme_params)
+            x_dot_interp = _newpoint_der(
+                X, U, F, h, t, params, scheme, 1, scheme_params
+            )
+            pinv_F = scheme_params["pinv_f"]
+            dim = vec_len(x_interp) // 2
+            q_interp = x_interp[:dim]
+            v_interp = x_interp[dim:]
+            a_interp = x_dot_interp[dim:]
+            u_interp = pinv_F(q_interp, v_interp, a_interp, params)
+
         else:
             raise NameError(f"scheme {u_scheme} not recognized")
     return u_interp
 
 
-def _newpoint(X, U, F, h, t, params, scheme, scheme_params=[]):
+def _newpoint(X, U, F, h, t, params, scheme, scheme_params={}):
     n = int(t // h)
     tau = t % h
     if (n + 1) > X.shape[0]:
@@ -859,11 +918,11 @@ def _newpoint(X, U, F, h, t, params, scheme, scheme_params=[]):
         elif scheme == "hs_mod":
             x_interp = hs_mod_interp(x, x_n, u, u_n, tau, F, h, params)
         elif scheme == "hs_parab":
-            U_c = scheme_params[0]
+            U_c = scheme_params["u_c"]
             u_c = U_c[n]
             x_interp = hs_parab_interp(x, x_n, u, u_n, tau, F, h, params, u_c)
         elif scheme == "hs_mod_parab":
-            U_c = scheme_params[0]
+            U_c = scheme_params["u_c"]
             u_c = U_c[n]
             x_interp = hs_mod_parab_interp(x, x_n, u, u_n, tau, F, h, params, u_c)
         else:
@@ -888,7 +947,7 @@ def _prepare_interp(X, U, F, h, t_array):
     return N, new_X, U, old_t_array
 
 
-def interpolate_u(U, old_t_array, t_array, u_scheme="lin", scheme_params=[]):
+def interpolate_u(U, old_t_array, t_array, u_scheme="lin", scheme_params={}):
     """
     Interpolates values of U using the appropiate form function
 
@@ -906,8 +965,12 @@ def interpolate_u(U, old_t_array, t_array, u_scheme="lin", scheme_params=[]):
             "lin": lineal interpolation
             "parab": parabolic interpolation, requires central points array
             as scheme params[0]
-    scheme_params : list, optional
-        Aditional parameters of the scheme. The default is [].
+            "min_err": for every point in the interpolation, the values of u
+            will be calculated to minimize dynamical error |q'' - f(q, q', u)|
+            "pinv_dyn": for every point in the interpolation, the pseudoinverse
+            dynamics are calculated
+    scheme_params : dict, optional
+        Aditional parameters of the scheme. The default is {}.
 
     Raises
     ------
@@ -944,7 +1007,7 @@ def interpolate_u(U, old_t_array, t_array, u_scheme="lin", scheme_params=[]):
 
 
 def interpolated_array(
-    X, U, F, h, t_array, params, scheme="hs_scipy", u_scheme="lin", scheme_params=[]
+    X, U, F, h, t_array, params, scheme="hs_scipy", u_scheme="lin", scheme_params={}
 ):
     """
     Interpolates values of X and U using the appropiate form functions.
@@ -983,8 +1046,12 @@ def interpolated_array(
             "lin": lineal interpolation
             "parab": parabolic interpolation, requires central points array
             as scheme params[0]
-    scheme_params :list, optional
-        Aditional parameters of the scheme. The default is [].
+            "min_err": for every point in the interpolation, the values of u
+            will be calculated to minimize dynamical error |q'' - f(q, q', u)|
+            "pinv_dyn": for every point in the interpolation, the pseudoinverse
+            dynamics are calculated
+    scheme_params :dict, optional
+        Aditional parameters of the scheme. The default is {}.
 
     Raises
     ------
@@ -1015,11 +1082,18 @@ def interpolated_array(
     supported_u_schemes = [
         "lin",
         "parab",
+        "min_err",
+        "pinv_dyn",
     ]
     if u_scheme not in supported_u_schemes:
         raise ValueError(
             f"Unsupported u_scheme {u_scheme}, supported schemes are{supported_u_schemes}"
         )
+    if u_scheme in ["min_err", "pinv_dyn"]:
+        scheme_params["F"] = F
+        scheme_params["X"] = X
+        scheme_params["scheme"] = scheme
+        scheme_params["params"] = params
 
     N, new_X, U, old_t_array = _prepare_interp(X, U, F, h, t_array)
     new_U = interpolate_u(U, old_t_array, t_array, u_scheme, scheme_params)
@@ -1196,7 +1270,7 @@ def hs_mod_parab_dot_dot_interp(x, x_n, u, u_n, tau, F, h, params, scheme_params
     return concatenate([q_interp, v_interp])
 
 
-def _newpoint_der(X, U, F, h, t, params, scheme, order, scheme_params=[]):
+def _newpoint_der(X, U, F, h, t, params, scheme, order, scheme_params={}):
     # Avoid out of interpolation error when t == t_final
     if abs(t - h * (X.shape[0] - 1)) < h * 1e-8:
         n = X.shape[0] - 2
@@ -1223,7 +1297,7 @@ def _newpoint_der(X, U, F, h, t, params, scheme, order, scheme_params=[]):
             elif order == 2:
                 x_interp = hs_mod_dot_dot_interp(x, x_n, u, u_n, tau, F, h, params)
         elif scheme == "hs_parab":
-            U_c = scheme_params[0]
+            U_c = scheme_params["u_c"]
             u_c = U_c[n]
             if order == 1:
                 x_interp = hs_parab_dot_interp(x, x_n, u, u_n, tau, F, h, params, u_c)
@@ -1232,7 +1306,7 @@ def _newpoint_der(X, U, F, h, t, params, scheme, order, scheme_params=[]):
                     x, x_n, u, u_n, tau, F, h, params, u_c
                 )
         elif scheme == "hs_mod_parab":
-            U_c = scheme_params[0]
+            U_c = scheme_params["u_c"]
             u_c = U_c[n]
             if order == 1:
                 x_interp = hs_mod_parab_dot_interp(
@@ -1248,7 +1322,7 @@ def _newpoint_der(X, U, F, h, t, params, scheme, order, scheme_params=[]):
 
 
 def interpolated_array_derivative(
-    X, U, F, h, t_array, params, scheme="hs_scipy", order=1, scheme_params=[]
+    X, U, F, h, t_array, params, scheme="hs_scipy", order=1, scheme_params={}
 ):
     """
     Calculates the n-th order derivatives of an interpolation of X using 
@@ -1283,8 +1357,8 @@ def interpolated_array_derivative(
             "hs_mod_parab": modified Hermite-Simpson scheme compatible interpolation with parabolic U
     order : int, optional
         Derivation order. The default is 1. Acceptable values are 1 and 2.
-    scheme_params :list, optional
-        Aditional parameters of the scheme. The default is [].
+    scheme_params :dict, optional
+        Aditional parameters of the scheme. The default is {}.
 
     Raises
     ------
@@ -1337,7 +1411,7 @@ def dynamic_error(
     params,
     scheme="hs_scipy",
     u_scheme="lin",
-    scheme_params=[],
+    scheme_params={},
     n_interp=2000,
 ):
     """
@@ -1386,8 +1460,8 @@ def dynamic_error(
             "lin": lineal interpolation
             "parab": parabolic interpolation, requires central points array
             as scheme params[0]
-    scheme_params :list, optional
-        Aditional parameters of the scheme. The default is [].
+    scheme_params :dict, optional
+        Aditional parameters of the scheme. The default is {}.
     n_interp : int, optional
         Number of interpolation points. The default is 2000.
 
