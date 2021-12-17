@@ -127,7 +127,7 @@ def rhs_to_casadi_function(RHS, q_vars, u_vars=None, verbose=False):
     )
 
 
-def implied_dynamic_x_to_casadi_function(D, x_vars, u_vars=None, verbose=False):
+def implicit_dynamic_x_to_casadi_function(D, x_vars, u_vars=None, verbose=False):
     """
     Converts an array D(x, x', u, lambdas, params) of symbolic expressions to a 
     Casadi function.
@@ -197,7 +197,7 @@ def implied_dynamic_x_to_casadi_function(D, x_vars, u_vars=None, verbose=False):
     )
 
 
-def implied_dynamic_q_to_casadi_function(D, q_vars, u_vars=None, verbose=False):
+def implicit_dynamic_q_to_casadi_function(D, q_vars, u_vars=None, verbose=False):
     """
     Converts an array D(q, q', q'', u, lambdas, params) of symbolic expressions to a 
     Casadi function.
@@ -330,6 +330,45 @@ def restriction2casadi(F_scheme, F, n_vars, n_u, n_params, n_scheme_params=0):
             ["x", "x_n", "u", "u_n", "dt", "params", "scheme_params"],
             ["residue"],
         )
+
+
+def accelrestriction2casadi(F_scheme, n_vars, n_scheme_params=0):
+    """
+    Converts a restriction funtion F to a casadi function that can be
+    more efficiently used in casadi
+
+    Parameters
+    ----------
+    F_scheme : Function of the form F(x, x_n, a, a_n, dt, scheme_params)
+        Restriction function that each step has to be equal to zero
+    n_vars : int
+        Number of q variables or coordinates in the problem, x variables
+        will be then twice this amount as they include velocities.
+    n_scheme_params : int, default 0
+        Number of scheme parameters, not involved in the dynamics
+
+    Returns
+    -------
+    Casadi Function
+        A casadi function of the form F(x, x_n, a, a_n, dt, scheme_params)
+        Restriction function that each step has to be equal to zero
+
+    """
+    x = cas.SX.sym("x", 2 * n_vars).T
+    x_n = cas.SX.sym("x_n", 2 * n_vars).T
+    a = cas.SX.sym("a", n_vars).T
+    a_n = cas.SX.sym("a_n", n_vars).T
+    dt = cas.SX.sym("dt")
+
+    sch_p = cas.SX.sym("sch_p", n_scheme_params)
+    result = F_scheme(x, x_n, a, a_n, dt, sch_p)
+    return cas.Function(
+        "Restriction",
+        [x, x_n, a, a_n, dt, sch_p],
+        [result,],
+        ["x", "x_n", "a", "a_n", "dt", "scheme_params"],
+        ["residue"],
+    )
 
 
 # --- Double Pendulum ---

@@ -528,7 +528,8 @@ class SimpLagrangesMethod(LagrangesMethod):
             raise ValueError("Need to compute the equations of motion first")
         ext_forces = Matrix(ext_forces)
         _E = self.forcing.jacobian(ext_forces)
-        _f = self.forcing - _E @ ext_forces
+        subs_list = [[uu, 0] for uu in ext_forces]
+        _f = self.forcing.subs(subs_list)
         _Z = self.mass_matrix @ self._qdoubledots - _f
         _sym_pinv_dyn = _E.pinv() @ _Z
         return _sym_pinv_dyn

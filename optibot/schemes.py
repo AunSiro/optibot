@@ -451,15 +451,15 @@ def coherent_dimensions(func):
         if len(x_0.shape) == 2:
             x_0 = x_0[0]
         # If u is 1D but the problem has more than 1 q,
-        # If u is 1D but the problem has more than 1 q,
         # it can mean that it corresponds to only one step
+        # but it also can be an underactuated problem with just one u
         if len(u.shape) == 1 and x_0.shape[0] != 2:
             try:
                 F(x_0, u, params)
             except TypeError:
-                pass
+                pass  # u is a 1D a control tape
             else:
-                u = expand_dims(u, axis=0)
+                u = expand_dims(u, axis=0)  # u is 1 step
         value = func(x_0, u, F, dt, params)
         return value
 
@@ -571,6 +571,17 @@ def integrate_hs_mod_parab(x_0, u, F, dt, params, scheme_params):
 # --- Schemes as Restrictions ---
 
 
+def index_div(x):
+    dim = vec_len(x) // 2
+    if is2d(x):
+        first_ind = slice(None, None), slice(None, dim)
+        last_ind = slice(None, None), slice(dim, None)
+    else:
+        first_ind = slice(None, dim)
+        last_ind = slice(dim, None)
+    return first_ind, last_ind
+
+
 def euler_restr(x, x_n, u, u_n, F, dt, params):
     return x_n - (x + dt * F(x, u, params))
 
@@ -590,14 +601,8 @@ def trapz_restr(x, x_n, u, u_n, F, dt, params):
 
 
 def trapz_mod_restr(x, x_n, u, u_n, F, dt, params):
-    dim = vec_len(x) // 2
     res = copy(x)
-    if is2d(x):
-        first_ind = slice(None, None), slice(None, dim)
-        last_ind = slice(None, None), slice(dim, None)
-    else:
-        first_ind = slice(None, dim)
-        last_ind = slice(dim, None)
+    first_ind, last_ind = index_div(x)
     f = F(x, u, params)[last_ind]
     f_n = F(x_n, u_n, params)[last_ind]
     res[last_ind] = x[last_ind] + dt / 2 * (f + f_n)
@@ -615,15 +620,9 @@ def hs_restr(x, x_n, u, u_n, F, dt, params):
 
 
 def hs_mod_restr(x, x_n, u, u_n, F, dt, params):
-    dim = vec_len(x) // 2
     x_c = copy(x)
     res = copy(x)
-    if is2d(x):
-        first_ind = slice(None, None), slice(None, dim)
-        last_ind = slice(None, None), slice(dim, None)
-    else:
-        first_ind = slice(None, dim)
-        last_ind = slice(dim, None)
+    first_ind, last_ind = index_div(x)
     f = F(x, u, params)[last_ind]
     f_n = F(x_n, u_n, params)[last_ind]
     q = x[first_ind]
@@ -651,18 +650,9 @@ def hs_parab_restr(x, x_n, u, u_n, F, dt, params, scheme_params):
 
 
 def hs_mod_parab_restr(x, x_n, u, u_n, F, dt, params, scheme_params):
-    from optibot.schemes import vec_len, is2d
-    from copy import copy
-
-    dim = vec_len(x) // 2
     x_c = copy(x)
     res = copy(x)
-    if is2d(x):
-        first_ind = slice(None, None), slice(None, dim)
-        last_ind = slice(None, None), slice(dim, None)
-    else:
-        first_ind = slice(None, dim)
-        last_ind = slice(dim, None)
+    first_ind, last_ind = index_div(x)
     f = F(x, u, params)[last_ind]
     f_n = F(x_n, u_n, params)[last_ind]
     q = x[first_ind]
@@ -677,6 +667,92 @@ def hs_mod_parab_restr(x, x_n, u, u_n, F, dt, params, scheme_params):
     f_c = F(x_c, u_c, params)[last_ind]
     res[last_ind] = v + dt / 6 * (f + 4 * f_c + f_n)
     res[first_ind] = q + dt * v + dt ** 2 / 6 * (f + 2 * f_c)
+    return x_n - res
+
+
+# --- Schemes as Acceleration Restrictions ---
+
+
+def euler_accel_restr(x, x_n, a, a_n, dt, scheme_params):
+    first_ind, last_ind = index_div(x)
+    x_d = copy(x)
+    x_d[first_ind] = x[last_ind]
+    x_d[last_ind] = a
+    return x_n - (x + dt * x_d)
+
+
+# def rk4_accel_restr(x, x_n, a, a_n, dt, params, scheme_params):
+#     k1 = F(x, u, params)
+#     k2 = F(x + dt / 2 * k1, u, params)
+#     k3 = F(x + dt / 2 * k2, u, params)
+#     k4 = F(x + dt * k3, u, params)
+#     return x_n - (x + dt / 6 * (k1 + 2 * k2 + 2 * k3 + k4))
+
+
+def trapz_accel_restr(x, x_n, a, a_n, dt, scheme_params):
+    first_ind, last_ind = index_div(x)
+    x_d = copy(x)
+    x_d[first_ind] = x[last_ind]
+    x_d[last_ind] = a
+    x_d_n = copy(x)
+    x_d_n[first_ind] = x_n[last_ind]
+    x_d_n[last_ind] = a_n
+    return x_n - (x + dt / 2 * (x_d + x_d_n))
+
+
+def trapz_mod_accel_restr(x, x_n, a, a_n, dt, scheme_params):
+    res = copy(x)
+    first_ind, last_ind = index_div(x)
+    res[last_ind] = x[last_ind] + dt / 2 * (a + a_n)
+    res[first_ind] = x[first_ind] + dt * x[last_ind] + dt ** 2 / 6 * (a_n + 2 * a)
+    return x_n - res
+
+
+def hs_half_x(x, x_n, x_d, x_d_n, dt):
+    x_c = (x + x_n) / 2 + dt / 8 * (x_d - x_d_n)
+    return x_c
+
+
+def hs_accel_restr(x, x_n, a, a_n, dt, scheme_params):
+    a_c = scheme_params
+    first_ind, last_ind = index_div(x)
+    x_d = copy(x)
+    x_d[first_ind] = x[last_ind]
+    x_d[last_ind] = a
+
+    x_d_n = copy(x)
+    x_d_n[first_ind] = x_n[last_ind]
+    x_d_n[last_ind] = a_n
+
+    x_c = hs_half_x(x, x_n, x_d, x_d_n, dt)
+    x_d_c = copy(x)
+    x_d_c[first_ind] = x_c[last_ind]
+    x_d_c[last_ind] = a_c
+    return x + dt / 6 * (x_d + 4 * x_d_c + x_d_n) - x_n
+
+
+def hs_mod_half_x(x, x_n, a, a_n, dt):
+    x_c = copy(x)
+    first_ind, last_ind = index_div(x)
+    q = x[first_ind]
+    v = x[last_ind]
+    q_n = x_n[first_ind]
+    v_n = x_n[last_ind]
+    q_c = (13 * q + 3 * q_n) / 16 + 5 * dt / 16 * v + dt ** 2 / 96 * (4 * a - a_n)
+    v_c = (v + v_n) / 2 + dt / 8 * (a - a_n)
+    x_c[first_ind] = q_c
+    x_c[last_ind] = v_c
+    return x_c
+
+
+def hs_mod_accel_restr(x, x_n, a, a_n, dt, scheme_params):
+    a_c = scheme_params
+    res = copy(x)
+    first_ind, last_ind = index_div(x)
+    q = x[first_ind]
+    v = x[last_ind]
+    res[last_ind] = v + dt / 6 * (a + 4 * a_c + a_n)
+    res[first_ind] = q + dt * v + dt ** 2 / 6 * (a + 2 * a_c)
     return x_n - res
 
 
