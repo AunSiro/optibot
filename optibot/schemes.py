@@ -745,7 +745,7 @@ def hs_mod_half_x(x, x_n, a, a_n, dt):
 
 
 def hs_mod_accel_restr(x, x_n, a, a_n, dt, scheme_params):
-    a_c = scheme_params
+    a_c = scheme_params.T
     res = copy(x)
     first_ind, last_ind = index_div(x)
     q = x[first_ind]
@@ -1597,4 +1597,3 @@ def interpolated_array_derivative(
                 )
             ).flatten()
     return new_X
-
