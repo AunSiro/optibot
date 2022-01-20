@@ -1245,22 +1245,23 @@ def interpolated_array(
         raise ValueError(
             f"Unsupported u_scheme {u_scheme}, supported schemes are{supported_u_schemes}"
         )
+
+    N, new_X, U, old_t_array = _prepare_interp(X, U, h, t_array)
+    X_dot = _calculate_missing_arrays(
+        X, U, h, params, F, X_dot, scheme, u_scheme, scheme_params
+    )
+
     if u_scheme in ["min_err", "pinv_dyn"]:
         scheme_params["X"] = X
         scheme_params["scheme"] = scheme
         scheme_params["params"] = params
+        scheme_params["X_dot"] = X_dot
         if u_scheme == "min_err":
             if F is None:
                 raise ValueError(
                     "F cannot be None when using min_err as u interpolation"
                 )
             scheme_params["F"] = F
-
-    N, new_X, U, old_t_array = _prepare_interp(X, U, h, t_array)
-
-    X_dot = _calculate_missing_arrays(
-        X, U, h, params, F, X_dot, scheme, u_scheme, scheme_params
-    )
 
     new_U = interpolate_u(U, old_t_array, t_array, u_scheme, scheme_params)
     if scheme == "hs_scipy":
@@ -1275,6 +1276,38 @@ def interpolated_array(
 
 
 # --- Derivatives ---
+
+
+def trap_dot_interp(x, x_n, x_dot, x_dot_n, tau, h, params):
+    dim = vec_len(x) // 2
+    q, q_n, v, v_n, f, f_n = _gen_basic_values(dim, x, x_n, x_dot, x_dot_n, params)
+    q_interp = v + 1 / h * tau * (v_n - v)
+    v_interp = f + 1 / h * tau * (f_n - f)
+    return concatenate([q_interp, v_interp])
+
+
+def trap_mod_dot_interp(x, x_n, x_dot, x_dot_n, tau, h, params):
+    dim = vec_len(x) // 2
+    q, q_n, v, v_n, f, f_n = _gen_basic_values(dim, x, x_n, x_dot, x_dot_n, params)
+    q_interp = v + f * tau + 1 / (2 * h) * tau ** 2 * (f_n - f)
+    v_interp = f + 1 / h * tau * (f_n - f)
+    return concatenate([q_interp, v_interp])
+
+
+def trap_dot_dot_interp(x, x_n, x_dot, x_dot_n, tau, h, params):
+    dim = vec_len(x) // 2
+    q, q_n, v, v_n, f, f_n = _gen_basic_values(dim, x, x_n, x_dot, x_dot_n, params)
+    q_interp = 1 / h * (v_n - v)
+    v_interp = 1 / h * (f_n - f)
+    return concatenate([q_interp, v_interp])
+
+
+def trap_mod_dot_dot_interp(x, x_n, x_dot, x_dot_n, tau, h, params):
+    dim = vec_len(x) // 2
+    q, q_n, v, v_n, f, f_n = _gen_basic_values(dim, x, x_n, x_dot, x_dot_n, params)
+    q_interp = f + 1 / h * tau * (f_n - f)
+    v_interp = 1 / h * (f_n - f)
+    return concatenate([q_interp, v_interp])
 
 
 def hs_dot_interp(x, x_n, x_dot, x_dot_n, tau, h, params, scheme_params):
@@ -1451,7 +1484,19 @@ def _newpoint_der(X, X_dot, h, t, params, scheme, order, scheme_params={}):
         raise ValueError(f"Value of time {t} detected outside interpolation limits")
     else:
         x, x_n, x_dot, x_dot_n = X[n], X[n + 1], X_dot[n], X_dot[n + 1]
-        if scheme == "hs":
+        if scheme == "trapz":
+            if order == 1:
+                x_interp = trap_dot_interp(x, x_n, x_dot, x_dot_n, tau, h, params)
+            elif order == 2:
+                x_interp = trap_dot_dot_interp(x, x_n, x_dot, x_dot_n, tau, h, params)
+        elif scheme == "trapz_mod":
+            if order == 1:
+                x_interp = trap_mod_dot_interp(x, x_n, x_dot, x_dot_n, tau, h, params)
+            elif order == 2:
+                x_interp = trap_mod_dot_dot_interp(
+                    x, x_n, x_dot, x_dot_n, tau, h, params
+                )
+        elif scheme == "hs":
             X_dot_c = scheme_params["x_dot_c"]
             x_dot_c = X_dot_c[n]
             if order == 1:
@@ -1548,6 +1593,8 @@ def interpolated_array_derivative(
             "hs_mod": modified Hermite-Simpson scheme compatible interpolation
             "hs_parab": Hermite-Simpson scheme compatible interpolation with parabolic U
             "hs_mod_parab": modified Hermite-Simpson scheme compatible interpolation with parabolic U
+            "trapz": Trapezoidal scheme
+            "trapz_mod": modified trapezoidal scheme
     order : int, optional
         Derivation order. The default is 1. Acceptable values are 1 and 2.
     scheme_params :dict, optional
@@ -1569,7 +1616,15 @@ def interpolated_array_derivative(
         raise ValueError(
             f"Unsupported derivation order, supported order are{supported_order}"
         )
-    supported_schemes = ["hs", "hs_scipy", "hs_mod", "hs_parab", "hs_mod_parab"]
+    supported_schemes = [
+        "hs",
+        "hs_scipy",
+        "hs_mod",
+        "hs_parab",
+        "hs_mod_parab",
+        "trapz",
+        "trapz_mod",
+    ]
     if scheme not in supported_schemes:
         raise ValueError(
             f"Unsupported scheme, supported schemes are{supported_schemes}"
