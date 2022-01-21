@@ -18,6 +18,9 @@ from numpy import (
     array,
     sum,
     abs,
+    max,
+    sqrt,
+    trapz,
 )
 from numpy.linalg import inv
 from scipy.interpolate import CubicHermiteSpline as hermite
@@ -105,7 +108,7 @@ def dynamic_error(
         equispaced values of dynamic error q''(t) - G(q(t), q'(t), u(t)).
 
     """
-    if "parab" in scheme and u_scheme != "parab":
+    if "parab" in scheme and u_scheme == "lin":
         warnings.warn(
             "You are currently using a u-parabolic interpolation for x with a lineal interpolation of u"
         )
@@ -340,3 +343,21 @@ def dynamic_error_implicit(
     dyn_err_2_a = x_dot_dot_interp[:, :dim] - f_arr_a
     dyn_err_2_b = x_dot_dot_interp[:, :dim] - f_arr_b
     return dyn_err_q, dyn_err_v, dyn_err_2_a, dyn_err_2_b
+
+
+def arr_mod(x):
+    x_1 = sum(x * x, axis=1)
+    return sqrt(x_1)
+
+
+def arr_sum(x):
+    return sum(abs(x), axis=1)
+
+
+def arr_max(x):
+    return max(abs(x), axis=1)
+
+
+def arr_abs_integr_vert(t_arr, x):
+    errors = trapz(abs(x), t_arr, axis=0)
+    return errors
