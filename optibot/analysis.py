@@ -5,8 +5,18 @@ Created on Mon Jan 17 11:08:53 2022
 @author: Siro Moreno
 """
 
-from .schemes import interpolated_array, interpolated_array_derivative
+from .schemes import (
+    interpolated_array,
+    interpolated_array_derivative,
+    _newpoint,
+    interp_2d,
+    _newpoint_der,
+    _newpoint_u,
+    _calculate_missing_arrays,
+)
 from scipy.optimize import root, minimize
+from scipy.integrate import quad
+from functools import lru_cache
 from numpy import (
     zeros,
     zeros_like,
@@ -395,3 +405,254 @@ def arr_max(x):
 def arr_abs_integr_vert(t_arr, x):
     errors = trapz(abs(x), t_arr, axis=0)
     return errors
+
+
+def F_point(
+    x_arr,
+    u_arr,
+    t_arr,
+    t,
+    params,
+    F,
+    x_dot_arr=None,
+    scheme="hs_scipy",
+    u_scheme="lin",
+    scheme_params={},
+):
+    """
+    Calculate the value of F(X_q(t), u(t), params), interpolating X_q(t) and u(t)
+    first.
+    
+    If X(t) = [q(t), v(t)], we define X_q(t) as [q(t), q'(t)]
+        
+    'scheme' and 'u_scheme' define the way in which we interpolate the values
+    of q, v and u between the given points.
+        
+    
+    
+
+    Parameters
+    ----------
+    x_arr : Numpy Array, shape = (W, 2N)
+        Values known of x(t)
+    u_arr : Numpy Array, shape = (W, [Y])
+        Values known of u(t)
+    t_arr : Numpy Array, shape = (W)
+        Values known of t
+    t : float
+        Time where we want to calculate F(X_q(t), u(t))
+    params : list
+        Physical problem parameters to be passed to F
+    F : Function of (x, u, params)
+        A function of a dynamic sistem, so that
+            x' = F(x, u, params)
+        if x_dot_arr is None, F will be used to calculate X'
+    x_dot_arr : Numpy Array, optional, shape = (W, 2N), default = None
+        Known values of X'
+        if x_dot_arr is None, F will be used to calculate X'
+    scheme : str, optional
+        Scheme to be used in the X interpolation. The default is "hs_scipy".
+        Acceptable values are:
+            "trapz" : trapezoidal scheme compatible interpolation (not lineal!)
+            "trapz_mod": modified trapezoidal scheme compatible interpolation (not lineal!)
+            "hs_scipy": 3d order polynomial that satisfies continuity in x(t) and x'(t)
+            "hs": Hermite-Simpson scheme compatible interpolation
+            "hs_mod": modified Hermite-Simpson scheme compatible interpolation
+            "hs_parab": Hermite-Simpson scheme compatible interpolation with parabolic U
+            "hs_mod_parab": modified Hermite-Simpson scheme compatible interpolation with parabolic U
+    u_scheme : string, optional
+        Model of the interpolation that must be used. The default is "lin".
+        Acceptable values are:
+            "lin": lineal interpolation
+            "parab": parabolic interpolation, requires central points array
+            as scheme params[0]
+    scheme_params :dict, optional
+        Aditional parameters of the scheme. The default is {}.
+
+    Returns
+    -------
+    F(X_q(t), u(t), params)
+        Format and structure will depend on the results of given F
+        Usually, it will be a NumPy Array of shape (1, N)
+
+    """
+    if "parab" in scheme and u_scheme == "lin":
+        warnings.warn(
+            "You are currently using a u-parabolic interpolation for x with a lineal interpolation of u"
+        )
+    if "parab" in u_scheme and "parab" not in scheme:
+        warnings.warn(
+            "You are currently using a parabolic interpolation for u with a non u-parabolic interpolation of x"
+        )
+    N = x_arr.shape[0] - 1
+    dim = x_arr.shape[1] // 2
+    h = (t_arr[-1] - t_arr[0]) / N
+
+    x_dot_arr = _calculate_missing_arrays(
+        x_arr, u_arr, h, params, F, x_dot_arr, scheme, u_scheme, scheme_params
+    )
+    if u_scheme in ["min_err", "pinv_dyn"]:
+        scheme_params["X"] = x_arr
+        scheme_params["scheme"] = scheme
+        scheme_params["params"] = params
+        scheme_params["x_dot_arr"] = x_dot_arr
+        if u_scheme == "min_err":
+            if F is None:
+                raise ValueError(
+                    "F cannot be None when using min_err as u interpolation"
+                )
+            scheme_params["F"] = F
+
+    if scheme == "hs_scipy":
+        X_interp = hermite(t_arr, x_arr, x_dot_arr)
+        x = X_interp(t)
+    else:
+        x = array(
+            _newpoint(x_arr, x_dot_arr, h, t, params, scheme, scheme_params)
+        ).flatten()
+
+    if u_scheme == "lin":
+        if len(u_arr.shape) == 1:
+            u = interp(t, t_arr, u_arr)
+        elif len(u_arr.shape) == 2:
+            u = interp_2d(t, t_arr, u_arr)
+        else:
+            raise ValueError(
+                f"U has {len(u_arr.shape)} dimensions, values accepted are 1 and 2"
+            )
+    else:
+        u = array(_newpoint_u(u_arr, h, t, u_scheme, scheme_params)).flatten()
+
+    if scheme == "hs_scipy":
+        X_interp = hermite(t_arr, x_arr, x_dot_arr)
+        X_dot_interp = X_interp.derivative()
+        x_d = X_dot_interp(t)
+    else:
+        x_d = array(
+            _newpoint_der(x_arr, x_dot_arr, h, t, params, scheme, 1, scheme_params)
+        ).flatten()
+
+    x_q = x.copy()
+    x_q[dim:] = x_d[:dim]
+    f_b = F(x_q, u, params)[dim:]
+    return f_b
+
+
+def quad_problem(
+    x_arr,
+    u_arr,
+    t_arr,
+    params,
+    F,
+    scheme,
+    u_scheme,
+    scheme_params,
+    discont_at_t_arr=True,
+    sub_div_limit=250,
+):
+
+    dim = x_arr.shape[-1] // 2
+
+    @lru_cache(maxsize=None)
+    def dummy_F(t):
+        E = F_point(
+            x_arr,
+            u_arr,
+            t_arr,
+            t,
+            params,
+            F=F,
+            scheme=scheme,
+            u_scheme=u_scheme,
+            scheme_params=scheme_params,
+        )
+        return E
+
+    errors = []
+
+    for ii in range(dim):
+
+        def dummy_prob(t):
+            return dummy_F(t)[ii]
+
+        if discont_at_t_arr:
+            E, E_e = quad(
+                dummy_prob, t_arr[0], t_arr[-1], limit=sub_div_limit, points=t_arr[1:-1]
+            )
+        else:
+            E, E_e = quad(dummy_prob, t_arr[0], t_arr[-1], limit=sub_div_limit)
+
+        E = x_arr[-1, dim + ii] - x_arr[0, dim + ii] - E
+
+        errors.append(E)
+
+    return array(errors)
+
+
+def doub_quad_problem(
+    x_arr,
+    u_arr,
+    t_arr,
+    params,
+    F,
+    scheme,
+    u_scheme,
+    scheme_params,
+    discont_at_t_arr=True,
+    sub_div_limit=250,
+):
+
+    dim = x_arr.shape[-1] // 2
+
+    @lru_cache(maxsize=None)
+    def dummy_F(t):
+        E = F_point(
+            x_arr,
+            u_arr,
+            t_arr,
+            t,
+            params,
+            F=F,
+            scheme=scheme,
+            u_scheme=u_scheme,
+            scheme_params=scheme_params,
+        )
+        return E
+
+    errors = []
+
+    for ii in range(dim):
+
+        def dummy_prob(t):
+            return dummy_F(t)[ii]
+
+        if discont_at_t_arr:
+
+            def dummy_integ(t):
+                E, E_e = quad(
+                    dummy_prob, t_arr[0], t, limit=sub_div_limit, points=t_arr[1:-1]
+                )
+                return E
+
+        else:
+
+            def dummy_integ(t):
+                E, E_e = quad(dummy_prob, t_arr[0], t, limit=sub_div_limit)
+                return E
+
+        if discont_at_t_arr:
+            E, E_e = quad(
+                dummy_integ,
+                t_arr[0],
+                t_arr[-1],
+                limit=sub_div_limit,
+                points=t_arr[1:-1],
+            )
+        else:
+            E, E_e = quad(dummy_integ, t_arr[0], t_arr[-1], limit=sub_div_limit)
+
+        E = x_arr[-1, ii] - x_arr[0, ii] - x_arr[0, dim + ii] * t_arr[-1] - E
+
+        errors.append(E)
+
+    return array(errors)
