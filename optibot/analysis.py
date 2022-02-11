@@ -167,6 +167,40 @@ def dynamic_error(
     return dyn_err_q, dyn_err_v, dyn_err_2_a, dyn_err_2_b
 
 
+def generate_G(M, F):
+    """
+    Generate a function G from M and F, so that from 
+
+            | q''  |   |                | -1   |                 |
+            |      | = |  M(x, params)  |    @ | F(x, u, params) |
+            |lambda|   |                |      |                 |,
+    
+    we can get a function G so that:
+        
+         q'' = G(x, u) = (M(x)^-1 @  F(x, u)) [upperside]
+            
+    Parameters
+    ----------
+    M : Function of (x, params)
+        Returns a Numerical Matrix.
+    F : Function of (x, u, params)
+        Returns a Numerical Vector.
+
+    Returns
+    -------
+    G : Function of (x, u, params)
+        Equal to q'' where the collocation constraint is enforced.
+
+    """
+
+    def G(x, u, params):
+        dim = x.shape[1] // 2
+        m_inv = inv(M(x, params))
+        return (m_inv @ F(x, u, params)).T[:dim]
+
+    return G
+
+
 def dynamic_error_implicit(
     x_arr,
     u_arr,
@@ -174,7 +208,6 @@ def dynamic_error_implicit(
     params,
     F,
     M,
-    lambda_arr=None,
     X_dot=None,
     scheme="hs_scipy",
     u_scheme="lin",
@@ -188,11 +221,25 @@ def dynamic_error_implicit(
             | M    A_c|   | q''  |   |f_d (q, v, u)|
             |         | @ |      | = |             |
             |m_cd   0 |   |lambda|   |f_dc(q, v)   |,
-    The first equation is:
-        M @ q'' + A_c @ lambda = f_d (q, v, u)
-    we define F(q, v, u, lambda) as F = f_d - A_c @ lambda
-    we can define G(q, v, u, lambda) = M^-1 @ F(q, v, u, lambda)
-    so that the 1st equation plus the definition of v(t) as q'(t)
+            
+    and therefore:
+            | q''  |   | M    A_c| -1   |f_d (q, v, u)|
+            |      | = |         |    @ |             |
+            |lambda|   |m_cd   0 |      |f_dc(q, v)   |,
+            
+    Calling M_comp to the whole inversed matrix, the first equation is:
+        
+        q''= (M_comp ^-1 @ [f_d  f_dc]^T) [upperside]
+        
+    We define F(q, v, u) = [f_d(q, v, u)  f_dc(q, v)]^T
+    
+    we can define G(q, v, u) = (M_comp(q, v) ^-1 @  F(q, v, u)) [upperside]
+    For notation simplicity, we will from now on extend the notation of 
+    M to encompass the whole M_comp, resulting in:
+        
+        q'' = G(q, v, u) = (M(q, v)^-1 @  F(q, v, u)) [upperside]
+        
+    so that the equation plus the definition of v(t) as q'(t)
     is equivalent to [q', v'] = [v , G(x, u)] 
     
     we can define the dynamic errors at a point t as:
@@ -218,11 +265,11 @@ def dynamic_error_implicit(
         ending time of interval of analysis
     params : list
         Physical problem parameters to be passed to F
-    F : Function of (x, u, lambda, params)
+    F : Function of (x, u,  params)
         A function of a dynamic sistem, so that
-            G(q, v, u, lambda) = M^-1 @ F(x, u, lambda)
+            G(q, v, u) = M^-1 @ F(x, u)
     M : Function of (x, params)
-        Calculates the numerical value of the mass matrix at a given configuration
+        Calculates the numerical value of the complete mass matrix at a given configuration
     lambda_arr : Numpy Array
         If the problem has restrictions, they are taken into account on the 
         lagrangian through the term: A_c @ lambda
@@ -274,19 +321,13 @@ def dynamic_error_implicit(
     dim = x_arr.shape[1] // 2
     h = t_end / (N - 1)
 
-    def G(x, u, lambdas, params):
-        m_inv = inv(M(x, params))
-        return (m_inv @ F(x, u, lambdas, params)).T
+    G = generate_G(M, F)
 
     if X_dot is None:
         X_dot = zeros_like(x_arr)
         for ii in range(N):
-            if lambda_arr is None:
-                lambdas = None
-            else:
-                lambdas = lambda_arr[ii]
             X_dot[ii, :dim] = x_arr[ii, dim:]
-            X_dot[ii, dim:] = G(x_arr[ii], u_arr[ii], lambdas, params)
+            X_dot[ii, dim:] = G(x_arr[ii], u_arr[ii], params)
 
     t_interp = linspace(0, t_end, n_interp)
     x_interp, u_interp = interpolated_array(
@@ -322,22 +363,15 @@ def dynamic_error_implicit(
         order=2,
         scheme_params=scheme_params,
     )
-    if lambda_arr is None:
-        lambda_interp = None
-    else:
-        lambda_interp = interp(linspace(0, t_end, n_interp), t_interp, lambda_arr)
 
     f_arr_a = zeros([n_interp, dim])
     f_arr_b = zeros([n_interp, dim])
     for ii in range(n_interp):
-        if lambda_interp is None:
-            lambdas = None
-        else:
-            lambdas = lambda_interp[ii]
-        f_arr_a[ii, :] = G(x_interp[ii], u_interp[ii], lambdas, params)
+
+        f_arr_a[ii, :] = G(x_interp[ii], u_interp[ii], params)
         x_q = x_interp[ii].copy()
         x_q[dim:] = x_dot_interp[ii, :dim]
-        f_arr_b[ii, :] = G(x_q, u_interp[ii], lambdas, params)
+        f_arr_b[ii, :] = G(x_q, u_interp[ii], params)
     dyn_err_q = x_dot_interp[:, :dim] - x_interp[:, dim:]
     dyn_err_v = x_dot_interp[:, dim:] - f_arr_a
     dyn_err_2_a = x_dot_dot_interp[:, :dim] - f_arr_a
