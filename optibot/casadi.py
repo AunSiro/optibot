@@ -71,7 +71,7 @@ def unpack(arr):
     return res
 
 
-def rhs_to_casadi_function(RHS, q_vars, u_vars=None, verbose=False):
+def rhs_to_casadi_function(RHS, q_vars, u_vars=None, verbose=False, mode="x"):
     """
     Converts an array of symbolic expressions RHS(x, u, params) to a casadi 
     function.
@@ -81,11 +81,20 @@ def rhs_to_casadi_function(RHS, q_vars, u_vars=None, verbose=False):
     Parameters
     ----------
     RHS : Sympy matrix
-        Vertical symbolic matrix RHS(x, x', u, lambdas, params)
-    q_vars : TYPE
-        DESCRIPTION.
-    u_vars : TYPE, optional
-        DESCRIPTION. The default is None.
+        Vertical symbolic matrix RHS(x, u, lambdas, params)
+    q_vars : int or list of dynamic symbols
+        Determine the symbols that will be searched
+        if int, the program will assume q as q_i for q in [0,q_vars]
+    u_vars : None, int or list of symbols. Default is None.
+        Symbols that will be sarched and separated. 
+        If None, symbols of the form u_ii where ii is a number will be 
+        assumed
+    verbose : Bool, optional
+        wether to print aditional information of expected and found variables
+        in the given expression
+    mode : str
+        if mode == 'x', a function F(x, u, params) = [x'] will be returned
+        if mode == 'q', a function F(q, v, u, params) = [a] will be returned
 
     Returns
     -------
@@ -101,30 +110,46 @@ def rhs_to_casadi_function(RHS, q_vars, u_vars=None, verbose=False):
     q_args, v_args, _, u_args_found, params, lambda_args = arguments
     x_args = q_args + v_args
 
-    funcs = v_args + RHS
+    if mode == "x":
+        funcs = v_args + RHS
+    elif mode == "q":
+        funcs = RHS
+    else:
+        raise ValueError(f'Unexpected mode {mode}, valid values are "x" and "q"')
+
     all_vars = x_args + u_args_found + params
     msg = "Function Arguments:\n"
-    msg += f"\tx: {x_args}\n"
+    if mode == "x":
+        msg += f"\tx: {x_args}\n"
+    elif mode == "q":
+        msg += f"\tq: {q_args}\n"
+        msg += f"\tv: {v_args}\n"
     msg += f"\tu: {u_args_found}\n"
     msg += f"\tparams: {params}\n"
     print(msg)
     cas_x_args = cas.MX.sym("x", len(x_args))
+    cas_q_args = cas.MX.sym("q", len(q_args))
+    cas_v_args = cas.MX.sym("v", len(v_args))
     cas_u_args = cas.MX.sym("u", len(u_args_found))
     cas_params = cas.MX.sym("p", len(params))
-    cas_all_vars = [cas_x_args[ii] for ii in range(len(x_args))]
+    if mode == "x":
+        cas_all_vars = [cas_x_args[ii] for ii in range(len(x_args))]
+        f_arg_list = [cas_x_args, cas_u_args, cas_params]
+        f_arg_names = ["x", "u", "params"]
+        f_out_names = ["x_dot"]
+    elif mode == "q":
+        cas_all_vars = [cas_q_args[ii] for ii in range(len(q_args))]
+        cas_all_vars += [cas_v_args[ii] for ii in range(len(v_args))]
+        f_arg_list = [cas_q_args, cas_v_args, cas_u_args, cas_params]
+        f_arg_names = ["q", "v", "u", "params"]
+        f_out_names = ["a"]
     cas_all_vars += [cas_u_args[ii] for ii in range(len(u_args_found))]
     cas_all_vars += [cas_params[ii] for ii in range(len(params))]
     cas_funcs = []
     for function in funcs:
         cas_funcs.append(sympy2casadi(function, all_vars, cas_all_vars))
     cas_funcs = cas.horzcat(*cas_funcs)
-    return cas.Function(
-        "F",
-        [cas_x_args, cas_u_args, cas_params],
-        [cas_funcs,],
-        ["x", "u", "params"],
-        ["x_dot"],
-    )
+    return cas.Function("F", f_arg_list, [cas_funcs,], f_arg_names, f_out_names,)
 
 
 def implicit_dynamic_x_to_casadi_function(D, x_vars, u_vars=None, verbose=False):

@@ -727,7 +727,7 @@ def dynamic_error_pseudospectral(
     err_v : Numpy array, shape = (n_interp, N)
         equispaced values of dynamic error v'(t) - G(q(t), v(t), u(t)).
     err_2 : Numpy array, shape = (n_interp, N)
-        equispaced values of dynamic error q''(t) - G(q(t), v(t), u(t)).
+        equispaced values of dynamic error q''(t) - G(q(t), q'(t), u(t)).
 
     """
     from scipy.interpolate import CubicHermiteSpline as hermite
@@ -789,6 +789,6 @@ def dynamic_error_pseudospectral(
 
     err_q = q_arr_d - v_arr
     err_v = v_arr_d - g_func(q_arr, v_arr, u_arr, params)
-    err_2 = q_arr_d_d - g_func(q_arr, v_arr, u_arr, params)
+    err_2 = q_arr_d_d - g_func(q_arr, q_arr_d, u_arr, params)
 
     return err_q, err_v, err_2

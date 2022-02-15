@@ -58,7 +58,36 @@ def num_derivative(X, h):
     return X_dot
 
 
-def RHS2numpy(RHS, q_vars, u_vars=None, verbose=False):
+def RHS2numpy(RHS, q_vars, u_vars=None, verbose=False, mode="x"):
+    """
+    Converts an array of symbolic expressions RHS(x, u, params) to a Numpy function.
+    Designed to work with systems so that
+        x' = RHS(x, u, params)
+
+    Parameters
+    ----------
+    RHS : Sympy matrix
+        Vertical symbolic matrix RHS(x, u, lambdas, params)
+    q_vars : int or list of dynamic symbols
+        Determine the symbols that will be searched
+        if int, the program will assume q as q_i for q in [0,q_vars]
+    u_vars : None, int or list of symbols. Default is None.
+        Symbols that will be sarched and separated. 
+        If None, symbols of the form u_ii where ii is a number will be 
+        assumed
+    verbose : Bool, optional
+        wether to print aditional information of expected and found variables
+        in the given expression
+    mode : str
+        if mode == 'x', a function F(x, u, params) = [x'] will be returned
+        if mode == 'q', a function F(q, v, u, params) = [a] will be returned
+
+    Returns
+    -------
+    TYPE
+        DESCRIPTION.
+
+    """
     from sympy import lambdify
     from .symbolic import find_arguments, standard_notation, diff_to_symb_expr
 
@@ -68,18 +97,34 @@ def RHS2numpy(RHS, q_vars, u_vars=None, verbose=False):
     q_args, v_args, a_args, u_args, params, lambda_args = arguments
     x_args = q_args + v_args
 
-    if len(q_args) == len(RHS):
-        funcs = v_args + RHS
-    elif len(RHS) == len(x_args):
-        funcs = RHS
+    if mode == "x":
+        if len(q_args) == len(RHS):
+            funcs = v_args + RHS
+        elif len(RHS) == len(x_args):
+            funcs = RHS
+        else:
+            raise ValueError(
+                f"Unrecognized RHS shape, detected elements = {len(RHS)}, expected {len(q_args)} or {len(x_args)}"
+            )
+    elif mode == "q":
+        if len(q_args) == len(RHS):
+            funcs = RHS
+        elif len(RHS) == len(x_args):
+            funcs = RHS[len(RHS) // 2 :]
+        else:
+            raise ValueError(
+                f"Unrecognized RHS shape, detected elements = {len(RHS)}, expected {len(q_args)} or {len(x_args)}"
+            )
     else:
-        raise ValueError(
-            f"Unrecognized RHS shape, detected elements = {len(RHS)}, expected {len(q_args)} or {len(x_args)}"
-        )
+        raise ValueError(f'Unexpected mode {mode}, valid values are "x" and "q"')
 
     all_vars = x_args + u_args + params
     msg = "Function Arguments:\n"
-    msg += f"\tx: {x_args}\n"
+    if mode == "x":
+        msg += f"\tx: {x_args}\n"
+    elif mode == "q":
+        msg += f"\tq: {q_args}\n"
+        msg += f"\tv: {v_args}\n"
     msg += f"\tu: {u_args}\n"
     msg += f"\tparams: {params}\n"
     print(msg)
@@ -87,12 +132,23 @@ def RHS2numpy(RHS, q_vars, u_vars=None, verbose=False):
     for function in funcs:
         np_funcs.append(lambdify(all_vars, function))
 
-    def New_F(x, u, params):
-        all_np_vars = unpack(x) + unpack(u) + unpack(params)
-        results = []
-        for func in np_funcs:
-            results.append(func(*all_np_vars))
-        return congruent_concatenate(results)
+    if mode == "x":
+
+        def New_F(x, u, params):
+            all_np_vars = unpack(x) + unpack(u) + unpack(params)
+            results = []
+            for func in np_funcs:
+                results.append(func(*all_np_vars))
+            return congruent_concatenate(results)
+
+    elif mode == "q":
+
+        def New_F(q, v, u, params):
+            all_np_vars = unpack(q) + unpack(v) + unpack(u) + unpack(params)
+            results = []
+            for func in np_funcs:
+                results.append(func(*all_np_vars))
+            return congruent_concatenate(results)
 
     return New_F
 
