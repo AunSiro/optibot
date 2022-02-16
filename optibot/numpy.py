@@ -31,6 +31,14 @@ def unpack(arr):
     return res
 
 
+def combinefunctions(*functions):
+    def combined(*args, **kwargs):
+        res = [f(*args, **kwargs) for f in functions]
+        return np.array(res).T
+
+    return combined
+
+
 def congruent_concatenate(varlist):
     x = np.array(varlist[0])
     if x.size == 1:

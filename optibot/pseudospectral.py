@@ -9,6 +9,7 @@ Created on Thu Nov 11 12:11:43 2021
 from sympy import legendre_poly, symbols, expand, zeros, lambdify
 from functools import lru_cache
 from numpy import array, piecewise, linspace
+from .numpy import combinefunctions
 
 
 # --- Generating Collocation Points ---
@@ -305,7 +306,7 @@ def matrix_D_bary(N, scheme, precission=20):
 def bary_poly(t_arr, y_arr):
     """
     Generates a numeric function of t that corresponds to the polynomial
-    that passes through the points (t, x) using the barycentric formula
+    that passes through the points (t, y) using the barycentric formula
 
     Parameters
     ----------
@@ -339,6 +340,33 @@ def bary_poly(t_arr, y_arr):
         return piecewise(t, cond_list, func_list)
 
     return new_poly
+
+
+def bary_poly_2d(t_arr, y_arr):
+    """
+    Generates a numeric function of t that corresponds to the polynomials
+    that passes through the points (t, y) using the barycentric formula
+    for each column n in y_arr(:, n)
+
+    Parameters
+    ----------
+    t_arr : iterable of floats
+        values of t
+    y_arr : iterable of floats
+        values of y
+
+    Returns
+    -------
+    polynomial : Function F(t)
+        polynomial numerical function
+
+    """
+    if len(y_arr.shape) == 1:
+        return bary_poly(t_arr, y_arr)
+
+    dim = y_arr.shape[-1]
+    pols = [bary_poly(t_arr, y_arr[:, ii]) for ii in range(dim)]
+    return combinefunctions(*pols)
 
 
 # --- Extreme points of LG scheme ---
@@ -467,7 +495,7 @@ def get_pol_u(scheme, uu):
     """
     N = len(uu)
     taus = coll_points(N, scheme)
-    pol_u = bary_poly(taus, uu)
+    pol_u = bary_poly_2d(taus, uu)
     return pol_u
 
 
@@ -512,17 +540,18 @@ def get_pol_x(scheme, qq, vv, t0, t1):
        polynomial interpolation of q''(tau)
 
     """
-    N = len(qq)
-    tau_x = base_points(N, scheme)
+    qq = array(qq)
+    N = qq.shape[0]
+    tau_x = array(base_points(N, scheme), dtype="float")
     qq_d = 2 / (t1 - t0) * matrix_D_bary(N, scheme) @ qq
     vv_d = 2 / (t1 - t0) * matrix_D_bary(N, scheme) @ vv
     qq_d_d = 2 / (t1 - t0) * matrix_D_bary(N, scheme) @ qq_d
 
-    pol_q = bary_poly(tau_x, qq)
-    pol_v = bary_poly(tau_x, vv)
-    pol_q_d = bary_poly(tau_x, qq_d)
-    pol_v_d = bary_poly(tau_x, vv_d)
-    pol_q_d_d = bary_poly(tau_x, qq_d_d)
+    pol_q = bary_poly_2d(tau_x, qq)
+    pol_v = bary_poly_2d(tau_x, vv)
+    pol_q_d = bary_poly_2d(tau_x, qq_d)
+    pol_v_d = bary_poly_2d(tau_x, vv_d)
+    pol_q_d_d = bary_poly_2d(tau_x, qq_d_d)
     return pol_q, pol_v, pol_q_d, pol_v_d, pol_q_d_d
 
 
@@ -649,6 +678,20 @@ def get_hermite_x(qq, vv, aa, tau_x, t0, t1):
     return her_q, her_v, her_q_d, her_v_d, her_q_d_d
 
 
+def try_array_f(function):
+    def try_f(q, v, u, params):
+        try:
+            f_out = function(q, v, u, params)
+        except:
+            f_out = []
+            for ii in range(q.shape[0]):
+                f_out.append(function(q[ii], v[ii], u[ii], params))
+            f_out = array(f_out)
+        return f_out
+
+    return try_f
+
+
 def dynamic_error_pseudospectral(
     qq,
     vv,
@@ -660,6 +703,7 @@ def dynamic_error_pseudospectral(
     x_interp="pol",
     g_func=lambda q, v, u, p: u,
     params=[],
+    n_interp=5000,
 ):
     """
     Generates arrays of equispaced points with values of dynamic error.
@@ -711,9 +755,11 @@ def dynamic_error_pseudospectral(
             "Hermite": Hermite's 3d order spline interpolation
     g_func : Function of (q, v, u, params)
         A function of a dynamic sistem, so that
-            v' = g(q, v, u, params)
+            q'' = g(q, q', u, params)
     params : list
         Physical problem parameters to be passed to F
+    n_interp : int, default 5000
+        number of interpolation points
 
     Raises
     ------
@@ -733,11 +779,15 @@ def dynamic_error_pseudospectral(
     from scipy.interpolate import CubicHermiteSpline as hermite
     from numpy import interp, gradient, zeros_like
 
-    N = len(qq)
     scheme_opts = ["LG", "LG_inv", "LGR", "LGR_inv", "LGL", "D2", "LG2", "LGLm"]
     if scheme not in scheme_opts:
         NameError(f"Invalid scheme.\n valid options are {scheme_opts}")
-    tau_arr = linspace(-1, 1, 1000)
+
+    N = len(qq)
+    tau_arr = linspace(-1, 1, n_interp)
+
+    g_func = try_array_f(g_func)
+
     if u_interp == "pol":
         pol_u = get_pol_u(scheme, uu)
         u_arr = pol_u(tau_arr)
@@ -766,7 +816,7 @@ def dynamic_error_pseudospectral(
         q_arr = interp(tau_arr, tau_x, qq)
         v_arr = interp(tau_arr, tau_x, vv)
         coll_p = t0 + (1 + array(tau_x, dtype="float64")) * (t1 - t0) / 2
-        t_arr_lin = linspace(t0, t1, 1000)
+        t_arr_lin = linspace(t0, t1, n_interp)
         q_arr_d = find_der_polyline(t_arr_lin, coll_p, qq)
         v_arr_d = find_der_polyline(t_arr_lin, coll_p, vv)
         q_arr_d_d = zeros_like(q_arr)
@@ -776,7 +826,7 @@ def dynamic_error_pseudospectral(
         her_q, her_v, her_q_d, her_v_d, her_q_d_d = get_hermite_x(
             qq, vv, aa, tau_x, t0, t1
         )
-        t_arr_lin = linspace(t0, t1, 1000)
+        t_arr_lin = linspace(t0, t1, n_interp)
         q_arr = her_q(t_arr_lin)
         v_arr = her_v(t_arr_lin)
         q_arr_d = her_q_d(t_arr_lin)

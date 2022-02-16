@@ -111,9 +111,23 @@ def rhs_to_casadi_function(RHS, q_vars, u_vars=None, verbose=False, mode="x"):
     x_args = q_args + v_args
 
     if mode == "x":
-        funcs = v_args + RHS
+        if len(q_args) == len(RHS):
+            funcs = v_args + RHS
+        elif len(RHS) == len(x_args):
+            funcs = RHS
+        else:
+            raise ValueError(
+                f"Unrecognized RHS shape, detected elements = {len(RHS)}, expected {len(q_args)} or {len(x_args)}"
+            )
     elif mode == "q":
-        funcs = RHS
+        if len(q_args) == len(RHS):
+            funcs = RHS
+        elif len(RHS) == len(x_args):
+            funcs = RHS[len(RHS) // 2 :]
+        else:
+            raise ValueError(
+                f"Unrecognized RHS shape, detected elements = {len(RHS)}, expected {len(q_args)} or {len(x_args)}"
+            )
     else:
         raise ValueError(f'Unexpected mode {mode}, valid values are "x" and "q"')
 
