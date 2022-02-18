@@ -227,7 +227,7 @@ def _v_sum(t_arr, i):
     return 1.0 / v_i
 
 
-@lru_cache
+@lru_cache(maxsize=None)
 def v_coef(N, i, scheme, precission=20):
     """
     Generates the coefficient V for barycentric coordinates
