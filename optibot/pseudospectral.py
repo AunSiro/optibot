@@ -8,8 +8,9 @@ Created on Thu Nov 11 12:11:43 2021
 
 from sympy import legendre_poly, symbols, expand, zeros, lambdify
 from functools import lru_cache
-from numpy import array, piecewise, linspace
+from numpy import array, piecewise, linspace, expand_dims
 from .numpy import combinefunctions
+from .schemes import interp_2d
 
 
 # --- Generating Collocation Points ---
@@ -261,6 +262,40 @@ def v_coef(N, i, scheme, precission=20):
     return _v_sum(taus, i)
 
 
+@lru_cache(maxsize=None)
+def v_coef_coll(N, i, scheme, precission=20):
+    """
+    Generates the coefficient V for barycentric coordinates
+
+    Parameters
+    ----------
+    N : int
+        Number of base points
+    i : int
+        index of current point
+    scheme : str
+        Scheme name. Supported values are:
+            'LG'
+            'LG_inv'
+            'LGR'
+            'LGR_inv'
+            'LGL'
+            'LGLm'
+            'LG2'
+            'D2'
+    precission: int, default 20
+        number of decimal places of precission
+
+    Returns
+    -------
+    v_i : float
+        coefficient V.
+
+    """
+    taus = coll_points(N, scheme, precission)
+    return _v_sum(taus, i)
+
+
 @lru_cache
 def matrix_D_bary(N, scheme, precission=20):
     """
@@ -372,14 +407,90 @@ def bary_poly_2d(t_arr, y_arr):
 # --- Extreme points of LG scheme ---
 
 
-@lru_cache
-def LG_end_p_fun(N, precission=20):
-    coefs = symbols(f"c_0:{N}")
-    taus = base_points(N, "LG", precission)
-    x = symbols("x")
-    pol_lag = lagrangePolynomial(taus, coefs)
-    res = pol_lag.subs(x, 1)
-    return lambdify(coefs, res)
+def get_bary_extreme_f(scheme, N, mode="u", point="start"):
+    """
+    Create a function that calculates the value of a polynomial at 
+    an extreme point when given the value at construction points.
+
+    Parameters
+    ----------
+    scheme : str
+        Scheme name. Supported values are:
+            'LG'
+            'LG_inv'
+            'LGR'
+            'LGR_inv'
+            'LGL'
+            'LGLm'
+            'LG2'
+            'D2'
+    N : int
+        Number of points that construct the polynomial
+    mode : {'u', 'x'} 
+        u polynomials are constructed on collocation points, while x polynomials
+        are constructed on base points
+    point : {'start', 'end'}
+        which point is to be calculated
+
+    Returns
+    -------
+    Function(values)
+        A function that will calculate the value at the asked point when the 
+        value of the construction points are [values]
+
+    """
+
+    if point == "start":
+        if mode == "u":
+            if scheme in ["LGL", "D2", "LGR"]:
+                return lambda coefs: coefs[0]
+        elif mode == "x":
+            if scheme in ["LGL", "D2", "LGR", "LGR_inv", "LG", "LG2", "LGLm"]:
+                return lambda coefs: coefs[0]
+        else:
+            raise ValueError(f"Invalid mode {mode}, accepted are u and x")
+    elif point == "end":
+        if mode == "u":
+            if scheme in ["LGL", "D2", "LGR_inv"]:
+                return lambda coefs: coefs[-1]
+        elif mode == "x":
+            if scheme in ["LGL", "D2", "LGR", "LGR_inv", "LG_inv", "LG2", "LGLm"]:
+                return lambda coefs: coefs[-1]
+        else:
+            raise ValueError(f"Invalid mode {mode}, accepted are u and x")
+    else:
+        raise ValueError(f"Invalid point {point}, accepted are start and end")
+
+    p = 1 if point == "end" else -1
+    v_gen = v_coef_coll if mode == "u" else v_coef
+
+    v_arr = [v_gen(N, ii, scheme) for ii in range(N)]
+    t_arr = coll_points(N, scheme)
+    sup = []
+    for i in range(N):
+        sup.append(float(v_arr[i] / (p - t_arr[i])))
+    inf = 0
+    for i in range(N):
+        inf += v_arr[i] / (p - t_arr[i])
+    inf = float(inf)
+
+    def extpoint(coefs):
+        numsup = 0
+        for ii in range(N):
+            numsup += coefs[ii] * sup[ii]
+        return numsup / inf
+
+    return extpoint
+
+
+# @lru_cache
+# def LG_end_p_fun(N, precission=20):
+#     coefs = symbols(f"c_0:{N}")
+#     taus = base_points(N, "LG", precission)
+#     x = symbols("x")
+#     pol_lag = lagrangePolynomial(taus, coefs)
+#     res = pol_lag.subs(x, 1)
+#     return lambdify(coefs, res)
 
 
 @lru_cache
@@ -392,14 +503,14 @@ def LG_diff_end_p_fun(N, precission=20):
     return lambdify(coefs, res)
 
 
-@lru_cache
-def LG_inv_start_p_fun(N, precission=20):
-    coefs = symbols(f"c_0:{N}")
-    taus = base_points(N, "LG_inv", precission)
-    x = symbols("x")
-    pol_lag = lagrangePolynomial(taus, coefs)
-    res = pol_lag.subs(x, 0)
-    return lambdify(coefs, res)
+# @lru_cache
+# def LG_inv_start_p_fun(N, precission=20):
+#     coefs = symbols(f"c_0:{N}")
+#     taus = base_points(N, "LG_inv", precission)
+#     x = symbols("x")
+#     pol_lag = lagrangePolynomial(taus, coefs)
+#     res = pol_lag.subs(x, 0)
+#     return lambdify(coefs, res)
 
 
 @lru_cache
@@ -417,14 +528,13 @@ def LG_end_p_fun_cas(N, precission=20):
     from casadi import SX, vertsplit, Function
     from .casadi import sympy2casadi
 
-    coefs = symbols(f"c_0:{N}")
-    taus = base_points(N, "LG", precission)
-    pol_lag = lagrangePolynomial(taus, coefs)
-    x = symbols("x")
-    res = pol_lag.subs(x, 1)
     x_cas = SX.sym("x", N)
-    res_cas = sympy2casadi(res, coefs, vertsplit(x_cas))
-    return Function("dynamics_x", [x_cas], [res_cas])
+    x_sympy = symbols(f"c0:{N}")
+    fun = get_bary_extreme_f("LG", N, mode="x", point="end")
+    sympy_expr = fun(x_sympy)
+    cas_expr = sympy2casadi(sympy_expr, x_sympy, vertsplit(x_cas))
+    cas_f = Function("dynamics_q", [x_cas,], [cas_expr,])
+    return cas_f
 
 
 @lru_cache
@@ -442,19 +552,19 @@ def LG_diff_end_p_fun_cas(N, precission=20):
     return Function("dynamics_x", [x_cas], [res_cas])
 
 
-@lru_cache
-def LG_inv_start_p_fun_cas(N, precission=20):
-    from casadi import SX, vertsplit, Function
-    from .casadi import sympy2casadi
+# @lru_cache
+# def LG_inv_start_p_fun_cas(N, precission=20):
+#     from casadi import SX, vertsplit, Function
+#     from .casadi import sympy2casadi
 
-    coefs = symbols(f"c_0:{N}")
-    taus = base_points(N, "LG_inv", precission)
-    pol_lag = lagrangePolynomial(taus, coefs)
-    x = symbols("x")
-    res = pol_lag.subs(x, 0)
-    x_cas = SX.sym("x", N)
-    res_cas = sympy2casadi(res, coefs, vertsplit(x_cas))
-    return Function("dynamics_x", [x_cas], [res_cas])
+#     coefs = symbols(f"c_0:{N}")
+#     taus = base_points(N, "LG_inv", precission)
+#     pol_lag = lagrangePolynomial(taus, coefs)
+#     x = symbols("x")
+#     res = pol_lag.subs(x, 0)
+#     x_cas = SX.sym("x", N)
+#     res_cas = sympy2casadi(res, coefs, vertsplit(x_cas))
+#     return Function("dynamics_x", [x_cas], [res_cas])
 
 
 @lru_cache
@@ -484,7 +594,11 @@ def find_der_polyline(x_n, xp, yp):
 
     n = searchsorted(xp, x_n)
     n = where(n - 1 > 0, n - 1, 0)
-    deriv_arr = (yp[1:] - yp[:-1]) / (xp[1:] - xp[:-1])
+    dim = len(yp.shape)
+    if dim == 1:
+        deriv_arr = (yp[1:] - yp[:-1]) / (xp[1:] - xp[:-1])
+    elif dim == 2:
+        deriv_arr = (yp[1:] - yp[:-1]) / expand_dims(xp[1:] - xp[:-1], 1)
     return deriv_arr[n]
 
 
@@ -594,16 +708,16 @@ def extend_x_arrays(qq, vv, scheme):
     N = len(qq)
     if scheme == "LG":
         tau_x = base_points(N, scheme) + [1]
-        endp_f = LG_end_p_fun(N)
-        qq_1 = float(endp_f(*qq))
-        vv_1 = float(endp_f(*vv))
+        endp_f = get_bary_extreme_f("LG", N, mode="x", point="end")
+        qq_1 = array(endp_f(qq), dtype="float")
+        vv_1 = array(endp_f(vv), dtype="float")
         new_qq = array(list(qq) + [qq_1,], dtype="float64")
         new_vv = array(list(vv) + [vv_1,], dtype="float64")
     elif scheme == "LG_inv":
         tau_x = [-1] + base_points(N, scheme)
-        startp_f = LG_inv_start_p_fun(N)
-        qq_1 = float(startp_f(*qq))
-        vv_1 = float(startp_f(*vv))
+        startp_f = get_bary_extreme_f("LG_inv", N, mode="x", point="start")
+        qq_1 = array(startp_f(qq), dtype="float")
+        vv_1 = array(startp_f(vv), dtype="float")
         new_qq = array(list(qq) + [qq_1,], dtype="float64")
         new_vv = array(list(vv) + [vv_1,], dtype="float64")
     else:
@@ -647,18 +761,27 @@ def extend_u_array(uu, scheme, N):
 
     """
     tau_u = base_points(N, scheme)
+    n_col = uu.shape[0]
+    uu_0 = get_bary_extreme_f(scheme, n_col, mode="u", point="start")(uu)
+    uu_e = get_bary_extreme_f(scheme, n_col, mode="u", point="end")(uu)
     if scheme == "LG2":
-        new_uu = array([uu[0]] + list(uu) + [uu[-1]], dtype="float64")
+        new_uu = array([uu_0] + list(uu) + [uu_e], dtype="float64")
     elif scheme == "LG":
         tau_u = tau_u + [1]
-        new_uu = array([uu[0]] + list(uu) + [uu[-1]], dtype="float64")
+        new_uu = array([uu_0] + list(uu) + [uu_e], dtype="float64")
     elif scheme == "LG_inv":
         tau_u = [-1] + tau_u
-        new_uu = array([uu[0]] + list(uu) + [uu[-1]], dtype="float64")
+        new_uu = array([uu_0] + list(uu) + [uu_e], dtype="float64")
     elif scheme == "LGLm":
-        new_uu = array([uu[0]] + list(uu) + [uu[-1]], dtype="float64")
-    else:
+        new_uu = array([uu_0] + list(uu) + [uu_e], dtype="float64")
+    elif scheme == "LGR":
+        new_uu = array(list(uu) + [uu_e], dtype="float64")
+    elif scheme == "LGR_inv":
+        new_uu = array([uu_0] + list(uu), dtype="float64")
+    elif scheme in ["LGL", "D2"]:
         new_uu = uu
+    else:
+        raise ValueError("Unrecognized scheme")
     return tau_u, new_uu
 
 
@@ -793,7 +916,14 @@ def dynamic_error_pseudospectral(
         u_arr = pol_u(tau_arr)
     elif u_interp == "lin":
         tau_u, uu = extend_u_array(uu, scheme, N)
-        u_arr = interp(tau_arr, tau_u, uu)
+        if len(uu.shape) == 1:
+            u_arr = interp(tau_arr, tau_u, uu)
+        elif len(uu.shape) == 2:
+            u_arr = interp_2d(tau_arr, tau_u, uu)
+        else:
+            raise ValueError(
+                f"U has {len(uu.shape)} dimensions, values accepted are 1 and 2"
+            )
     elif u_interp == "smooth":
         tau_u, uu = extend_u_array(uu, scheme, N)
         uu_dot = gradient(uu, tau_u)
@@ -813,8 +943,17 @@ def dynamic_error_pseudospectral(
         q_arr_d_d = pol_q_d_d(tau_arr)
     elif x_interp == "lin":
         tau_x, qq, vv = extend_x_arrays(qq, vv, scheme)
-        q_arr = interp(tau_arr, tau_x, qq)
-        v_arr = interp(tau_arr, tau_x, vv)
+        if len(qq.shape) == 1:
+            q_arr = interp(tau_arr, tau_x, qq)
+            v_arr = interp(tau_arr, tau_x, vv)
+        elif len(qq.shape) == 2:
+            q_arr = interp_2d(tau_arr, tau_x, qq)
+            v_arr = interp_2d(tau_arr, tau_x, vv)
+        else:
+            raise ValueError(
+                f"q has {len(qq.shape)} dimensions, values accepted are 1 and 2"
+            )
+
         coll_p = t0 + (1 + array(tau_x, dtype="float64")) * (t1 - t0) / 2
         t_arr_lin = linspace(t0, t1, n_interp)
         q_arr_d = find_der_polyline(t_arr_lin, coll_p, qq)
