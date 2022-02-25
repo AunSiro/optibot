@@ -8,7 +8,7 @@ Created on Thu Nov 11 12:11:43 2021
 
 from sympy import legendre_poly, symbols, expand, zeros, lambdify
 from functools import lru_cache
-from numpy import array, piecewise, linspace, expand_dims
+from numpy import array, piecewise, linspace, expand_dims, squeeze
 from .numpy import combinefunctions
 from .schemes import interp_2d
 
@@ -808,7 +808,9 @@ def try_array_f(function):
         except:
             f_out = []
             for ii in range(q.shape[0]):
-                f_out.append(function(q[ii], v[ii], u[ii], params))
+                _out = function(q[ii], v[ii], u[ii], params)
+                _out = squeeze(_out)
+                f_out.append(_out)
             f_out = array(f_out)
         return f_out
 

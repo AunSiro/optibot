@@ -32,7 +32,7 @@ from numpy import (
     sqrt,
     trapz,
 )
-from numpy.linalg import inv
+from numpy.linalg import inv, solve
 from scipy.interpolate import CubicHermiteSpline as hermite
 from copy import copy
 import warnings
@@ -204,9 +204,11 @@ def generate_G(M, F):
     """
 
     def G(x, u, params):
-        dim = x.shape[1] // 2
-        m_inv = inv(M(x, params))
-        return (m_inv @ F(x, u, params)).T[:dim]
+        dim = x.shape[-1] // 2
+        mm = M(x, params)
+        ff = F(x, u, params)
+        res = solve(mm, ff)
+        return res[:dim]
 
     return G
 
