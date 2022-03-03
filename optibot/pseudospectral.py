@@ -817,6 +817,165 @@ def try_array_f(function):
     return try_f
 
 
+def interpolations_pseudospectral(
+    qq,
+    vv,
+    uu,
+    scheme,
+    t0,
+    t1,
+    u_interp="pol",
+    x_interp="pol",
+    g_func=lambda q, v, u, p: u,
+    params=[],
+    n_interp=5000,
+):
+    """
+    Generates arrays of equispaced points with values of interpolations.
+    
+    x(t) = [q(t), v(t)], and the physics equation states that x' = F(x, u),
+    which is equivalent to [q', v'] = [v , G(q, v, u)] 
+    
+    'x_interp' and 'u_interp' define the way in which we interpolate the values
+    of q, v and u between the given points.
+
+    Parameters
+    ----------
+    qq : Numpy Array, shape = (W, N)
+        Values known of q(t)
+    vv : Numpy Array, shape = (W, N)
+        Values known of v(t)
+    uu : Numpy Array, shape = (Y, [Z])
+        Values known of x(t)
+    scheme : str
+        Pseudospectral cheme used in the optimization.
+        Acceptable values are:
+            'LG'
+            'LG_inv'
+            'LGR'
+            'LGR_inv'
+            'LGL'
+            'LGLm'
+            'LG2'
+            'D2'
+    t0 : float
+        starting time of interval of analysis
+    t1 : float
+        ending time of interval of analysis
+    u_interp :  string, optional
+        Model of the interpolation that must be used. The default is "pol".
+        Acceptable values are:
+            "pol": corresponding polynomial interpolation
+            "lin": lineal interpolation
+            "smooth": 3d order spline interpolation
+    x_interp : string, optional
+        Model of the interpolation that must be used. The default is "pol".
+        Acceptable values are:
+            "pol": corresponding polynomial interpolation
+            "lin": lineal interpolation
+            "Hermite": Hermite's 3d order spline interpolation
+    g_func : Function of (q, v, u, params)
+        A function of a dynamic sistem, so that
+            q'' = g(q, q', u, params)
+    params : list
+        Physical problem parameters to be passed to F
+    n_interp : int, default 5000
+        number of interpolation points
+
+    Raises
+    ------
+    NameError
+        When an unsupported value for scheme, x_interp or u_interp is used.
+
+    Returns
+    -------
+    q_arr, q_arr_d, v_arr, v_arr_d, q_arr_d_d, u_arr : Numpy array, shape = (n_interp, N)
+        equispaced values of dynamic error q'(t) - v(t).
+    err_v : Numpy array, shape = (n_interp, N)
+        equispaced values of dynamic error v'(t) - G(q(t), v(t), u(t)).
+    err_2 : Numpy array, shape = (n_interp, N)
+        equispaced values of dynamic error q''(t) - G(q(t), q'(t), u(t)).
+
+    """
+    from scipy.interpolate import CubicHermiteSpline as hermite
+    from numpy import interp, gradient, zeros_like
+
+    scheme_opts = ["LG", "LG_inv", "LGR", "LGR_inv", "LGL", "D2", "LG2", "LGLm"]
+    if scheme not in scheme_opts:
+        NameError(f"Invalid scheme.\n valid options are {scheme_opts}")
+
+    N = len(qq)
+    tau_arr = linspace(-1, 1, n_interp)
+
+    g_func = try_array_f(g_func)
+
+    if u_interp == "pol":
+        pol_u = get_pol_u(scheme, uu)
+        u_arr = pol_u(tau_arr)
+    elif u_interp == "lin":
+        tau_u, uu = extend_u_array(uu, scheme, N)
+        if len(uu.shape) == 1:
+            u_arr = interp(tau_arr, tau_u, uu)
+        elif len(uu.shape) == 2:
+            u_arr = interp_2d(tau_arr, tau_u, uu)
+        else:
+            raise ValueError(
+                f"U has {len(uu.shape)} dimensions, values accepted are 1 and 2"
+            )
+    elif u_interp == "smooth":
+        tau_u, uu = extend_u_array(uu, scheme, N)
+        uu_dot = gradient(uu, tau_u)
+        u_arr = hermite(tau_u, uu, uu_dot)(tau_arr)
+    else:
+        raise NameError(
+            'Invalid interpolation method for u.\n valid options are "pol", "lin", "smooth"'
+        )
+
+    if x_interp == "pol":
+        tau_x = base_points(N, scheme)
+        pol_q, pol_v, pol_q_d, pol_v_d, pol_q_d_d = get_pol_x(scheme, qq, vv, t0, t1)
+        q_arr = pol_q(tau_arr)
+        v_arr = pol_v(tau_arr)
+        q_arr_d = pol_q_d(tau_arr)
+        v_arr_d = pol_v_d(tau_arr)
+        q_arr_d_d = pol_q_d_d(tau_arr)
+    elif x_interp == "lin":
+        tau_x, qq, vv = extend_x_arrays(qq, vv, scheme)
+        if len(qq.shape) == 1:
+            q_arr = interp(tau_arr, tau_x, qq)
+            v_arr = interp(tau_arr, tau_x, vv)
+        elif len(qq.shape) == 2:
+            q_arr = interp_2d(tau_arr, tau_x, qq)
+            v_arr = interp_2d(tau_arr, tau_x, vv)
+        else:
+            raise ValueError(
+                f"q has {len(qq.shape)} dimensions, values accepted are 1 and 2"
+            )
+
+        coll_p = t0 + (1 + array(tau_x, dtype="float64")) * (t1 - t0) / 2
+        t_arr_lin = linspace(t0, t1, n_interp)
+        q_arr_d = find_der_polyline(t_arr_lin, coll_p, qq)
+        v_arr_d = find_der_polyline(t_arr_lin, coll_p, vv)
+        q_arr_d_d = zeros_like(q_arr)
+    elif x_interp == "Hermite":
+        tau_x, qq, vv = extend_x_arrays(qq, vv, scheme)
+        aa = g_func(qq, vv, uu, params)
+        her_q, her_v, her_q_d, her_v_d, her_q_d_d = get_hermite_x(
+            qq, vv, aa, tau_x, t0, t1
+        )
+        t_arr_lin = linspace(t0, t1, n_interp)
+        q_arr = her_q(t_arr_lin)
+        v_arr = her_v(t_arr_lin)
+        q_arr_d = her_q_d(t_arr_lin)
+        v_arr_d = her_v_d(t_arr_lin)
+        q_arr_d_d = her_q_d_d(t_arr_lin)
+    else:
+        raise NameError(
+            'Invalid interpolation method for x.\n valid options are "pol", "lin", "Hermite"'
+        )
+    return q_arr, q_arr_d, v_arr, v_arr_d, q_arr_d_d, u_arr
+
+
 def dynamic_error_pseudospectral(
     qq,
     vv,
@@ -901,83 +1060,9 @@ def dynamic_error_pseudospectral(
         equispaced values of dynamic error q''(t) - G(q(t), q'(t), u(t)).
 
     """
-    from scipy.interpolate import CubicHermiteSpline as hermite
-    from numpy import interp, gradient, zeros_like
-
-    scheme_opts = ["LG", "LG_inv", "LGR", "LGR_inv", "LGL", "D2", "LG2", "LGLm"]
-    if scheme not in scheme_opts:
-        NameError(f"Invalid scheme.\n valid options are {scheme_opts}")
-
-    N = len(qq)
-    tau_arr = linspace(-1, 1, n_interp)
-
-    g_func = try_array_f(g_func)
-
-    if u_interp == "pol":
-        pol_u = get_pol_u(scheme, uu)
-        u_arr = pol_u(tau_arr)
-    elif u_interp == "lin":
-        tau_u, uu = extend_u_array(uu, scheme, N)
-        if len(uu.shape) == 1:
-            u_arr = interp(tau_arr, tau_u, uu)
-        elif len(uu.shape) == 2:
-            u_arr = interp_2d(tau_arr, tau_u, uu)
-        else:
-            raise ValueError(
-                f"U has {len(uu.shape)} dimensions, values accepted are 1 and 2"
-            )
-    elif u_interp == "smooth":
-        tau_u, uu = extend_u_array(uu, scheme, N)
-        uu_dot = gradient(uu, tau_u)
-        u_arr = hermite(tau_u, uu, uu_dot)(tau_arr)
-    else:
-        raise NameError(
-            'Invalid interpolation method for u.\n valid options are "pol", "lin", "smooth"'
-        )
-
-    if x_interp == "pol":
-        tau_x = base_points(N, scheme)
-        pol_q, pol_v, pol_q_d, pol_v_d, pol_q_d_d = get_pol_x(scheme, qq, vv, t0, t1)
-        q_arr = pol_q(tau_arr)
-        v_arr = pol_v(tau_arr)
-        q_arr_d = pol_q_d(tau_arr)
-        v_arr_d = pol_v_d(tau_arr)
-        q_arr_d_d = pol_q_d_d(tau_arr)
-    elif x_interp == "lin":
-        tau_x, qq, vv = extend_x_arrays(qq, vv, scheme)
-        if len(qq.shape) == 1:
-            q_arr = interp(tau_arr, tau_x, qq)
-            v_arr = interp(tau_arr, tau_x, vv)
-        elif len(qq.shape) == 2:
-            q_arr = interp_2d(tau_arr, tau_x, qq)
-            v_arr = interp_2d(tau_arr, tau_x, vv)
-        else:
-            raise ValueError(
-                f"q has {len(qq.shape)} dimensions, values accepted are 1 and 2"
-            )
-
-        coll_p = t0 + (1 + array(tau_x, dtype="float64")) * (t1 - t0) / 2
-        t_arr_lin = linspace(t0, t1, n_interp)
-        q_arr_d = find_der_polyline(t_arr_lin, coll_p, qq)
-        v_arr_d = find_der_polyline(t_arr_lin, coll_p, vv)
-        q_arr_d_d = zeros_like(q_arr)
-    elif x_interp == "Hermite":
-        tau_x, qq, vv = extend_x_arrays(qq, vv, scheme)
-        aa = g_func(qq, vv, uu, params)
-        her_q, her_v, her_q_d, her_v_d, her_q_d_d = get_hermite_x(
-            qq, vv, aa, tau_x, t0, t1
-        )
-        t_arr_lin = linspace(t0, t1, n_interp)
-        q_arr = her_q(t_arr_lin)
-        v_arr = her_v(t_arr_lin)
-        q_arr_d = her_q_d(t_arr_lin)
-        v_arr_d = her_v_d(t_arr_lin)
-        q_arr_d_d = her_q_d_d(t_arr_lin)
-    else:
-        raise NameError(
-            'Invalid interpolation method for x.\n valid options are "pol", "lin", "Hermite"'
-        )
-
+    q_arr, q_arr_d, v_arr, v_arr_d, q_arr_d_d, u_arr = interpolations_pseudospectral(
+        qq, vv, uu, scheme, t0, t1, u_interp, x_interp, g_func, params, n_interp,
+    )
     err_q = q_arr_d - v_arr
     err_v = v_arr_d - g_func(q_arr, v_arr, u_arr, params)
     err_2 = q_arr_d_d - g_func(q_arr, q_arr_d, u_arr, params)

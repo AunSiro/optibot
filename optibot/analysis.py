@@ -177,7 +177,7 @@ def dynamic_error(
     return dyn_err_q, dyn_err_v, dyn_err_2_a, dyn_err_2_b
 
 
-def generate_G(M, F):
+def generate_G(M, F_impl):
     """
     Generate a function G from M and F, so that from 
 
@@ -206,7 +206,7 @@ def generate_G(M, F):
     def G(x, u, params):
         dim = x.shape[-1] // 2
         mm = M(x, params)
-        ff = F(x, u, params)
+        ff = F_impl(x, u, params)
         res = solve(mm, ff)
         return res[:dim]
 
@@ -218,7 +218,7 @@ def dynamic_error_implicit(
     u_arr,
     t_end,
     params,
-    F,
+    F_impl,
     M,
     X_dot=None,
     scheme="hs_scipy",
@@ -333,7 +333,7 @@ def dynamic_error_implicit(
     dim = x_arr.shape[1] // 2
     h = t_end / (N - 1)
 
-    G = generate_G(M, F)
+    G = generate_G(M, F_impl)
 
     if X_dot is None:
         X_dot = zeros_like(x_arr)

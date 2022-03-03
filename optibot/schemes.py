@@ -129,8 +129,6 @@ def expand_F(F, mode="numpy"):
     """
     old_docstring = str(F.__doc__)
     old_f_name = str(F.__name__)
-    if not mode in ["numpy", "casadi"]:
-        raise NameError(f"Unrecognized mode: {mode}")
     if mode == "numpy":
 
         def new_F(x, u, params):
@@ -189,6 +187,9 @@ def expand_F(F, mode="numpy"):
                 # dimensionally consistend.
             return res
 
+    else:
+        raise NameError(f"Unrecognized mode: {mode}")
+
     new_docstring = f"""
     This is an expanded version of function {old_f_name}.
     This expanded function is designed to describe a dinamic sistem so that:
@@ -204,9 +205,52 @@ def expand_F(F, mode="numpy"):
     return new_F
 
 
-def reduce_F(F):
+def expand_G(G, mode="numpy"):
     """
-    Extract a function G(q, v, u, params) such that v' = G(q, v, u, params)
+    Expands a function G(q, q', u, params) that returns accelerations,
+    so that the new function return accelerations and velocities.
+
+    Parameters
+    ----------
+    G : function of (q, v, u, params)
+        A function of a dynamic sistem, so that
+            v' = G(q, v, u, params),
+            q' = v
+    mode : str: 'numpy' o 'casadi', optional
+        Wether the function is a numpy or a casadi function.
+        The default is "numpy".
+
+    Returns
+    -------
+    Function of (x, u, params)
+        A function of a dynamic sistem, so that
+            x' = F(x, u, params)
+
+    """
+    old_docstring = str(G.__doc__)
+    old_f_name = str(G.__name__)
+
+    def F(x, u, params):
+        dim = x.shape[-1]
+        if len(x.shape) == 1:
+            q = x[:dim]
+            v = x[dim:]
+        elif len(x.shape) == 2:
+            q = x[:, :dim]
+            v = x[:, dim:]
+        else:
+            raise ValueError("Unsupported array shape")
+        return G(q, v, u, params)
+
+    F.__name__ = old_f_name
+    F.__doc__ = old_docstring
+    new_F = expand_F(F, mode)
+    return new_F
+
+
+def reduce_F(F, mode="numpy"):
+    """
+    Extract a function G(q, q', u, params) such that q'' = G(q, q', u, params)
     from a function F(x, u, params) such that x' = F(x, u, params)
 
     Parameters
@@ -217,24 +261,38 @@ def reduce_F(F):
     Returns
     -------
     G : Function
-        function G(q, v, u, params) such that v' = G(q, v, u, params)
+        function G(q, q', u, params) such that  q'' = G(q, q', u, params)
 
     """
     old_docstring = str(F.__doc__)
     old_f_name = str(F.__name__)
+    if mode == "numpy":
 
-    def G(q, v, u, params):
-        dim = q.shape[-1]
-        axnum = len(q.shape) - 1
-        x = concatenate((q, v), axnum)
-        res = F(x, u, params)
-        aa = res[:, dim:]
-        return aa
+        def G(q, v, u, params):
+            dim = q.shape[-1]
+            axnum = len(q.shape) - 1
+            x = concatenate((q, v), axnum)
+            res = F(x, u, params)
+            aa = res[:, dim:]
+            return aa
+
+    elif mode == "casadi":
+        from casadi import horzcat
+
+        def G(q, v, u, params):
+            dim = q.shape[-1]
+            x = horzcat(q, v)
+            res = F(x, u, params)
+            aa = res[:, dim:]
+            return aa
+
+    else:
+        raise NameError(f"Unrecognized mode: {mode}")
 
     new_docstring = f"""
     This is an reduced version of function {old_f_name}.
     This reduced function is designed to describe a dinamic sistem so that:
-        v' = F(q, v, u, params)
+        q'' = G(q, q', u, params)
     While the old function was:
         x' = F(x, u, params)
     Old function documentation:
