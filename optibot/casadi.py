@@ -71,7 +71,9 @@ def unpack(arr):
     return res
 
 
-def rhs_to_casadi_function(RHS, q_vars, u_vars=None, verbose=False, mode="x"):
+def rhs_to_casadi_function(
+    RHS, q_vars, u_vars=None, verbose=False, mode="x", silent=False
+):
     """
     Converts an array of symbolic expressions RHS(x, u, params) to a casadi 
     function.
@@ -89,21 +91,25 @@ def rhs_to_casadi_function(RHS, q_vars, u_vars=None, verbose=False, mode="x"):
         Symbols that will be sarched and separated. 
         If None, symbols of the form u_ii where ii is a number will be 
         assumed
-    verbose : Bool, optional
+    verbose : Bool, optional, default = False
         wether to print aditional information of expected and found variables
         in the given expression
     mode : str
         if mode == 'x', a function F(x, u, params) = [x'] will be returned
-        if mode == 'q', a function F(q, v, u, params) = [a] will be returned
+        if mode == 'q', a function G(q, v, u, params) = [a] will be returned
+    silent: Bool, optional, default False
+        if True, nothing will be printed. If verbose = True, silent will be ignored.
 
     Returns
     -------
-    TYPE
-        DESCRIPTION.
+    Casadi Function
+        Either F(x, u, params) or G(q, v, u, params)
 
     """
     from .symbolic import find_arguments, standard_notation, diff_to_symb_expr
 
+    if verbose:
+        silent = False
     RHS = list(RHS)
     RHS = [standard_notation(diff_to_symb_expr(expr)) for expr in RHS]
     arguments = find_arguments(RHS, q_vars, u_vars, verbose=verbose)
@@ -140,7 +146,8 @@ def rhs_to_casadi_function(RHS, q_vars, u_vars=None, verbose=False, mode="x"):
         msg += f"\tv: {v_args}\n"
     msg += f"\tu: {u_args_found}\n"
     msg += f"\tparams: {params}\n"
-    print(msg)
+    if not silent:
+        print(msg)
     cas_x_args = cas.MX.sym("x", len(x_args))
     cas_q_args = cas.MX.sym("q", len(q_args))
     cas_v_args = cas.MX.sym("v", len(v_args))
@@ -166,7 +173,9 @@ def rhs_to_casadi_function(RHS, q_vars, u_vars=None, verbose=False, mode="x"):
     return cas.Function("F", f_arg_list, [cas_funcs,], f_arg_names, f_out_names,)
 
 
-def implicit_dynamic_x_to_casadi_function(D, x_vars, u_vars=None, verbose=False):
+def implicit_dynamic_x_to_casadi_function(
+    D, x_vars, u_vars=None, verbose=False, silent=False
+):
     """
     Converts an array D(x, x', u, lambdas, params) of symbolic expressions to a 
     Casadi function.
@@ -183,6 +192,11 @@ def implicit_dynamic_x_to_casadi_function(D, x_vars, u_vars=None, verbose=False)
         If int, they will be generated as 'x_i' for i in [0, x_vars]
     u_vars : list of Sympy dynamic symbols
         List of u symbols to look for. The default is None.
+    verbose : Bool, optional, default = False
+        wether to print aditional information of expected and found variables
+        in the given expression
+    silent: Bool, optional, default False
+        if True, nothing will be printed. If verbose = True, silent will be ignored.
 
     Returns
     -------
@@ -193,6 +207,8 @@ def implicit_dynamic_x_to_casadi_function(D, x_vars, u_vars=None, verbose=False)
     from .symbolic import find_arguments, standard_notation, diff_to_symb_expr
     from sympy.physics.mechanics import dynamicsymbols
 
+    if verbose:
+        silent = False
     D = list(D)
     D = [standard_notation(diff_to_symb_expr(expr)) for expr in D]
     if type(x_vars) == int:
@@ -211,7 +227,8 @@ def implicit_dynamic_x_to_casadi_function(D, x_vars, u_vars=None, verbose=False)
     msg += f"\tu: {u_args}\n"
     msg += f"\tlambdas: {lambda_args}\n"
     msg += f"\tparams: {params}\n"
-    print(msg)
+    if not silent:
+        print(msg)
     cas_x_args = cas.MX.sym("x", len(x_args))
     cas_x_dot_args = cas.MX.sym("x", len(x_dot_args))
     cas_u_args = cas.MX.sym("u", len(u_args))
@@ -236,7 +253,9 @@ def implicit_dynamic_x_to_casadi_function(D, x_vars, u_vars=None, verbose=False)
     )
 
 
-def implicit_dynamic_q_to_casadi_function(D, q_vars, u_vars=None, verbose=False):
+def implicit_dynamic_q_to_casadi_function(
+    D, q_vars, u_vars=None, verbose=False, silent=False
+):
     """
     Converts an array D(q, q', q'', u, lambdas, params) of symbolic expressions to a 
     Casadi function.
@@ -253,6 +272,11 @@ def implicit_dynamic_q_to_casadi_function(D, q_vars, u_vars=None, verbose=False)
         If int, they will be generated as 'q_i' for i in [0, q_vars]
     u_vars : list of Sympy dynamic symbols
         List of u symbols to look for. The default is None.
+    verbose : Bool, optional, default = False
+        wether to print aditional information of expected and found variables
+        in the given expression
+    silent: Bool, optional, default False
+        if True, nothing will be printed. If verbose = True, silent will be ignored.
 
     Returns
     -------
@@ -263,6 +287,8 @@ def implicit_dynamic_q_to_casadi_function(D, q_vars, u_vars=None, verbose=False)
     from .symbolic import find_arguments, standard_notation, diff_to_symb_expr
     from sympy.physics.mechanics import dynamicsymbols
 
+    if verbose:
+        silent = False
     D = list(D)
     D = [standard_notation(diff_to_symb_expr(expr)) for expr in D]
     if type(q_vars) == int:
@@ -283,7 +309,8 @@ def implicit_dynamic_q_to_casadi_function(D, q_vars, u_vars=None, verbose=False)
     msg += f"\tu: {u_args}\n"
     msg += f"\tlambda: {lambda_args}\n"
     msg += f"\tparams: {params}\n"
-    print(msg)
+    if not silent:
+        print(msg)
     cas_q_args = cas.MX.sym("q", len(q_args))
     cas_v_args = cas.MX.sym("v", len(v_args))
     cas_a_args = cas.MX.sym("a", len(a_args))
