@@ -6,8 +6,9 @@ Created on Thu Mar  3 18:03:53 2022
 @author: smorenom
 """
 
-from .casadi import rhs_to_casadi_function
+from .casadi import rhs_to_casadi_function, find_arguments
 import casadi as cas
+from numpy import array, linspace
 
 _implemented_equispaced_schemes = [
     "euler",
@@ -156,22 +157,196 @@ class _Opti_Problem:
 
 
 class _Pseudospectral:
-    pass
+    def opti_setup(
+        self, col_points, precission=20,
+    ):
+        from .pseudospectral import (
+            base_points,
+            coll_points,
+            matrix_D_bary,
+            LG_end_p_fun_cas,
+            LG_inv_diff_start_p_fun_cas,
+        )
+        from .casadi import sympy2casadi
+
+        scheme = self.scheme
+        t_start = self.t_start
+        t_end = self.t_end
+
+        opti = cas.Opti()
+        opts = {"ipopt.print_level": 0, "print_time": 0}
+        opti.solver("ipopt", opts)
+        self.opti = opti
+
+        opt_dict = {
+            "LGL": [col_points,],
+            "D2": [col_points,],
+            "LG2": [col_points + 2,],
+            "LGLm": [col_points + 2,],
+            "LG": [col_points + 1,],
+        }
+        N = opt_dict[scheme][0]
+
+        D_mat = sympy2casadi(matrix_D_bary(N, scheme, precission), [], [])
+        self.D_mat = D_mat
+
+        if scheme in ["LGL", "LG"]:
+            x_opti = opti.variable(N, 2 * self.n_q)
+            x_dot_opti = 2 / (t_end - t_start) * D_mat @ x_opti
+            q_opti = x_opti[:, : self.n_q]
+            v_opti = x_opti[:, self.n_q :]
+            a_opti = x_dot_opti[:, self.n_q :]
+
+        elif scheme in ["LG2", "D2", "LGLm"]:
+            q_opti = opti.variable(N, self.n_q)
+            v_opti = 2 / (t_end - t_start) * D_mat @ q_opti
+            a_opti = 2 / (t_end - t_start) * D_mat @ v_opti
+            x_opti = cas.horzcat(q_opti, v_opti)
+            x_dot_opti = cas.horzcat(v_opti, a_opti)
+        else:
+            raise NotImplementedError(f"scheme {scheme} not implemented in opti_setup.")
+
+        u_opti = opti.variable(col_points, self.n_u)
+        tau_arr = array(base_points(N, scheme, precission), dtype=float)
+        col_arr = array(coll_points(col_points, scheme, precission), dtype=float)
+        t_arr = ((t_end - t_start) * tau_arr + (t_start + t_end)) / 2
+        t_col_arr = ((t_end - t_start) * col_arr + (t_start + t_end)) / 2
+
+        self.opti_arrs = {
+            "x": x_opti,
+            "x_d": x_dot_opti,
+            "q": q_opti,
+            "v": v_opti,
+            "a": a_opti,
+            "u": u_opti,
+            "tau": tau_arr,
+            "tau_col": col_arr,
+            "t": t_arr,
+            "t_col": t_col_arr,
+        }
+
+        if scheme == "LGinv":
+            start_p_func = LG_inv_diff_start_p_fun_cas(N)
+            x_start = start_p_func(x_opti)
+            x_dot_start = start_p_func(x_dot_opti)
+            q_start = start_p_func(q_opti)
+            v_start = start_p_func(v_opti)
+            a_start = start_p_func(a_opti)
+        else:
+            x_start = x_opti[0, :]
+            x_dot_start = x_dot_opti[0, :]
+            q_start = q_opti[0, :]
+            v_start = v_opti[0, :]
+            a_start = a_opti[0, :]
+
+        if scheme == "LG":
+            end_p_func = LG_end_p_fun_cas(N)
+            x_end = end_p_func(x_opti)
+            x_dot_end = end_p_func(x_dot_opti)
+            q_end = end_p_func(q_opti)
+            v_end = end_p_func(v_opti)
+            a_end = end_p_func(a_opti)
+        else:
+            x_end = x_opti[-1, :]
+            x_dot_end = x_dot_opti[-1, :]
+            q_end = q_opti[-1, :]
+            v_end = v_opti[-1, :]
+            a_end = a_opti[-1, :]
+
+        self.opti_points = {
+            "x_s": x_start,
+            "x_e": x_end,
+            "x_d_s": x_dot_start,
+            "x_d_e": x_dot_end,
+            "q_s": q_start,
+            "q_e": q_end,
+            "v_s": v_start,
+            "v_e": v_end,
+            "a_s": a_start,
+            "a_e": a_end,
+        }
 
 
 class _Equispaced:
-    pass
+    def opti_setup(self, segment_number):
+
+        N = segment_number
+        scheme = self.scheme
+        t_start = self.t_start
+        t_end = self.t_end
+        opti = cas.Opti()
+        p_opts = {"expand": True, "ipopt.print_level": 0, "print_time": 0}
+        s_opts = {
+            "max_iter": 10000,
+            "tol": 1e-26,
+        }  # investigate how to make it work adding 'linear_solver' : "MA27"}
+        opti.solver("ipopt", p_opts, s_opts)
+        self.opti = opti
+
+        x_opti = opti.variable(N + 1, 2 * self.n_q)
+        x_dot_opti = opti.variable(N + 1, 2 * self.n_q)
+        u_opti = opti.variable(N + 1, self.n_u)
+        q_opti = x_opti[:, : self.n_q]
+        v_opti = x_opti[:, self.n_q :]
+        a_opti = x_dot_opti[:, self.n_q :]
+        t_arr = linspace(t_start, t_end, N + 1)
+
+        self.opti_arrs = {
+            "x": x_opti,
+            "x_d": x_dot_opti,
+            "q": q_opti,
+            "v": v_opti,
+            "a": a_opti,
+            "u": u_opti,
+            "t": t_arr,
+        }
+
+        self.opti_points = {
+            "x_s": x_opti[0, :],
+            "x_e": x_opti[-1, :],
+            "x_d_s": x_dot_opti[0, :],
+            "x_d_e": x_dot_opti[-1, :],
+            "q_s": q_opti[0, :],
+            "q_e": q_opti[-1, :],
+            "v_s": v_opti[0, :],
+            "v_e": v_opti[-1, :],
+            "a_s": a_opti[0, :],
+            "a_e": a_opti[-1, :],
+        }
+
+        if "hs" in scheme:
+            u_c_opti = opti.variable(N, self.n_u)
+            x_c_opti = opti.variable(N, 2 * self.n_q)
+            x_dot_c_opti = opti.variable(N, 2 * self.n_q)
+            q_c_opti = x_c_opti[:, : self.n_q]
+            v_c_opti = x_c_opti[:, self.n_q :]
+            a_c_opti = x_dot_c_opti[:, self.n_q :]
+            t_c_arr = (t_arr[:-1] + t_arr[1:]) / 2
+            self.opti_arrs = {
+                **self.opti_arrs,
+                "x_c": x_c_opti,
+                "x_d_c": x_dot_c_opti,
+                "q_c": q_c_opti,
+                "v_c": v_c_opti,
+                "a_c": a_c_opti,
+                "u_c": u_c_opti,
+                "t_c": t_c_arr,
+            }
 
 
 class _Explicit_Dynamics:
     def dynamic_setup(self, u_vars=None):
         q_vars = list(self.LM.q)
+        self.n_q = len(q_vars)
         RHS = self.LM.rhs
+        _arguments = find_arguments(RHS, q_vars, u_vars)
+        self.params_sym = _arguments[4]
         dynam_f_x, dynam_g_x, dynam_g_q = _get_f_g_funcs(
             RHS, q_vars, u_vars, verbose=self.verbose, silent=self.silent
         )
         self.dyn_f_restr = dynam_f_x
         self.dyn_g_restr = dynam_g_q
+        self.n_u = dynam_f_x.mx_in()[2].shape[0]
 
 
 class _Implicit_Dynamics:
@@ -188,6 +363,10 @@ class _Implicit_Dynamics:
         q_vars = list(self.LM.q)
         q_dot_vars = list(self.LM._qdots)
         x_vars = [q_2_x(ii, q_vars, q_dot_vars) for ii in q_vars + q_dot_vars]
+        self.n_q = len(q_vars)
+
+        _arguments = find_arguments(impl_q, q_vars, separate_lambdas=True)
+        self.params_sym = _arguments[4]
 
         dynam_f_x = implicit_dynamic_x_to_casadi_function(
             impl_x, x_vars, verbose=self.verbose, silent=self.silent
@@ -197,6 +376,7 @@ class _Implicit_Dynamics:
         )
         self.dyn_f_restr = dynam_f_x
         self.dyn_g_restr = dynam_g_q
+        self.n_u = dynam_f_x.mx_in()[2].shape[0]
 
 
 class Pseudospectral_Explicit_Opti_Problem(

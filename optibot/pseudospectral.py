@@ -533,7 +533,7 @@ def LG_end_p_fun_cas(N, precission=20):
     fun = get_bary_extreme_f("LG", N, mode="x", point="end")
     sympy_expr = fun(x_sympy)
     cas_expr = sympy2casadi(sympy_expr, x_sympy, vertsplit(x_cas))
-    cas_f = Function("dynamics_q", [x_cas,], [cas_expr,])
+    cas_f = Function("x_poly_endpoint", [x_cas,], [cas_expr,])
     return cas_f
 
 
@@ -552,19 +552,14 @@ def LG_diff_end_p_fun_cas(N, precission=20):
     return Function("dynamics_x", [x_cas], [res_cas])
 
 
-# @lru_cache
-# def LG_inv_start_p_fun_cas(N, precission=20):
-#     from casadi import SX, vertsplit, Function
-#     from .casadi import sympy2casadi
+@lru_cache
+def LG_inv_start_p_fun_cas(N, precission=20):
+    _f = LG_end_p_fun_cas(N, precission)
 
-#     coefs = symbols(f"c_0:{N}")
-#     taus = base_points(N, "LG_inv", precission)
-#     pol_lag = lagrangePolynomial(taus, coefs)
-#     x = symbols("x")
-#     res = pol_lag.subs(x, 0)
-#     x_cas = SX.sym("x", N)
-#     res_cas = sympy2casadi(res, coefs, vertsplit(x_cas))
-#     return Function("dynamics_x", [x_cas], [res_cas])
+    def cas_f(x_cas):
+        return _f(x_cas[::-1, :])
+
+    return cas_f
 
 
 @lru_cache
