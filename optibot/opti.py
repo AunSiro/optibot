@@ -9,6 +9,16 @@ Created on Thu Mar  3 18:03:53 2022
 from .casadi import rhs_to_casadi_function, find_arguments
 import casadi as cas
 from numpy import array, linspace
+from .pseudospectral import (
+    base_points,
+    coll_points,
+    matrix_D_bary,
+    LG_end_p_fun_cas,
+    LG_inv_diff_start_p_fun_cas,
+    get_bary_extreme_f,
+)
+from .casadi import sympy2casadi
+from Sympy import symbols
 
 _implemented_equispaced_schemes = [
     "euler",
@@ -123,6 +133,46 @@ def _get_f_g_funcs(RHS, q_vars, u_vars=None, verbose=False, silent=True):
     return dynam_f_x, dynam_g_x, dynam_g_q
 
 
+# --- Pseudospectral functions
+
+
+def _get_cost_obj_trap_int(scheme, N):
+    t_arr = (
+        [-1,] + coll_points(N, scheme) + [1,]
+    )
+    t_arr = [float(ii) for ii in t_arr]
+    start_p_f = get_bary_extreme_f(scheme, N, mode="u", point="start")
+    end_p_f = get_bary_extreme_f(scheme, N, mode="u", point="end")
+
+    def obj_f(coefs):
+        start_p = start_p_f(coefs)
+        end_p = end_p_f(coefs)
+        coef_list = [start_p] + [coefs[jj] for jj in range(N)] + [end_p]
+        sum_res = 0
+        for jj in range(N + 1):
+            sum_res += (
+                (coef_list[jj] ** 2 + coef_list[jj + 1] ** 2)
+                * (t_arr[jj + 1] - t_arr[jj])
+                / 2
+            )
+        return sum_res
+
+    return obj_f
+
+
+def _get_cost_obj_trap_int_cas(scheme, N):
+    u_sym = cas.SX.sym("u", N)
+    u_sympy = symbols(f"c0:{N}")
+    fun = _get_cost_obj_trap_int(scheme, N)
+    sympy_expr = fun(u_sympy)
+    cas_expr = sympy2casadi(sympy_expr, u_sympy, cas.vertsplit(u_sym))
+    cas_f = cas.Function("cost_func", [u_sym,], [cas_expr,])
+    return cas_f
+
+
+# --- Opti problem
+
+
 class _Opti_Problem:
     def __init__(
         self,
@@ -160,18 +210,11 @@ class _Pseudospectral:
     def opti_setup(
         self, col_points, precission=20,
     ):
-        from .pseudospectral import (
-            base_points,
-            coll_points,
-            matrix_D_bary,
-            LG_end_p_fun_cas,
-            LG_inv_diff_start_p_fun_cas,
-        )
-        from .casadi import sympy2casadi
 
         scheme = self.scheme
         t_start = self.t_start
         t_end = self.t_end
+        self.col_points = col_points
 
         opti = cas.Opti()
         opts = {"ipopt.print_level": 0, "print_time": 0}
@@ -190,21 +233,28 @@ class _Pseudospectral:
         D_mat = sympy2casadi(matrix_D_bary(N, scheme, precission), [], [])
         self.D_mat = D_mat
 
-        if scheme in ["LGL", "LG"]:
-            x_opti = opti.variable(N, 2 * self.n_q)
-            x_dot_opti = 2 / (t_end - t_start) * D_mat @ x_opti
-            q_opti = x_opti[:, : self.n_q]
-            v_opti = x_opti[:, self.n_q :]
-            a_opti = x_dot_opti[:, self.n_q :]
+        try:
+            if scheme in ["LGL", "LG"]:
+                x_opti = opti.variable(N, 2 * self.n_q)
+                x_dot_opti = 2 / (t_end - t_start) * D_mat @ x_opti
+                q_opti = x_opti[:, : self.n_q]
+                v_opti = x_opti[:, self.n_q :]
+                a_opti = x_dot_opti[:, self.n_q :]
 
-        elif scheme in ["LG2", "D2", "LGLm"]:
-            q_opti = opti.variable(N, self.n_q)
-            v_opti = 2 / (t_end - t_start) * D_mat @ q_opti
-            a_opti = 2 / (t_end - t_start) * D_mat @ v_opti
-            x_opti = cas.horzcat(q_opti, v_opti)
-            x_dot_opti = cas.horzcat(v_opti, a_opti)
-        else:
-            raise NotImplementedError(f"scheme {scheme} not implemented in opti_setup.")
+            elif scheme in ["LG2", "D2", "LGLm"]:
+                q_opti = opti.variable(N, self.n_q)
+                v_opti = 2 / (t_end - t_start) * D_mat @ q_opti
+                a_opti = 2 / (t_end - t_start) * D_mat @ v_opti
+                x_opti = cas.horzcat(q_opti, v_opti)
+                x_dot_opti = cas.horzcat(v_opti, a_opti)
+            else:
+                raise NotImplementedError(
+                    f"scheme {scheme} not implemented in opti_setup."
+                )
+        except AttributeError:
+            raise RuntimeError(
+                "Dynamics must be computed before opti setup, use dynamic_setup()"
+            )
 
         u_opti = opti.variable(col_points, self.n_u)
         tau_arr = array(base_points(N, scheme, precission), dtype=float)
@@ -266,11 +316,28 @@ class _Pseudospectral:
             "a_e": a_end,
         }
 
+    def u_sq_cost(self):
+        try:
+            U = self.opti_arrs["u"]
+        except AttributeError:
+            raise RuntimeError(
+                "opti must be set up before defining cost, use opti_setup()"
+            )
+
+        dt = self.t_end - self.t_start
+
+        f_u_cost = _get_cost_obj_trap_int_cas(self.scheme, self.col_points)
+        cost = dt * cas.sum2(f_u_cost(U))
+
+        self.cost = cost
+        self.opti.minimize(cost)
+
 
 class _Equispaced:
     def opti_setup(self, segment_number):
 
         N = segment_number
+        self.N = N
         scheme = self.scheme
         t_start = self.t_start
         t_end = self.t_end
@@ -283,13 +350,18 @@ class _Equispaced:
         opti.solver("ipopt", p_opts, s_opts)
         self.opti = opti
 
-        x_opti = opti.variable(N + 1, 2 * self.n_q)
-        x_dot_opti = opti.variable(N + 1, 2 * self.n_q)
-        u_opti = opti.variable(N + 1, self.n_u)
-        q_opti = x_opti[:, : self.n_q]
-        v_opti = x_opti[:, self.n_q :]
-        a_opti = x_dot_opti[:, self.n_q :]
-        t_arr = linspace(t_start, t_end, N + 1)
+        try:
+            x_opti = opti.variable(N + 1, 2 * self.n_q)
+            x_dot_opti = opti.variable(N + 1, 2 * self.n_q)
+            u_opti = opti.variable(N + 1, self.n_u)
+            q_opti = x_opti[:, : self.n_q]
+            v_opti = x_opti[:, self.n_q :]
+            a_opti = x_dot_opti[:, self.n_q :]
+            t_arr = linspace(t_start, t_end, N + 1)
+        except AttributeError:
+            raise RuntimeError(
+                "Dynamics must be computed before opti setup, use dynamic_setup()"
+            )
 
         self.opti_arrs = {
             "x": x_opti,
@@ -332,6 +404,33 @@ class _Equispaced:
                 "u_c": u_c_opti,
                 "t_c": t_c_arr,
             }
+
+    def u_sq_cost(self):
+        try:
+            U = self.opti_arrs["u"]
+        except AttributeError:
+            raise RuntimeError(
+                "opti must be set up before defining cost, use opti_setup()"
+            )
+
+        dt = self.t_end - self.t_start
+
+        try:
+            U_c = self.opti_arrs["u_c"]
+            cost = dt * cas.sum2(
+                (
+                    4 * cas.sum1(U_c[:, :] ** 2)
+                    + cas.sum1(U[:, :] ** 2)
+                    + cas.sum1(U[1:-1, :] ** 2)
+                )
+                / (3 * self.N)
+            )
+        except AttributeError:
+            cost = dt * cas.sum2(
+                (cas.sum1(U[:, :] ** 2) + cas.sum1(U[1:-1, :] ** 2)) / self.N
+            )
+        self.cost = cost
+        self.opti.minimize(cost)
 
 
 class _Explicit_Dynamics:
