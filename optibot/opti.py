@@ -43,7 +43,8 @@ _implemented_pseudospectral_schemes = [
 def _get_f_g_funcs(RHS, q_vars, u_vars=None, verbose=False, silent=True):
     """
     Converts an array of symbolic expressions RHS(x, u, params) to the 3 casadi 
-    dynamics residual functions.
+    dynamics residual functions. They have a blind argument "lag" that allows them
+    to share structure with implicit dinamic functions that require lagrange multipliers.
     Designed to work with systems so that
         x' = RHS(x, u, params)
 
@@ -66,13 +67,13 @@ def _get_f_g_funcs(RHS, q_vars, u_vars=None, verbose=False, silent=True):
 
     Returns
     -------
-    Casadi Function D(x, x', u, params) so that
+    Casadi Function D(x, x', u, lag, params) so that
         D = x'- F(x, u, params)
         
-    Casadi Function D(x, x', u, params) so that
+    Casadi Function D(x, x', u, lag, params) so that
         D = x'[bottom] - G(x, u, params)
         
-    Casadi Function D(q, q', q'', u, params) so that
+    Casadi Function D(q, q', q'', u, lag, params) so that
         D = q'' - G(q, q', u, params)
 
     """
@@ -105,28 +106,29 @@ def _get_f_g_funcs(RHS, q_vars, u_vars=None, verbose=False, silent=True):
     q_dot_dot_sym = cas.SX.sym("q_dot_dot", q_len)
     u_sym = cas.SX.sym("u", u_len)
     p_sym = cas.SX.sym("p", p_len)
+    lag_sym = cas.SX.sym("lag", 0)
 
     dynam_f_x = cas.Function(
         "dynamics_f_x",
-        [x_sym, x_dot_sym, u_sym, p_sym],
+        [x_sym, x_dot_sym, u_sym, lag_sym, p_sym],
         [x_dot_sym.T - F_cas_x(x_sym, u_sym, p_sym)],
-        ["x", "x_dot", "u", "params"],
+        ["x", "x_dot", "u", "lag", "params"],
         ["residue"],
     )
 
     dynam_g_x = cas.Function(
         "dynamics_g_x",
-        [x_sym, x_dot_sym, u_sym, p_sym],
+        [x_sym, x_dot_sym, u_sym, lag_sym, p_sym],
         [x_dot_sym[q_len:].T - F_cas_x(x_sym, u_sym, p_sym)[q_len:]],
-        ["x", "x_dot", "u", "params"],
+        ["x", "x_dot", "u", "lag", "params"],
         ["residue"],
     )
 
     dynam_g_q = cas.Function(
         "dynamics_g_q",
-        [q_sym, q_dot_sym, q_dot_dot_sym, u_sym, p_sym],
+        [q_sym, q_dot_sym, q_dot_dot_sym, u_sym, lag_sym, p_sym],
         [q_dot_dot_sym.T - G_cas_q(q_sym, q_dot_sym, u_sym, p_sym)],
-        ["q", "q_dot", "q_dot_dot", "u", "params"],
+        ["q", "q_dot", "q_dot_dot", "u", "lag", "params"],
         ["residue"],
     )
 
@@ -261,6 +263,7 @@ class _Pseudospectral:
         col_arr = array(coll_points(col_points, scheme, precission), dtype=float)
         t_arr = ((t_end - t_start) * tau_arr + (t_start + t_end)) / 2
         t_col_arr = ((t_end - t_start) * col_arr + (t_start + t_end)) / 2
+        lam_opti = opti.variable(col_points, self.n_lambdas)
 
         self.opti_arrs = {
             "x": x_opti,
@@ -269,6 +272,7 @@ class _Pseudospectral:
             "v": v_opti,
             "a": a_opti,
             "u": u_opti,
+            "lam": lam_opti,
             "tau": tau_arr,
             "tau_col": col_arr,
             "t": t_arr,
@@ -363,6 +367,8 @@ class _Equispaced:
                 "Dynamics must be computed before opti setup, use dynamic_setup()"
             )
 
+        lam_opti = opti.variable(N + 1, self.n_lambdas)
+
         self.opti_arrs = {
             "x": x_opti,
             "x_d": x_dot_opti,
@@ -371,6 +377,7 @@ class _Equispaced:
             "a": a_opti,
             "u": u_opti,
             "t": t_arr,
+            "lam": lam_opti,
         }
 
         self.opti_points = {
@@ -394,6 +401,7 @@ class _Equispaced:
             v_c_opti = x_c_opti[:, self.n_q :]
             a_c_opti = x_dot_c_opti[:, self.n_q :]
             t_c_arr = (t_arr[:-1] + t_arr[1:]) / 2
+            lam_c_opti = opti.variable(N, self.n_lambdas)
             self.opti_arrs = {
                 **self.opti_arrs,
                 "x_c": x_c_opti,
@@ -403,6 +411,7 @@ class _Equispaced:
                 "a_c": a_c_opti,
                 "u_c": u_c_opti,
                 "t_c": t_c_arr,
+                "lam_c": lam_c_opti,
             }
 
     def u_sq_cost(self):
@@ -446,6 +455,7 @@ class _Explicit_Dynamics:
         self.dyn_f_restr = dynam_f_x
         self.dyn_g_restr = dynam_g_q
         self.n_u = dynam_f_x.mx_in()[2].shape[0]
+        self.n_lambdas = 0
 
 
 class _Implicit_Dynamics:
@@ -476,6 +486,7 @@ class _Implicit_Dynamics:
         self.dyn_f_restr = dynam_f_x
         self.dyn_g_restr = dynam_g_q
         self.n_u = dynam_f_x.mx_in()[2].shape[0]
+        self.n_lambdas = dynam_f_x.mx_in()[3].shape[0]
 
 
 class Pseudospectral_Explicit_Opti_Problem(
