@@ -704,28 +704,29 @@ class _Implicit_Dynamics:
         self.n_lambdas = dynam_f_x.mx_in()[3].shape[0]
 
 
-class Pseudospectral_Explicit_Opti_Problem(
-    _Opti_Problem, _Pseudospectral, _Explicit_Dynamics
-):
-    pass
+# class Pseudospectral_Explicit_Opti_Problem(
+#     _Opti_Problem, _Pseudospectral, _Explicit_Dynamics
+# ):
+#     pass
 
 
-class Equispaced_Explicit_Opti_Problem(_Opti_Problem, _Equispaced, _Explicit_Dynamics):
-    pass
+# class Equispaced_Explicit_Opti_Problem(_Opti_Problem, _Equispaced, _Explicit_Dynamics):
+#     pass
 
 
-class Pseudospectral_Implicit_Opti_Problem(
-    _Opti_Problem, _Pseudospectral, _Implicit_Dynamics
-):
-    pass
+# class Pseudospectral_Implicit_Opti_Problem(
+#     _Opti_Problem, _Pseudospectral, _Implicit_Dynamics
+# ):
+#     pass
 
 
-class Equispaced_Implicit_Opti_Problem(_Opti_Problem, _Equispaced, _Implicit_Dynamics):
-    pass
+# class Equispaced_Implicit_Opti_Problem(_Opti_Problem, _Equispaced, _Implicit_Dynamics):
+#     pass
 
 
 def Opti_Problem(
     LM,
+    params,
     scheme="trapz",
     ini_guess="zero",
     solve_repetitions=1,
@@ -737,25 +738,26 @@ def Opti_Problem(
     from .symbolic import ImplicitLagrangesMethod, SimpLagrangesMethod
     from sympy.physics.mechanics import LagrangesMethod
 
+    inherit = [_Opti_Problem]
+
     if isinstance(LM, ImplicitLagrangesMethod):
-        dynamics_mode = "implicit"
+        inherit.append(_Implicit_Dynamics)
     elif isinstance(LM, (SimpLagrangesMethod, LagrangesMethod)):
-        dynamics_mode = "explicit"
+        inherit.append(_Explicit_Dynamics)
     else:
         ValueError(f"LM must be a Lagranges Method object, not: {type(LM)}")
 
     if scheme in _implemented_equispaced_schemes:
-        if dynamics_mode == "explicit":
-            return Equispaced_Explicit_Opti_Problem()
-        elif dynamics_mode == "implicit":
-            return Equispaced_Implicit_Opti_Problem()
+        inherit.append(_Equispaced)
     elif scheme in _implemented_pseudospectral_schemes:
-        if dynamics_mode == "explicit":
-            return Pseudospectral_Explicit_Opti_Problem()
-        elif dynamics_mode == "implicit":
-            return Pseudospectral_Implicit_Opti_Problem()
+        inherit.append(_Pseudospectral)
     else:
         _v = _implemented_equispaced_schemes + _implemented_pseudospectral_schemes
         raise NotImplementedError(
             f"scheme {scheme} not implemented. Valid methods are {_v}."
         )
+
+    class Adequate_Problem(*inherit):
+        pass
+
+    return Adequate_Problem(LM, params, scheme)
