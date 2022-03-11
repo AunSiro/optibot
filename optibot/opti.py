@@ -43,7 +43,7 @@ _implemented_pseudospectral_schemes = [
 def _get_f_g_funcs(RHS, q_vars, u_vars=None, verbose=False, silent=True):
     """
     Converts an array of symbolic expressions RHS(x, u, params) to the 3 casadi 
-    dynamics residual functions. They have a blind argument "lag" that allows them
+    dynamics residual functions. They have a blind argument "lam" that allows them
     to share structure with implicit dinamic functions that require lagrange multipliers.
     Designed to work with systems so that
         x' = RHS(x, u, params)
@@ -73,7 +73,7 @@ def _get_f_g_funcs(RHS, q_vars, u_vars=None, verbose=False, silent=True):
     Casadi Function D(x, x', u, lag, params) so that
         D = x'[bottom] - G(x, u, params)
         
-    Casadi Function D(q, q', q'', u, lag, params) so that
+    Casadi Function D(q, q', q'', u, lam, params) so that
         D = q'' - G(q, q', u, params)
 
     """
@@ -106,29 +106,29 @@ def _get_f_g_funcs(RHS, q_vars, u_vars=None, verbose=False, silent=True):
     q_dot_dot_sym = cas.SX.sym("q_dot_dot", q_len)
     u_sym = cas.SX.sym("u", u_len)
     p_sym = cas.SX.sym("p", p_len)
-    lag_sym = cas.SX.sym("lag", 0)
+    lam_sym = cas.SX.sym("lam", 0)
 
     dynam_f_x = cas.Function(
         "dynamics_f_x",
-        [x_sym, x_dot_sym, u_sym, lag_sym, p_sym],
+        [x_sym, x_dot_sym, u_sym, lam_sym, p_sym],
         [x_dot_sym.T - F_cas_x(x_sym, u_sym, p_sym)],
-        ["x", "x_dot", "u", "lag", "params"],
+        ["x", "x_dot", "u", "lam", "params"],
         ["residue"],
     )
 
     dynam_g_x = cas.Function(
         "dynamics_g_x",
-        [x_sym, x_dot_sym, u_sym, lag_sym, p_sym],
+        [x_sym, x_dot_sym, u_sym, lam_sym, p_sym],
         [x_dot_sym[q_len:].T - F_cas_x(x_sym, u_sym, p_sym)[q_len:]],
-        ["x", "x_dot", "u", "lag", "params"],
+        ["x", "x_dot", "u", "lam", "params"],
         ["residue"],
     )
 
     dynam_g_q = cas.Function(
         "dynamics_g_q",
-        [q_sym, q_dot_sym, q_dot_dot_sym, u_sym, lag_sym, p_sym],
+        [q_sym, q_dot_sym, q_dot_dot_sym, u_sym, lam_sym, p_sym],
         [q_dot_dot_sym.T - G_cas_q(q_sym, q_dot_sym, u_sym, p_sym)],
-        ["q", "q_dot", "q_dot_dot", "u", "lag", "params"],
+        ["q", "q_dot", "q_dot_dot", "u", "lam", "params"],
         ["residue"],
     )
 
@@ -179,6 +179,7 @@ class _Opti_Problem:
     def __init__(
         self,
         LM,
+        params,
         scheme="trapz",
         ini_guess="zero",
         solve_repetitions=1,
@@ -197,6 +198,7 @@ class _Opti_Problem:
                 f"scheme {scheme} not implemented. Valid methods are {_v}."
             )
         self.LM = LM
+        self.params = params
         self.scheme = scheme
         self.ini_guess = ini_guess
         self.solve_repetitions = solve_repetitions
@@ -231,6 +233,7 @@ class _Pseudospectral:
             "LG": [col_points + 1,],
         }
         N = opt_dict[scheme][0]
+        self.N = N
 
         D_mat = sympy2casadi(matrix_D_bary(N, scheme, precission), [], [])
         self.D_mat = D_mat
@@ -336,6 +339,93 @@ class _Pseudospectral:
         self.cost = cost
         self.opti.minimize(cost)
 
+    def apply_scheme(self):
+        scheme = self.scheme
+        try:
+            N = self.N
+        except AttributeError:
+            raise RuntimeError(
+                "opti must be set up before applying constraints, use opti_setup()"
+            )
+        dynam_f_x = self.dyn_f_restr
+        dynam_g_q = self.dyn_g_restr
+        x_opti = self.opti_arrs["x"]
+        x_dot_opti = self.opti_arrs["x_d"]
+        q_opti = self.opti_arrs["q"]
+        v_opti = self.opti_arrs["v"]
+        a_opti = self.opti_arrs["a"]
+        u_opti = self.opti_arrs["u"]
+        lam_opti = self.opti_arrs["lam"]
+        params = self.params
+
+        if scheme == "LGL":
+            for ii in range(N):
+                self.opti.subject_to(
+                    dynam_f_x(
+                        x_opti[ii, :],
+                        x_dot_opti[ii, :],
+                        u_opti[ii, :],
+                        lam_opti[ii, :],
+                        params,
+                    )
+                    == 0
+                )
+        elif scheme == "LG":
+            for ii in range(1, N):
+                self.opti.subject_to(
+                    dynam_f_x(
+                        x_opti[ii, :],
+                        x_dot_opti[ii, :],
+                        u_opti[ii - 1, :],
+                        lam_opti[ii - 1, :],
+                        params,
+                    )
+                    == 0
+                )
+        elif scheme == "D2":
+            for ii in range(N):
+                self.opti.subject_to(
+                    dynam_g_q(
+                        q_opti[ii, :],
+                        v_opti[ii, :],
+                        a_opti[ii, :],
+                        u_opti[ii, :],
+                        lam_opti[ii, :],
+                        params,
+                    )
+                    == 0
+                )
+        elif scheme == "LG2":
+            for ii in range(1, N - 1):
+                self.opti.subject_to(
+                    dynam_g_q(
+                        q_opti[ii, :],
+                        v_opti[ii, :],
+                        a_opti[ii, :],
+                        u_opti[ii - 1, :],
+                        lam_opti[ii - 1, :],
+                        params,
+                    )
+                    == 0
+                )
+        elif scheme == "LGLm":
+            for ii in range(1, N - 1):
+                self.opti.subject_to(
+                    dynam_g_q(
+                        q_opti[ii, :],
+                        v_opti[ii, :],
+                        a_opti[ii, :],
+                        u_opti[ii - 1, :],
+                        lam_opti[ii - 1, :],
+                        params,
+                    )
+                    == 0
+                )
+        else:
+            raise NotImplementedError(
+                f"scheme {scheme} not implemented in apply_scheme."
+            )
+
 
 class _Equispaced:
     def opti_setup(self, segment_number):
@@ -440,6 +530,131 @@ class _Equispaced:
             )
         self.cost = cost
         self.opti.minimize(cost)
+
+    def apply_scheme(self):
+        from .casadi import accelrestriction2casadi
+        from .schemes import (
+            euler_accel_restr,
+            trapz_accel_restr,
+            trapz_mod_accel_restr,
+            hs_mod_accel_restr,
+            hs_accel_restr,
+            hs_half_x,
+        )
+
+        scheme = self.scheme
+        try:
+            N = self.N
+        except AttributeError:
+            raise RuntimeError(
+                "opti must be set up before applying constraints, use opti_setup()"
+            )
+        T = self.t_end - self.t_start
+        dynam_f_x = self.dyn_f_restr
+        dynam_g_q = self.dyn_g_restr
+        x_opti = self.opti_arrs["x"]
+        x_dot_opti = self.opti_arrs["x_d"]
+        q_opti = self.opti_arrs["q"]
+        v_opti = self.opti_arrs["v"]
+        a_opti = self.opti_arrs["a"]
+        u_opti = self.opti_arrs["u"]
+        lam_opti = self.opti_arrs["lam"]
+        params = self.params
+        if "hs" in scheme:
+            x_c_opti = self.opti_arrs["x_c"]
+            x_c_dot_opti = self.opti_arrs["x_d_c"]
+            u_c_opti = self.opti_arrs["u_c"]
+            a_c_opti = self.opti_arrs["a_c"]
+            lam_c_opti = self.opti_arrs["lam_c"]
+            if "mod" in scheme:
+                from .schemes import hs_mod_half_x
+
+                half_x = hs_mod_half_x
+            else:
+                from .schemes import hs_half_x
+
+                half_x = hs_half_x
+
+        # Dynamics Constraints:
+        for ii in range(N + 1):
+            self.opti.subject_to(
+                dynam_f_x(
+                    x_opti[ii, :],
+                    x_dot_opti[ii, :],
+                    u_opti[ii, :],
+                    lam_opti[ii, :],
+                    params,
+                )
+                == 0
+            )
+        if "hs" in scheme:
+            for ii in range(N):
+                self.opti.subject_to(
+                    x_c_opti[ii, :]
+                    == half_x(
+                        x_opti[ii, :],
+                        x_opti[ii + 1, :],
+                        x_dot_opti[ii, :],
+                        x_dot_opti[ii + 1, :],
+                        T / N,
+                    )
+                )
+                self.opti.subject_to(
+                    dynam_f_x(
+                        x_c_opti[ii, :],
+                        x_c_dot_opti[ii, :],
+                        u_c_opti[ii, :],
+                        lam_c_opti[ii, :],
+                        params,
+                    )
+                    == 0
+                )
+            if "parab" not in scheme:
+                for ii in range(N):
+                    self.opti.subject_to(
+                        u_c_opti[ii, :] == (u_opti[ii, :] + u_opti[ii + 1, :]) / 2
+                    )
+
+        # Scheme Constraints
+        restr_schemes = {
+            #'euler': euler_accel_restr, #comprobar compatibilidad
+            "trapz": trapz_accel_restr,
+            "trapz_mod": trapz_mod_accel_restr,
+            "hs": hs_accel_restr,
+            "hs_mod": hs_mod_accel_restr,
+            "hs_parab": hs_accel_restr,
+            "hs_mod_parab": hs_mod_accel_restr,
+        }
+        n_q = self.n_q
+        f_restr = restr_schemes[scheme]
+        if "hs" in scheme:
+            cas_accel_restr = accelrestriction2casadi(f_restr, n_q, n_q)
+            for ii in range(N):
+                self.opti.subject_to(
+                    cas_accel_restr(
+                        x_opti[ii, :],
+                        x_opti[ii + 1, :],
+                        a_opti[ii, :],
+                        a_opti[ii + 1, :],
+                        T / N,
+                        a_c_opti[ii, :],
+                    )
+                    == 0
+                )
+        else:
+            cas_accel_restr = accelrestriction2casadi(f_restr, n_q)
+            for ii in range(N):
+                self.opti.subject_to(
+                    cas_accel_restr(
+                        x_opti[ii, :],
+                        x_opti[ii + 1, :],
+                        a_opti[ii, :],
+                        a_opti[ii + 1, :],
+                        T / N,
+                        [],
+                    )
+                    == 0
+                )
 
 
 class _Explicit_Dynamics:
