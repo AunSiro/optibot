@@ -6,9 +6,8 @@ Created on Thu Mar  3 18:03:53 2022
 @author: smorenom
 """
 
-from .casadi import rhs_to_casadi_function, find_arguments
-import casadi as cas
-from numpy import array, linspace, expand_dims, ones
+from .symbolic import find_arguments
+from .casadi import sympy2casadi, rhs_to_casadi_function
 from .pseudospectral import (
     base_points,
     coll_points,
@@ -17,8 +16,12 @@ from .pseudospectral import (
     LG_inv_diff_start_p_fun_cas,
     get_bary_extreme_f,
 )
-from .casadi import sympy2casadi
-from Sympy import symbols
+
+import casadi as cas
+from numpy import array, linspace, expand_dims, ones
+from sympy import symbols
+from time import time
+from functools import lru_cache
 
 _implemented_equispaced_schemes = [
     "euler",
@@ -138,6 +141,7 @@ def _get_f_g_funcs(RHS, q_vars, u_vars=None, verbose=False, silent=True):
 # --- Pseudospectral functions
 
 
+@lru_cache(maxsize=None)
 def _get_cost_obj_trap_int(scheme, N):
     t_arr = (
         [-1,] + coll_points(N, scheme) + [1,]
@@ -162,6 +166,7 @@ def _get_cost_obj_trap_int(scheme, N):
     return obj_f
 
 
+@lru_cache(maxsize=None)
 def _get_cost_obj_trap_int_cas(scheme, N):
     u_sym = cas.SX.sym("u", N)
     u_sympy = symbols(f"c0:{N}")
@@ -222,7 +227,8 @@ class _Opti_Problem:
 
     def _save_results(self):
         for key in self.opti_arrs.keys():
-            self.results[key] = self.sol.value(key)
+            opti_arr = self.opti_arrs[key]
+            self.results[key] = self.sol.value(opti_arr)
 
     def simple_solve(self):
         try:
@@ -237,7 +243,6 @@ class _Opti_Problem:
         self._save_results()
 
     def chrono_solve(self):
-        from time import time
 
         cput0 = time()
         try:
@@ -247,10 +252,10 @@ class _Opti_Problem:
             raise RuntimeError(
                 "opti problem must be setup, use opti_setup() and apply_scheme()"
             )
-        cput1 = time.time()
+        cput1 = time()
         cpudt = (cput1 - cput0) / self.solve_repetitions
         self.sol = sol
-        self.results = {"cpudt": cpudt}
+        self.results = {"cpudt": cpudt, "cost": sol.value(self.cost)}
         self._save_results()
 
 
@@ -265,7 +270,10 @@ class _Pseudospectral:
         self.col_points = col_points
 
         opti = cas.Opti()
-        opts = {"ipopt.print_level": 0, "print_time": 0}
+        if self.verbose:
+            opts = {}
+        else:
+            opts = {"ipopt.print_level": 0, "print_time": 0}
         opti.solver("ipopt", opts)
         self.opti = opti
 
@@ -480,7 +488,12 @@ class _Equispaced:
         t_start = self.t_start
         t_end = self.t_end
         opti = cas.Opti()
-        p_opts = {"expand": True, "ipopt.print_level": 0, "print_time": 0}
+        if self.verbose:
+            p_opts = {
+                "expand": True,
+            }
+        else:
+            p_opts = {"expand": True, "ipopt.print_level": 0, "print_time": 0}
         s_opts = {
             "max_iter": 10000,
             "tol": 1e-26,
@@ -703,14 +716,27 @@ class _Equispaced:
 
 class _Explicit_Dynamics:
     def dynamic_setup(self, u_vars=None):
+
         q_vars = list(self.LM.q)
         self.n_q = len(q_vars)
-        RHS = self.LM.rhs
-        _arguments = find_arguments(RHS, q_vars, u_vars)
+
+        try:
+            dynam_f_x = self.LM.dynam_f_x
+            dynam_g_q = self.LM.dynam_g_q
+            _arguments = self.LM.arguments
+            if not self.silent:
+                print("Functions loaded from LM object")
+        except AttributeError:
+            RHS = self.LM.rhs
+            _arguments = find_arguments(RHS, q_vars, u_vars)
+            dynam_f_x, dynam_g_x, dynam_g_q = _get_f_g_funcs(
+                RHS, q_vars, u_vars, verbose=self.verbose, silent=self.silent
+            )
+            self.LM.dynam_f_x = dynam_f_x
+            self.LM.dynam_g_q = dynam_g_q
+            self.LM.arguments = _arguments
+
         self.params_sym = _arguments[4]
-        dynam_f_x, dynam_g_x, dynam_g_q = _get_f_g_funcs(
-            RHS, q_vars, u_vars, verbose=self.verbose, silent=self.silent
-        )
         self.dyn_f_restr = dynam_f_x
         self.dyn_g_restr = dynam_g_q
         self.n_u = dynam_f_x.mx_in()[2].shape[0]
@@ -719,29 +745,46 @@ class _Explicit_Dynamics:
 
 class _Implicit_Dynamics:
     def dynamic_setup(self, u_vars=None):
-        from .casadi import (
-            implicit_dynamic_q_to_casadi_function,
-            implicit_dynamic_x_to_casadi_function,
-        )
-        from .symbolic import q_2_x
 
-        impl_x = self.LM.implicit_dynamics_x
-        impl_q = self.LM.implicit_dynamics_q
+        from .symbolic import q_2_x
 
         q_vars = list(self.LM.q)
         q_dot_vars = list(self.LM._qdots)
         x_vars = [q_2_x(ii, q_vars, q_dot_vars) for ii in q_vars + q_dot_vars]
         self.n_q = len(q_vars)
+        silent = self.silent
 
-        _arguments = find_arguments(impl_q, q_vars, separate_lambdas=True)
+        try:
+            dynam_f_x = self.LM.dynam_f_x
+            dynam_g_q = self.LM.dynam_g_q
+            _arguments = self.LM.arguments
+            if not silent:
+                print("Functions loaded from LM object")
+        except AttributeError:
+            from .casadi import (
+                implicit_dynamic_q_to_casadi_function,
+                implicit_dynamic_x_to_casadi_function,
+            )
+
+            impl_x = self.LM.implicit_dynamics_x
+            impl_q = self.LM.implicit_dynamics_q
+            _arguments = find_arguments(impl_q, q_vars, separate_lambdas=True)
+
+            if not silent:
+                print("Generating F function")
+            dynam_f_x = implicit_dynamic_x_to_casadi_function(
+                impl_x, x_vars, verbose=self.verbose, silent=self.silent
+            )
+            if not silent:
+                print("Generating G function")
+            dynam_g_q = implicit_dynamic_q_to_casadi_function(
+                impl_q, q_vars, verbose=self.verbose, silent=self.silent
+            )
+            self.LM.dynam_f_x = dynam_f_x
+            self.LM.dynam_g_q = dynam_g_q
+            self.LM.arguments = _arguments
+
         self.params_sym = _arguments[4]
-
-        dynam_f_x = implicit_dynamic_x_to_casadi_function(
-            impl_x, x_vars, verbose=self.verbose, silent=self.silent
-        )
-        dynam_g_q = implicit_dynamic_q_to_casadi_function(
-            impl_q, q_vars, verbose=self.verbose, silent=self.silent
-        )
         self.dyn_f_restr = dynam_f_x
         self.dyn_g_restr = dynam_g_q
         self.n_u = dynam_f_x.mx_in()[2].shape[0]
@@ -851,4 +894,14 @@ def Opti_Problem(
     class Adequate_Problem(*inherit):
         pass
 
-    return Adequate_Problem(LM, params, scheme)
+    return Adequate_Problem(
+        LM,
+        params,
+        scheme,
+        ini_guess,
+        solve_repetitions,
+        t_start,
+        t_end,
+        verbose,
+        silent,
+    )
