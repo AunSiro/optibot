@@ -8,7 +8,7 @@ Created on Thu Mar  3 18:03:53 2022
 
 from .casadi import rhs_to_casadi_function, find_arguments
 import casadi as cas
-from numpy import array, linspace
+from numpy import array, linspace, expand_dims, ones
 from .pseudospectral import (
     base_points,
     coll_points,
@@ -208,6 +208,50 @@ class _Opti_Problem:
         self.silent = silent
 
         self.LM.form_lagranges_equations()
+
+    def _ini_guess_start(self):
+        try:
+            q_opti = self.opti_arrs["q"]
+            v_opti = self.opti_arrs["v"]
+            a_opti = self.opti_arrs["a"]
+        except AttributeError:
+            raise RuntimeError(
+                "opti problem must be setup, use opti_setup() and apply_scheme()"
+            )
+        return q_opti, v_opti, a_opti
+
+    def _save_results(self):
+        for key in self.opti_arrs.keys():
+            self.results[key] = self.sol.value(key)
+
+    def simple_solve(self):
+        try:
+            sol = self.opti.solve()
+        except AttributeError:
+            raise RuntimeError(
+                "opti problem must be setup, use opti_setup() and apply_scheme()"
+            )
+        cpudt = None
+        self.sol = sol
+        self.results = {"cpudt": cpudt}
+        self._save_results()
+
+    def chrono_solve(self):
+        from time import time
+
+        cput0 = time()
+        try:
+            for ii in range(self.solve_repetitions):
+                sol = self.opti.solve()
+        except AttributeError:
+            raise RuntimeError(
+                "opti problem must be setup, use opti_setup() and apply_scheme()"
+            )
+        cput1 = time.time()
+        cpudt = (cput1 - cput0) / self.solve_repetitions
+        self.sol = sol
+        self.results = {"cpudt": cpudt}
+        self._save_results()
 
 
 class _Pseudospectral:
@@ -704,6 +748,44 @@ class _Implicit_Dynamics:
         self.n_lambdas = dynam_f_x.mx_in()[3].shape[0]
 
 
+class _Zero_init:
+    def initial_guess(self):
+        q_opti, v_opti, a_opti = self._ini_guess_start()
+        self.opti.set_initial(q_opti, 0)
+        if self.scheme not in ["LG2", "D2", "LGLm"]:
+            self.opti.set_initial(v_opti, 0)
+            if self.scheme_mode == "equispaced":
+                self.opti.set_initial(a_opti, 0)
+
+
+class _Lin_init:
+    def initial_guess(self, q_s, q_e):
+        q_opti, v_opti, a_opti = self._ini_guess_start()
+        if self.scheme_mode == "equispaced":
+            N = self.N + 1  # Number of segments
+        else:
+            N = self.N  # Number of Node Points
+        T = self.t_end - self.t_start
+        q_s = array(q_s, dtype=float)
+        q_e = array(q_e, dtype=float)
+        s_arr = linspace(0, 1, N)
+        q_guess = expand_dims(q_s, 0) + expand_dims(s_arr, 1) * expand_dims(
+            (q_e - q_s), 0
+        )
+        q_dot_guess = (q_e - q_s) * ones([N, 1]) / T
+        self.opti.set_initial(q_opti, q_guess)
+        if self.scheme not in ["LG2", "D2", "LGLm"]:
+            self.opti.set_initial(v_opti, q_dot_guess)
+            if self.scheme_mode == "equispaced":
+                self.opti.set_initial(a_opti, 0)
+                if "hs" in self.scheme:
+                    self.opti.set_initial(
+                        self.opti_arrs["q_c"], (q_guess[:-1, :] + q_guess[1:, :]) / 2
+                    )
+                    self.opti.set_initial(self.opti_arrs["v_c"], q_dot_guess[1:, :])
+                    self.opti.set_initial(self.opti_arrs["a_c"], 0)
+
+
 # class Pseudospectral_Explicit_Opti_Problem(
 #     _Opti_Problem, _Pseudospectral, _Explicit_Dynamics
 # ):
@@ -755,6 +837,15 @@ def Opti_Problem(
         _v = _implemented_equispaced_schemes + _implemented_pseudospectral_schemes
         raise NotImplementedError(
             f"scheme {scheme} not implemented. Valid methods are {_v}."
+        )
+
+    if ini_guess == "zero":
+        inherit.append(_Zero_init)
+    elif ini_guess == "lin":
+        inherit.append(_Lin_init)
+    else:
+        raise NotImplementedError(
+            f"Initial value mode {ini_guess} not implemented. Valid methods are 'zero' and 'lin'."
         )
 
     class Adequate_Problem(*inherit):
