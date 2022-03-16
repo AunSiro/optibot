@@ -1058,6 +1058,7 @@ def dynamic_error_pseudospectral(
     q_arr, q_arr_d, v_arr, v_arr_d, q_arr_d_d, u_arr = interpolations_pseudospectral(
         qq, vv, uu, scheme, t0, t1, u_interp, x_interp, g_func, params, n_interp,
     )
+    g_func = try_array_f(g_func)
     err_q = q_arr_d - v_arr
     err_v = v_arr_d - g_func(q_arr, v_arr, u_arr, params)
     err_2 = q_arr_d_d - g_func(q_arr, q_arr_d, u_arr, params)
