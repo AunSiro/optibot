@@ -178,7 +178,7 @@ def expand_F(F, mode="numpy"):
             if x.shape[0] == 1 and DM(a).shape[0] != 1:
                 a = a.T
             dim = x.shape[-1] // 2
-            v = array(x)[:, dim:]
+            v = x[:, dim:]
             res = horzcat(v, a)
             if x_transposed and res.shape[0] == 1:
                 res = res.T

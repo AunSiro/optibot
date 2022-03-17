@@ -84,9 +84,9 @@ def _get_f_g_funcs(RHS, q_vars, u_vars=None, verbose=False, silent=True):
         silent = False
     q_type = type(q_vars)
     if q_type == int:
-        q_len = q_vars
+        n_q = q_vars
     elif q_type == list or q_type == tuple:
-        q_len = len(q_vars)
+        n_q = len(q_vars)
     else:
         raise ValueError("q_vars type not supported. Valid types are int and list")
     if not silent:
@@ -99,22 +99,30 @@ def _get_f_g_funcs(RHS, q_vars, u_vars=None, verbose=False, silent=True):
     G_cas_q = rhs_to_casadi_function(
         RHS, q_vars, u_vars, verbose, mode="q", silent=silent
     )
-    u_len = F_cas_x.mx_in()[1].shape[0]
-    p_len = F_cas_x.mx_in()[2].shape[0]
+    n_u = F_cas_x.mx_in()[1].shape[0]
+    n_p = F_cas_x.mx_in()[2].shape[0]
+    n_lambdas = 0
 
-    x_sym = cas.SX.sym("x", q_len * 2)
-    x_dot_sym = cas.SX.sym("x_dot", q_len * 2)
-    q_sym = cas.SX.sym("q", q_len)
-    q_dot_sym = cas.SX.sym("q_dot", q_len)
-    q_dot_dot_sym = cas.SX.sym("q_dot_dot", q_len)
-    u_sym = cas.SX.sym("u", u_len)
-    p_sym = cas.SX.sym("p", p_len)
-    lam_sym = cas.SX.sym("lam", 0)
+    x_sym = cas.SX.sym("x", n_q * 2).T
+    x_dot_sym = cas.SX.sym("x_dot", n_q * 2).T
+    q_sym = cas.SX.sym("q", n_q).T
+    q_dot_sym = cas.SX.sym("q_dot", n_q).T
+    q_dot_dot_sym = cas.SX.sym("q_dot_dot", n_q).T
+    u_sym = cas.SX.sym("u", n_u).T
+    p_sym = cas.SX.sym("p", n_p)
+    lam_sym = cas.SX.sym("lam", n_lambdas).T
+
+    _F = F_cas_x(x_sym, u_sym, p_sym)
+    _G = G_cas_q(q_sym, q_dot_sym, u_sym, p_sym)
+    if _F.shape[0] != 1:
+        _F = _F.T
+    if _G.shape[0] != 1:
+        _G = _G.T
 
     dynam_f_x = cas.Function(
         "dynamics_f_x",
         [x_sym, x_dot_sym, u_sym, lam_sym, p_sym],
-        [x_dot_sym.T - F_cas_x(x_sym, u_sym, p_sym)],
+        [x_dot_sym - _F],
         ["x", "x_dot", "u", "lam", "params"],
         ["residue"],
     )
@@ -122,7 +130,7 @@ def _get_f_g_funcs(RHS, q_vars, u_vars=None, verbose=False, silent=True):
     dynam_g_x = cas.Function(
         "dynamics_g_x",
         [x_sym, x_dot_sym, u_sym, lam_sym, p_sym],
-        [x_dot_sym[q_len:].T - F_cas_x(x_sym, u_sym, p_sym)[q_len:]],
+        [x_dot_sym[n_q:] - _F[n_q:]],
         ["x", "x_dot", "u", "lam", "params"],
         ["residue"],
     )
@@ -130,7 +138,7 @@ def _get_f_g_funcs(RHS, q_vars, u_vars=None, verbose=False, silent=True):
     dynam_g_q = cas.Function(
         "dynamics_g_q",
         [q_sym, q_dot_sym, q_dot_dot_sym, u_sym, lam_sym, p_sym],
-        [q_dot_dot_sym.T - G_cas_q(q_sym, q_dot_sym, u_sym, p_sym)],
+        [q_dot_dot_sym - _G],
         ["q", "q_dot", "q_dot_dot", "u", "lam", "params"],
         ["residue"],
     )
@@ -212,7 +220,10 @@ class _Opti_Problem:
         self.verbose = verbose
         self.silent = silent
 
-        self.LM.form_lagranges_equations()
+        try:
+            self.LM.form_lagranges_equations()
+        except AttributeError:
+            pass
 
     def _ini_guess_start(self):
         try:
@@ -791,6 +802,63 @@ class _Implicit_Dynamics:
         self.n_lambdas = dynam_f_x.mx_in()[3].shape[0]
 
 
+class _Function_Dynamics:
+    def dynamic_setup(self, func_kind, n_q, n_u, n_lambdas=0):
+
+        from .schemes import expand_G, reduce_F
+
+        n_p = len(self.params)
+
+        x_sym = cas.SX.sym("x", n_q * 2).T
+        x_dot_sym = cas.SX.sym("x_dot", n_q * 2).T
+        q_sym = cas.SX.sym("q", n_q).T
+        q_dot_sym = cas.SX.sym("q_dot", n_q).T
+        q_dot_dot_sym = cas.SX.sym("q_dot_dot", n_q).T
+        u_sym = cas.SX.sym("u", n_u).T
+        p_sym = cas.SX.sym("p", n_p)
+        lam_sym = cas.SX.sym("lam", n_lambdas).T
+
+        if func_kind == "f_x":
+            F_x = self.LM
+            G_q = reduce_F(F_x, "casadi")
+        elif func_kind == "g_q":
+            G_q = self.LM
+            F_x = expand_G(G_q, "casadi")
+        else:
+            raise NotImplementedError(
+                f"function kind {func_kind} not implemented. Implemented kinds are f_x and g_q"
+            )
+
+        _F = F_x(x_sym, u_sym, p_sym)
+        _G = G_q(q_sym, q_dot_sym, u_sym, p_sym)
+        if _F.shape[0] != 1:
+            _F = _F.T
+        if _G.shape[0] != 1:
+            _G = _G.T
+
+        dynam_f_x = cas.Function(
+            "dynamics_f_x",
+            [x_sym, x_dot_sym, u_sym, lam_sym, p_sym],
+            [x_dot_sym - _F],
+            ["x", "x_dot", "u", "lam", "params"],
+            ["residue"],
+        )
+
+        dynam_g_q = cas.Function(
+            "dynamics_g_q",
+            [q_sym, q_dot_sym, q_dot_dot_sym, u_sym, lam_sym, p_sym],
+            [q_dot_dot_sym - _G],
+            ["q", "q_dot", "q_dot_dot", "u", "lam", "params"],
+            ["residue"],
+        )
+        self.params_sym = symbols(f"p_0:{n_p}")
+        self.dyn_f_restr = dynam_f_x
+        self.dyn_g_restr = dynam_g_q
+        self.n_u = n_u
+        self.n_lambdas = n_lambdas
+        self.n_q = n_q
+
+
 class _Zero_init:
     def initial_guess(self):
         q_opti, v_opti, a_opti = self._ini_guess_start()
@@ -867,10 +935,20 @@ def Opti_Problem(
 
     if isinstance(LM, ImplicitLagrangesMethod):
         inherit.append(_Implicit_Dynamics)
+        if verbose:
+            print("Dynamics detected: Implicit Lagranges Method")
     elif isinstance(LM, (SimpLagrangesMethod, LagrangesMethod)):
         inherit.append(_Explicit_Dynamics)
+        if verbose:
+            print("Dynamics detected: Explicit Lagranges Method")
+    elif callable(LM):  # Maybe too generic?
+        inherit.append(_Function_Dynamics)
+        if verbose:
+            print("Dynamics detected: Function")
     else:
-        ValueError(f"LM must be a Lagranges Method object, not: {type(LM)}")
+        ValueError(
+            f"LM must be a Lagranges Method object or a function, not: {type(LM)}"
+        )
 
     if scheme in _implemented_equispaced_schemes:
         inherit.append(_Equispaced)
