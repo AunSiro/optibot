@@ -195,7 +195,6 @@ class _Opti_Problem:
         params,
         scheme="trapz",
         ini_guess="zero",
-        solve_repetitions=1,
         t_start=0,
         t_end=1,
         verbose=False,
@@ -214,7 +213,6 @@ class _Opti_Problem:
         self.params = params
         self.scheme = scheme
         self.ini_guess = ini_guess
-        self.solve_repetitions = solve_repetitions
         self.t_start = t_start
         self.t_end = t_end
         self.verbose = verbose
@@ -253,18 +251,36 @@ class _Opti_Problem:
         self.results = {"cpudt": cpudt}
         self._save_results()
 
-    def chrono_solve(self):
+    def chrono_solve(self, solve_repetitions):
+        """
+        
+
+        Parameters
+        ----------
+        solve_repetitions : int, optional. The default is 1.
+            Number of times solve() is called.
+
+        Raises
+        ------
+        RuntimeError
+            DESCRIPTION.
+
+        Returns
+        -------
+        None.
+
+        """
 
         cput0 = time()
         try:
-            for ii in range(self.solve_repetitions):
+            for ii in range(solve_repetitions):
                 sol = self.opti.solve()
         except AttributeError:
             raise RuntimeError(
                 "opti problem must be setup, use opti_setup() and apply_scheme()"
             )
         cput1 = time()
-        cpudt = (cput1 - cput0) / self.solve_repetitions
+        cpudt = (cput1 - cput0) / solve_repetitions
         self.sol = sol
         self.results = {"cpudt": cpudt, "cost": sol.value(self.cost)}
         self._save_results()
@@ -897,37 +913,87 @@ class _Lin_init:
                     self.opti.set_initial(self.opti_arrs["a_c"], 0)
 
 
-# class Pseudospectral_Explicit_Opti_Problem(
-#     _Opti_Problem, _Pseudospectral, _Explicit_Dynamics
-# ):
-#     pass
-
-
-# class Equispaced_Explicit_Opti_Problem(_Opti_Problem, _Equispaced, _Explicit_Dynamics):
-#     pass
-
-
-# class Pseudospectral_Implicit_Opti_Problem(
-#     _Opti_Problem, _Pseudospectral, _Implicit_Dynamics
-# ):
-#     pass
-
-
-# class Equispaced_Implicit_Opti_Problem(_Opti_Problem, _Equispaced, _Implicit_Dynamics):
-#     pass
-
-
 def Opti_Problem(
     LM,
     params,
     scheme="trapz",
     ini_guess="zero",
-    solve_repetitions=1,
     t_start=0,
     t_end=1,
     verbose=False,
     silent=True,
 ):
+    """
+    Creates an object that contains a casadi opti problem.
+    
+    Use the methods in this order:
+        
+        problem.dynamic_setup()
+        problem.opti_setup()
+        problem.apply_scheme()
+        
+        additional restrictions and functions, such as:
+            problem.u_sq_cost() [apply a u squared integral cost]
+            problem.opti.subject_to(conditions)
+            
+        problem.simple_solve() or problem.chrono_solve()
+        
+    Important points and arrays of the opti problem generated after opti_setup()
+    are stored at problem.opti_arrs and problem.opti_points
+    
+    Results obtained after solving are stored at problem.results
+
+    Parameters
+    ----------
+    LM : symbolic Lagranges Method object, or function
+        If possible, use a symbolic Lagranges Method object. A function F so that
+        x' = F(x, u, params) or G so that q'' = g(q, q', u, params) are also supported.
+    params : list of numerical parameters
+        Contains the values of the parameters of the problem
+    scheme : str
+        Discretization scheme. The default is "trapz". Acceptable values are:
+            
+            "trapz" : trapezoidal scheme 
+            "trapz_mod": modified 2nd order compatible trapezoidal scheme 
+            "hs": Hermite-Simpson scheme 
+            "hs_mod": modified 2nd order compatible Hermite-Simpson scheme 
+            "hs_parab": Hermite-Simpson scheme compatible with parabolic U
+            "hs_mod_parab": 2nd order compatible Hermite-Simpson scheme with parabolic U
+            
+            "LG" Legendre-Gauss Collocation
+            "LG_inv" LG Colocation with enpoint instead of startpoint as node point
+            "LGR" Legendre-Gauss-Radau Collocation
+            "LGR_inv" LGR with endpoint instead of start point as collocation point
+            "LGL" Legendre-Gauss-Lobato Collocation
+            "LGLm" 2nd order modified LGL that only uses interior points as collocation
+            "LG2" 2nd order modified LG that adds endpoint as node point
+            "D2" 2nd order modified LGL 
+    ini_guess : ["zero", "lin"] The default is "zero".
+        initial guess strategy for the optimization. Valid values are:
+            "zero": All arrays initialised as zeroes.
+            "lin": q arrays initialised as lineal interpolation between two points,
+                   q' arrays initialised as constant speed where applicable
+                   q'' arrays initialised as zeroes where applicable
+    t_start : float, optional
+        Initial time. The default is 0.
+    t_end : float, optional
+        End time. The default is 1.
+    verbose : bool, optional
+       Expanded information printed during operation. The default is False.
+    silent : bool, optional
+        If true, no information is printed during operation. The default is True.
+
+    Raises
+    ------
+    NotImplementedError
+        When trying to use options not implemented yet.
+
+    Returns
+    -------
+    Optimization Object
+        Contains methods for easier configuration of opti problems
+
+    """
     from .symbolic import ImplicitLagrangesMethod, SimpLagrangesMethod
     from sympy.physics.mechanics import LagrangesMethod
 
@@ -973,13 +1039,5 @@ def Opti_Problem(
         pass
 
     return Adequate_Problem(
-        LM,
-        params,
-        scheme,
-        ini_guess,
-        solve_repetitions,
-        t_start,
-        t_end,
-        verbose,
-        silent,
+        LM, params, scheme, ini_guess, t_start, t_end, verbose, silent,
     )
