@@ -231,7 +231,7 @@ def expand_G(G, mode="numpy"):
     old_f_name = str(G.__name__)
 
     def F(x, u, params):
-        dim = x.shape[-1]
+        dim = x.shape[-1] // 2
         if len(x.shape) == 1:
             q = x[:dim]
             v = x[dim:]

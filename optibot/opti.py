@@ -608,7 +608,7 @@ class _Equispaced:
                 )
                 / (3 * self.N)
             )
-        except AttributeError:
+        except KeyError:
             cost = dt * cas.sum2(
                 (cas.sum1(U[:, :] ** 2) + cas.sum1(U[1:-1, :] ** 2)) / self.N
             )
@@ -837,25 +837,54 @@ class _Function_Dynamics:
         if func_kind == "f_x":
             F_x = self.LM
             G_q = reduce_F(F_x, "casadi")
+
         elif func_kind == "g_q":
             G_q = self.LM
             F_x = expand_G(G_q, "casadi")
+
+        elif func_kind == "f_x_impl":
+            F_restr = self.LM
+            x_restr = F_restr(x_sym, x_dot_sym, u_sym, p_sym)
+            if x_restr.shape[0] != 1:
+                x_restr = x_restr.T
+
+            x_union = cas.horzcat(q_sym, q_dot_sym)
+            x_dot_union = cas.horzcat(q_dot_sym, q_dot_dot_sym)
+
+            q_restr = F_restr(x_union, x_dot_union, u_sym, p_sym)
+            if q_restr.shape[0] != 1:
+                q_restr = q_restr.T
+            q_restr = q_restr[:n_q]
+
+        elif func_kind == "g_q_impl":
+            G_restr = self.LM
+            q_restr = G_restr(q_sym, q_dot_sym, q_dot_dot_sym, u_sym, p_sym)
+            if q_restr.shape[0] != 1:
+                q_restr = q_restr.T
+
+            x_restr = G_restr(x_sym[:n_q], x_sym[n_q:], x_dot_sym[n_q:], u_sym, p_sym)
+            if x_restr.shape[0] != 1:
+                x_restr = x_restr.T
+            x_restr = cas.horzcat(x_restr, x_dot_sym[:n_q] - x_sym[n_q:])
         else:
             raise NotImplementedError(
-                f"function kind {func_kind} not implemented. Implemented kinds are f_x and g_q"
+                f"function kind {func_kind} not implemented. Implemented kinds are f_x, g_q, f_x_imp and g_q_impl"
             )
 
-        _F = F_x(x_sym, u_sym, p_sym)
-        _G = G_q(q_sym, q_dot_sym, u_sym, p_sym)
-        if _F.shape[0] != 1:
-            _F = _F.T
-        if _G.shape[0] != 1:
-            _G = _G.T
+        if func_kind in ["f_x", "g_q"]:
+            _F = F_x(x_sym, u_sym, p_sym)
+            _G = G_q(q_sym, q_dot_sym, u_sym, p_sym)
+            if _F.shape[0] != 1:
+                _F = _F.T
+            if _G.shape[0] != 1:
+                _G = _G.T
+            x_restr = x_dot_sym - _F
+            q_restr = q_dot_dot_sym - _G
 
         dynam_f_x = cas.Function(
             "dynamics_f_x",
             [x_sym, x_dot_sym, u_sym, lam_sym, p_sym],
-            [x_dot_sym - _F],
+            [x_restr],
             ["x", "x_dot", "u", "lam", "params"],
             ["residue"],
         )
@@ -863,7 +892,7 @@ class _Function_Dynamics:
         dynam_g_q = cas.Function(
             "dynamics_g_q",
             [q_sym, q_dot_sym, q_dot_dot_sym, u_sym, lam_sym, p_sym],
-            [q_dot_dot_sym - _G],
+            [q_restr],
             ["q", "q_dot", "q_dot_dot", "u", "lam", "params"],
             ["residue"],
         )
@@ -911,6 +940,31 @@ class _Lin_init:
                     )
                     self.opti.set_initial(self.opti_arrs["v_c"], q_dot_guess[1:, :])
                     self.opti.set_initial(self.opti_arrs["a_c"], 0)
+
+
+class _Custom_init:
+    def initial_guess(self, q_guess, v_guess, a_guess, u_guess):
+        q_opti, v_opti, a_opti = self._ini_guess_start()
+        u_opti = self.opti_arrs["u"]
+        self.opti.set_initial(q_opti, q_guess)
+        self.opti.set_initial(u_opti, u_guess)
+        if self.scheme not in ["LG2", "D2", "LGLm"]:
+            self.opti.set_initial(v_opti, v_guess)
+            if self.scheme_mode == "equispaced":
+                self.opti.set_initial(a_opti, 0)
+                if "hs" in self.scheme:
+                    self.opti.set_initial(
+                        self.opti_arrs["q_c"], (q_guess[:-1, :] + q_guess[1:, :]) / 2
+                    )
+                    self.opti.set_initial(
+                        self.opti_arrs["v_c"], (v_guess[:-1, :] + v_guess[1:, :]) / 2
+                    )
+                    self.opti.set_initial(
+                        self.opti_arrs["a_c"], (a_guess[:-1, :] + a_guess[1:, :]) / 2
+                    )
+                    self.opti.set_initial(
+                        self.opti_arrs["u_c"], (u_guess[:-1, :] + u_guess[1:, :]) / 2
+                    )
 
 
 def Opti_Problem(
@@ -968,12 +1022,13 @@ def Opti_Problem(
             "LGLm" 2nd order modified LGL that only uses interior points as collocation
             "LG2" 2nd order modified LG that adds endpoint as node point
             "D2" 2nd order modified LGL 
-    ini_guess : ["zero", "lin"] The default is "zero".
+    ini_guess : ["zero", "lin", "custom"] The default is "zero".
         initial guess strategy for the optimization. Valid values are:
             "zero": All arrays initialised as zeroes.
             "lin": q arrays initialised as lineal interpolation between two points,
                    q' arrays initialised as constant speed where applicable
                    q'' arrays initialised as zeroes where applicable
+            "custom": user defined arrays for q, v, a and u
     t_start : float, optional
         Initial time. The default is 0.
     t_end : float, optional
@@ -1030,9 +1085,11 @@ def Opti_Problem(
         inherit.append(_Zero_init)
     elif ini_guess == "lin":
         inherit.append(_Lin_init)
+    elif ini_guess == "custom":
+        inherit.append(_Custom_init)
     else:
         raise NotImplementedError(
-            f"Initial value mode {ini_guess} not implemented. Valid methods are 'zero' and 'lin'."
+            f"Initial value mode {ini_guess} not implemented. Valid methods are 'zero', 'lin' and 'custom'."
         )
 
     class Adequate_Problem(*inherit):

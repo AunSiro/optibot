@@ -339,7 +339,7 @@ def dynamic_error_implicit(
         X_dot = zeros_like(x_arr)
         for ii in range(N):
             X_dot[ii, :dim] = x_arr[ii, dim:]
-            X_dot[ii, dim:] = G(x_arr[ii], u_arr[ii], params)
+            X_dot[ii, dim:] = G(x_arr[ii], u_arr[ii], params).flatten()
 
     t_interp = linspace(0, t_end, n_interp)
     x_interp, u_interp = interpolated_array(
@@ -380,10 +380,10 @@ def dynamic_error_implicit(
     f_arr_b = zeros([n_interp, dim])
     for ii in range(n_interp):
 
-        f_arr_a[ii, :] = G(x_interp[ii], u_interp[ii], params)
+        f_arr_a[ii, :] = G(x_interp[ii], u_interp[ii], params).flatten()
         x_q = x_interp[ii].copy()
         x_q[dim:] = x_dot_interp[ii, :dim]
-        f_arr_b[ii, :] = G(x_q, u_interp[ii], params)
+        f_arr_b[ii, :] = G(x_q, u_interp[ii], params).flatten()
     dyn_err_q = x_dot_interp[:, :dim] - x_interp[:, dim:]
     dyn_err_v = x_dot_interp[:, dim:] - f_arr_a
     dyn_err_2_a = x_dot_dot_interp[:, :dim] - f_arr_a
