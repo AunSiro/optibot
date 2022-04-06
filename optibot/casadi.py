@@ -77,8 +77,10 @@ def rhs_to_casadi_function(
     """
     Converts an array of symbolic expressions RHS(x, u, params) to a casadi 
     function.
-    Designed to work with systems so that
+    Designed to work with systems so that either
         x' = RHS(x, u, params)
+    or
+        a = RHS(x, u, params)
 
     Parameters
     ----------

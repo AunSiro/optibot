@@ -3,6 +3,11 @@
 Created on Mon May 31 12:52:20 2021
 
 @author: Siro Moreno
+
+Here we present functions and classes that operate with SymPy symbolic objects.
+There are handy auxiliary functions, functions that convert expressions
+between notations, and classes that inherit from Lagranges Method and expand
+it in various ways. 
 """
 from sympy import (
     symbols,
@@ -46,6 +51,11 @@ def is_iterable(x):
 
 
 def make_list(x):
+    """
+    Use when in need to iterate in a list but unsure if got only an item instead.
+    If x is iterable, will return list(x).
+    If not, will return a list containing x as only item.
+    """
     if is_iterable(x):
         return list(x)
     else:
@@ -55,6 +65,11 @@ def make_list(x):
 
 
 def q_2_x(expr, qs, qdots):
+    """
+    Substitutes qs[i] for dynamic symbol x_i and qdots[i] for dynamic symbol
+    x_(n+i) in a symbolic expression 
+    """
+    assert len(qs) == len(qdots)
     n = len(qs)
     subs_list = []
     for i in range(n):
@@ -153,7 +168,7 @@ def lagrange(L_expr, var):
     return lag.simplify().expand()
 
 
-def get_lagr_eqs(T, U, n_vars):
+def get_lagr_eqs(T, U, qs):
     """
     Get a list of lagrange equations. T and U are Kinetic energy
     and Potential energy, as functions of coordinates q, its
@@ -162,11 +177,11 @@ def get_lagr_eqs(T, U, n_vars):
     Parameters
     ----------
     T : Symbolic Expression
-        Kinetic Energy as function of q_i with i in (0,n_vars).
+        Kinetic Energy.
     U : Symbolic Expression
-        Potential Energy as function of q_i with i in (0,n_vars).
-    n_vars : int
-        Amount of variables.
+        Potential Energy.
+    qs : int or list of dynamic symbols
+        if int: amount of variables q_i.
 
     Returns
     -------
@@ -174,21 +189,55 @@ def get_lagr_eqs(T, U, n_vars):
         List of simbolic lagrange equations.
 
     """
+    if type(qs) == int:
+        n_vars = qs
+        qs = [dynamicsymbols(f"q_{ii}") for ii in range(n_vars)]
+    else:
+        n_vars = len(qs)
+
     L = T - U
     res = []
     for ii in range(n_vars):
-        q = dynamicsymbols(f"q_{ii}")
+        q = qs[ii]
         res.append(simplify(lagrange(L, q)))
     return res
 
 
 def diff_to_symb(symb):
+    """
+    Given a symbol or dynamic symbol, returns the corresponding symbol.
+    If type is already Symbol, it will return symb unchanged.
+    If symb is a dynamic symbol, an equivalent symbol will be returned.
+    If symb is a derivative of a dynamic symbol:
+        - if the base dynamic symbol is 'q_n' or 'qn' with n being a number,
+          will return 'v_n' or 'vn' for the first derivative,
+          'a_n' or 'an' for the second derivative, and 'a_dot_n' or 'a_dotn'
+          for succesive derivatives, repeating the segment '_dot' according to
+          the degree of the derivative.
+        - otherwise, a symbol created adding '_dot' to the name of the symbol
+          matching the order of the derivative will be returned
+
+    Parameters
+    ----------
+    symb : Symbol, dynamic symbol or derivative of a dynamic symbol
+        Object to convert to symbol
+
+    Returns
+    -------
+    Symbol
+
+    """
+    if type(symb) == Symbol:
+        return symb
+
     q = symb
     dot_level = 0
     while type(q) == Derivative:
         q = q.integrate()
         dot_level += 1
-    q_name = q.__str__()[:-3]
+
+    q_name = q.__str__()[:-3]  # if is a dynamic symbol, str will be like 'q_1(t)'
+
     if dot_level == 0:
         pass
     elif q_name[:2] == "q_" or (q_name[0] == "q" and q_name[1].isdigit()):
@@ -305,474 +354,6 @@ def lagr_to_RHS(lagr_eqs, output_msgs=True):
         print("Simplifying result expressions")
     RHS = simplify(coeff_mat_inv @ (u_mat - c_mat))
     return RHS
-
-
-class SimpLagrangesMethod(LagrangesMethod):
-    def __init__(
-        self,
-        Lagrangian,
-        qs,
-        forcelist=None,
-        bodies=None,
-        frame=None,
-        hol_coneqs=None,
-        nonhol_coneqs=None,
-        simplif=True,
-        verbose=True,
-    ):
-        super().__init__(
-            Lagrangian, qs, forcelist, bodies, frame, hol_coneqs, nonhol_coneqs,
-        )
-        self._verbose = verbose
-        self._simplif = simplif
-        self._rhs = None
-        self._rhs_reduced = None
-        self._rhs_full = None
-        self.R = None
-        self._lambda_vec = None
-
-    def _simplyprint(self, expr, verbose=True, simplif=True, name=""):
-        if simplif:
-            if verbose:
-                print("simplifying " + name)
-            return simplify(expr)
-        else:
-            return expr
-
-    def _invsimplyprint(self, expr, verbose=True, simplif=True, name=""):
-        if verbose:
-            print("Generating " + name)
-        expr = expr.inv()
-        return self._simplyprint(expr, verbose, simplif, name)
-
-    @property
-    def mass_matrix(self):
-        """Returns the mass matrix.
-        Explanation
-        ===========
-        If the system is described by 'n' generalized coordinates
-        then an n X n matrix is returned.
-        """
-
-        if self.eom is None:
-            raise ValueError("Need to compute the equations of motion first")
-        return self._m_d
-
-    @property
-    def rhs(self):
-        """Returns equations that can be solved numerically.
-        Parameters
-        ==========
-        
-        """
-        if self.eom is None:
-            raise ValueError("Need to compute the equations of motion first")
-        if not self._rhs is None:
-            return self._rhs
-
-        n = len(self.q)
-        t = dynamicsymbols._t
-        M = self._m_d
-        self.Q = self.forcing
-        self.q_dot = self._qdots
-        coneqs = self.coneqs
-        _invsimplyprint = self._invsimplyprint
-        _simplyprint = self._simplyprint
-        verbose = self._verbose
-        simplif = self._simplif
-
-        # print(self.coneqs,len(self.coneqs))
-        if len(coneqs) > 0:
-            m = len(coneqs)
-            n_ind = n - m
-
-            self.M_in = M[:n_ind, :n_ind]
-            self.M_de = M[n_ind:, n_ind:]
-            self.M_con = M[:n_ind, n_ind:]
-
-            self.phi_q = self.lam_coeffs
-            self.phi_q_in = self.phi_q[:, :n_ind]
-            self.phi_q_de = self.phi_q[:, n_ind:]
-
-            self.Q_in = Matrix(self.Q[:n_ind])
-            self.Q_de = Matrix(self.Q[n_ind:])
-
-            self.q_dot_in = Matrix(self.q_dot[:n_ind])
-
-            self.phi_q_de_inv = _invsimplyprint(
-                self.phi_q_de, verbose, simplif, name="Phi_q_de_inv"
-            )
-
-            self.R = _simplyprint(
-                -self.phi_q_de_inv @ self.phi_q_in, verbose, simplif, name="R"
-            )
-            self.R_dot = self.R.diff(t)
-            self.q_dot_de = self.R @ self.q_dot_in
-            H_con = self.M_con @ self.R
-            H = self.M_in + H_con + H_con.T + self.R.T @ self.M_de @ self.R
-            self.H = _simplyprint(H, verbose, simplif, name="H")
-            K = self.R.T @ self.M_de @ self.R_dot + self.M_con @ self.R_dot
-            self.K = _simplyprint(K, verbose, simplif, name="K")
-            Fa = self.Q_in + self.R.T @ self.Q_de
-            self.Fa = _simplyprint(Fa, verbose, simplif, name="Fa")
-
-            h_inv = _invsimplyprint(self.H, verbose, simplif, name="H_inv")
-            q_dotdot_in = h_inv @ (self.Fa - self.K @ self.q_dot_in)
-            self.q_dotdot_in = _simplyprint(
-                q_dotdot_in, verbose, simplif, name="RHS_in"
-            )
-
-            dyn_deps = sum(
-                [find_dyn_dependencies(expr) for expr in self.q_dotdot_in], start=[]
-            )
-            q_de = self.q[n_ind:]
-
-            if all([not symb in dyn_deps for symb in q_de]):
-                if verbose:
-                    print("Reduced model found and completed")
-                self._rhs_reduced = Matrix(list(self.q_dot_in) + list(self.q_dotdot_in))
-                self._rhs = self._rhs_reduced
-                return self._rhs
-            else:
-                if verbose:
-                    print(
-                        "Dependencies found in simplified model on dependent coordinates,"
-                    )
-                    print("Calculating complete model.")
-                self.calculate_RHS_complete()
-                return self._rhs
-        else:
-            M_inv = _invsimplyprint(self._m_d, verbose, simplif, name="M_inv")
-            self.q_dotdot = _simplyprint(M_inv @ self.Q, verbose, simplif, name="RHS")
-            if verbose:
-                print("Model completed")
-            self._rhs = Matrix(list(self.q_dot) + list(self.q_dotdot))
-            return self._rhs
-
-    def calculate_RHS_complete(self):
-        verbose = self._verbose
-        simplif = self._simplif
-        _simplyprint = self._simplyprint
-
-        if self.R is None:
-            self.rhs
-
-        if (self._rhs is None) or (len(self.coneqs) > 0):
-            q_dotdot_de = self.R_dot @ self.q_dot_in + self.R @ self.q_dotdot_in
-
-            self.q_dotdot_de = _simplyprint(
-                q_dotdot_de, verbose, simplif, name="Dependent Variables"
-            )
-            self._rhs = Matrix(
-                list(self.q_dot) + list(self.q_dotdot_in) + list(self.q_dotdot_de)
-            )
-
-        return self._rhs
-
-    @property
-    def rhs_reduced(self):
-        """Returns equations that can be solved numerically.
-        Parameters
-        ==========
-        
-        """
-        if self.eom is None:
-            raise ValueError("Need to compute the equations of motion first")
-        if self._rhs is None:
-            self.rhs
-        if self._rhs_reduced is None:
-            raise ValueError(
-                "System could not be reduced to a lower number of variables, use rhs instead"
-            )
-        else:
-            return self._rhs_reduced
-
-    @property
-    def lambda_vector(self):
-        if self._lambda_vec is None:
-            if len(self.coneqs) == 0:
-                self._lambda_vec = []
-            else:
-                if self._verbose:
-                    print("Generating and simplifiying Lambdas vector")
-                self._lambda_vec = simplify(
-                    self.phi_q_de_inv @ (self.Q_de - self.M_de @ self.q_dotdot_de)
-                )
-        return self._lambda_vec
-
-    @property
-    def rhs_full(self):
-        """Returns equations that can be solved numerically.
-        Parameters
-        ==========
-        
-        """
-        if self.eom is None:
-            raise ValueError("Need to compute the equations of motion first")
-        if self._rhs_full is None:
-            self.calculate_RHS_complete()
-
-            self._rhs_full = Matrix(list(self.rhs) + list(self.lambda_vector))
-        return self._rhs_full
-
-    def sym_pinv_dyn(self, ext_forces):
-        """Symbolic pseudo-inverse dynamics. If system is fully actuated, will 
-        be the exact inverse dynamics.
-        Parameters
-        ----------
-        ext_forces : list of symbols
-            list of actuation symbols respect to which the inverse dynamics
-            should be calculated
-        """
-        if self.eom is None:
-            raise ValueError("Need to compute the equations of motion first")
-        ext_forces = Matrix(ext_forces)
-        _E = self.forcing.jacobian(ext_forces)
-        subs_list = [[uu, 0] for uu in ext_forces]
-        _f = self.forcing.subs(subs_list)
-        _Z = self.mass_matrix @ self._qdoubledots - _f
-        _sym_pinv_dyn = _E.pinv() @ _Z
-        return _sym_pinv_dyn
-
-    def num_pinv_dyn(self, ext_forces):
-        """Numeric pseudo-inverse dynamics. If system is fully actuated, will 
-        be the exact inverse dynamics.
-        Parameters
-        ----------
-        ext_forces : list of symbols
-            list of actuation symbols respect to which the inverse dynamics
-            should be calculated
-        Returns
-        -------
-        Function:
-            Numerical function of q, q', q'' and params
-        """
-        if self.eom is None:
-            raise ValueError("Need to compute the equations of motion first")
-        sym_pinv_dyn = list(self.sym_pinv_dyn(ext_forces))
-        exhaustive_expr = list(
-            self.mass_matrix_full @ self.forcing_full
-        )  # Contains all parameters involved
-        param_list = set()
-        _dy_sy = set()
-        for expr in exhaustive_expr:
-            _dy_sy = _dy_sy.union(find_dynamicsymbols(expr))
-        _dy_sy = sorted(_dy_sy, key=derivative_level, reverse=True)
-        # we substitute dynamic symbols with a dummy variable in order to
-        # avoid adding t to the parameter list if it is not a parameter
-        _dumm = symbols("dummy")
-        for expr in exhaustive_expr:
-            subs_list = [[dvar, _dumm] for dvar in _dy_sy]
-            new_expr = expr.subs(subs_list)
-            param_list = param_list.union(new_expr.atoms(Symbol))
-        param_list.remove(_dumm)
-        for act_sym in ext_forces:
-            if act_sym in param_list:
-                param_list.remove(act_sym)
-
-        for ds in _dy_sy:
-            base_sym = find_dyn_dependencies(ds)[0]
-            if base_sym not in self._q and base_sym not in ext_forces:
-                param_list.addn(ds)
-        param_list = sorted(param_list, key=get_str)
-
-        _lambd_pinv_dyn = lambdify(
-            [self._q, self._qdots, self._qdoubledots, param_list], sym_pinv_dyn
-        )
-
-        def _num_pinv_dyn(q, q_dot, q_dotdot, params):
-            return _lambd_pinv_dyn(q, q_dot, q_dotdot, params)
-
-        _num_pinv_dyn.__doc__ = f"""Numeric pseudo-inverse dynamics. If system is fully actuated, will 
-            be the exact inverse dynamics.
-            Parameters
-            ----------
-            q : array of {len(list(self._q))} elements
-                coordinates of point
-            q_dot : array of {len(list(self._q))} elements
-                speeds
-            q_dotdot : array of {len(list(self._q))} elements
-                accelerations
-            params : array of {len(list(param_list))} elements
-                physical parameters of the problem:
-                    {param_list}
-            Returns
-            -------
-            u : array of actuations that produce the accelerations that least
-            diverge from the given
-            """
-        return _num_pinv_dyn
-
-
-class ImplicitLagrangesMethod(LagrangesMethod):
-    @property
-    def mass_matrix_square(self):
-        """Augments the coefficients of restrictions to the mass_matrix.
-        Returns:
-            | M    A_c|
-            |m_cd   0 |
-        So that the dynamics can be written as 
-            | M    A_c|   | q''  |   |f_d |
-            |         | @ |      | = |    |
-            |m_cd   0 |   |lambda|   |f_dc|
-        """
-
-        if self.eom is None:
-            raise ValueError("Need to compute the equations of motion first")
-        m = len(self.coneqs)
-        row1 = self.mass_matrix
-        if self.coneqs:
-            row2 = self._m_cd.row_join(zeros(m, m))
-            return row1.col_join(row2)
-        else:
-            return row1
-
-    @property
-    def implicit_dynamics_q(self):
-        """Returns a vector of implicit dynamics.
-        Given that the dynamics can be written as:
-            | M    A_c|   | q''  |   |f_d |
-            |         | @ |      | = |    |
-            |m_cd   0 |   |lambda|   |f_dc|
-        Returns a vector D equal to:
-            | M    A_c|   | q''  |   |f_d |
-        D = |         | @ |      | - |    |
-            |m_cd   0 |   |lambda|   |f_dc|
-        so that the dynamics can be defined as:
-            D(q, q', q'', u, lambdas, params) = 0
-        """
-        if self.eom is None:
-            raise ValueError("Need to compute the equations of motion first")
-        M = self.mass_matrix_square
-        if self.coneqs:
-            F = self.forcing.col_join(self._f_cd)
-            Q_exp = self._qdoubledots.col_join(self.lam_vec)
-        else:
-            F = self.forcing
-            Q_exp = self._qdoubledots
-
-        return M @ Q_exp - F
-
-    @property
-    def implicit_dynamics_x(self):
-        """Returns a vector of implicit dynamics.
-        Given that the dynamics can be written as:
-            | M    A_c|   | q''  |   |f_d |
-            |         | @ |      | = |    |
-            |m_cd   0 |   |lambda|   |f_dc|
-        And transforming the variables q and v into x:
-                | q |   | x_q |
-            x = |   | = |     |
-                | v |   | x_v |
-        Expressing the dynammics in terms of x:
-            | I   0    0 |   |      |   |x_v |
-            |            |   | x'   |   |    |
-            | 0   M   A_c| @ |      | = |f_d |
-            |            |   |      |   |    |
-            | 0  m_cd  0 |   |lambda|   |f_dc|
-            
-        Function returns a vector D equal to:
-            | I   0    0 |   |      |   |x_v |
-            |            |   | x'   |   |    |
-        D = | 0   M   A_c| @ |      | - |f_d |
-            |            |   |      |   |    |
-            | 0  m_cd  0 |   |lambda|   |f_dc|
-        so that the dynamics can be defined as:
-            D(x, x', u, lambdas, params) = 0
-        """
-        if self.eom is None:
-            raise ValueError("Need to compute the equations of motion first")
-        M = q_2_x(self.mass_matrix_full, self.q, self._qdots)
-        n = len(self.q)
-        X = Matrix(dynamicsymbols("x_0:" + str(2 * n)))
-        X_dot = X.diff(dynamicsymbols._t)
-        forcing = q_2_x(self.forcing, self.q, self._qdots)
-        if self.coneqs:
-            f_cd = q_2_x(self._f_cd, self.q, self._qdots)
-            F = Matrix(X[n:]).col_join(forcing).col_join(f_cd)
-            X_exp = X_dot.col_join(self.lam_vec)
-        else:
-            F = Matrix(X[n:]).col_join(forcing)
-            X_exp = X_dot
-
-        return M @ X_exp - F
-
-    def sym_pinv_dyn(self, ext_forces):
-        """Symbolic pseudo-inverse dynamics. If system is fully actuated, will 
-        be the exact inverse dynamics.
-        Parameters
-        ----------
-        ext_forces : list of symbols
-            list of actuation symbols respect to which the inverse dynamics
-            should be calculated
-        """
-        if self.eom is None:
-            raise ValueError("Need to compute the equations of motion first")
-        ext_forces = Matrix(ext_forces)
-        _E = self.forcing.jacobian(ext_forces)
-        _f = self.forcing - _E @ ext_forces
-        _Z = self.mass_matrix @ self._qdoubledots - _f
-        _sym_pinv_dyn = _E.pinv() @ _Z
-        return _sym_pinv_dyn
-
-    def num_pinv_dyn(self, ext_forces):
-        """Numeric pseudo-inverse dynamics. If system is fully actuated, will 
-        be the exact inverse dynamics.
-        Parameters
-        ----------
-        ext_forces : list of symbols
-            list of actuation symbols respect to which the inverse dynamics
-            should be calculated
-        Returns
-        -------
-        Function:
-            Numerical function of q, q', q'' and params
-        """
-        if self.eom is None:
-            raise ValueError("Need to compute the equations of motion first")
-        sym_pinv_dyn = list(self.sym_pinv_dyn(ext_forces))
-        param_list = set()
-        _dy_sy = sorted_dynamic_symbols(sym_pinv_dyn)
-        # we substitute dynamic symbols with a dummy variable in order to
-        # avoid adding t to the parameter list if it is not a parameter
-        _dumm = symbols("dummy")
-        for expr in sym_pinv_dyn:
-            subs_list = [[dvar, _dumm] for dvar in _dy_sy]
-            new_expr = expr.subs(subs_list)
-            param_list.union(new_expr.atoms(Symbol))
-        param_list.remove(_dumm)
-
-        for ds in _dy_sy:
-            if find_dyn_dependencies(ds)[0] not in self._q:
-                param_list.addn(ds)
-        param_list = sorted(param_list, key=get_str)
-
-        _lambd_pinv_dyn = lambdify(
-            [self._q, self._qdots, self._qdoubledots, param_list], sym_pinv_dyn
-        )
-
-        def _num_pinv_dyn(q, q_dot, q_dotdot, params):
-            return _lambd_pinv_dyn(q, q_dot, q_dotdot, params)
-
-        _num_pinv_dyn.__doc__ = f"""Numeric pseudo-inverse dynamics. If system is fully actuated, will 
-            be the exact inverse dynamics.
-            Parameters
-            ----------
-            q : array of {len(list(self._q))} elements
-                coordinates of point
-            q_dot : array of {len(list(self._q))} elements
-                speeds
-            q_dotdot : array of {len(list(self._q))} elements
-                accelerations
-            params : array of {len(list(param_list))} elements
-                physical parameters of the problem:
-                    {param_list}
-            Returns
-            -------
-            u : array of actuations that produce the accelerations that least
-            diverge from the given
-            """
-        return _num_pinv_dyn
 
 
 def add_if_not_there(x, container):
@@ -1100,3 +681,485 @@ def print_funcs(expr_list, q_vars=0, flavour="np", verbose=False):
 
     print(msg)
     return msg
+
+
+# --- Modifications of Lagranges Method from Sympy:
+
+
+class SimpLagrangesMethod(LagrangesMethod):
+    """
+    A modification of the Lagranges Method so that it can symplify the system
+    to independent variables, transforming it through the restrictions.
+    Independent variables must be stated firs in qs.
+    """
+
+    def __init__(
+        self,
+        Lagrangian,
+        qs,
+        forcelist=None,
+        bodies=None,
+        frame=None,
+        hol_coneqs=None,
+        nonhol_coneqs=None,
+        simplif=True,
+        verbose=True,
+    ):
+        super().__init__(
+            Lagrangian, qs, forcelist, bodies, frame, hol_coneqs, nonhol_coneqs,
+        )
+        self._verbose = verbose
+        self._simplif = simplif
+        self._rhs = None
+        self._rhs_reduced = None
+        self._rhs_full = None
+        self.R = None
+        self._lambda_vec = None
+
+    def _simplyprint(self, expr, verbose=True, simplif=True, name=""):
+        if simplif:
+            if verbose:
+                print("simplifying " + name)
+            return simplify(expr)
+        else:
+            return expr
+
+    def _invsimplyprint(self, expr, verbose=True, simplif=True, name=""):
+        if verbose:
+            print("Generating " + name)
+        expr = expr.inv()
+        return self._simplyprint(expr, verbose, simplif, name)
+
+    @property
+    def mass_matrix(self):
+        """Returns the mass matrix.
+        Explanation
+        ===========
+        If the system is described by 'n' generalized coordinates
+        then an n X n matrix is returned.
+        """
+
+        if self.eom is None:
+            raise ValueError("Need to compute the equations of motion first")
+        return self._m_d
+
+    @property
+    def rhs(self):
+        """Returns equations that can be solved numerically.
+        Parameters
+        ==========
+        
+        """
+        if self.eom is None:
+            raise ValueError("Need to compute the equations of motion first")
+        if not self._rhs is None:
+            return self._rhs
+
+        n = len(self.q)
+        t = dynamicsymbols._t
+        M = self._m_d
+        self.Q = self.forcing
+        self.q_dot = self._qdots
+        coneqs = self.coneqs
+        _invsimplyprint = self._invsimplyprint
+        _simplyprint = self._simplyprint
+        verbose = self._verbose
+        simplif = self._simplif
+
+        # print(self.coneqs,len(self.coneqs))
+        if len(coneqs) > 0:
+            m = len(coneqs)
+            n_ind = n - m
+
+            self.M_in = M[:n_ind, :n_ind]
+            self.M_de = M[n_ind:, n_ind:]
+            self.M_con = M[:n_ind, n_ind:]
+
+            self.phi_q = self.lam_coeffs
+            self.phi_q_in = self.phi_q[:, :n_ind]
+            self.phi_q_de = self.phi_q[:, n_ind:]
+
+            self.Q_in = Matrix(self.Q[:n_ind])
+            self.Q_de = Matrix(self.Q[n_ind:])
+
+            self.q_dot_in = Matrix(self.q_dot[:n_ind])
+
+            self.phi_q_de_inv = _invsimplyprint(
+                self.phi_q_de, verbose, simplif, name="Phi_q_de_inv"
+            )
+
+            self.R = _simplyprint(
+                -self.phi_q_de_inv @ self.phi_q_in, verbose, simplif, name="R"
+            )
+            self.R_dot = self.R.diff(t)
+            self.q_dot_de = self.R @ self.q_dot_in
+            H_con = self.M_con @ self.R
+            H = self.M_in + H_con + H_con.T + self.R.T @ self.M_de @ self.R
+            self.H = _simplyprint(H, verbose, simplif, name="H")
+            K = self.R.T @ self.M_de @ self.R_dot + self.M_con @ self.R_dot
+            self.K = _simplyprint(K, verbose, simplif, name="K")
+            Fa = self.Q_in + self.R.T @ self.Q_de
+            self.Fa = _simplyprint(Fa, verbose, simplif, name="Fa")
+
+            h_inv = _invsimplyprint(self.H, verbose, simplif, name="H_inv")
+            q_dotdot_in = h_inv @ (self.Fa - self.K @ self.q_dot_in)
+            self.q_dotdot_in = _simplyprint(
+                q_dotdot_in, verbose, simplif, name="RHS_in"
+            )
+
+            dyn_deps = sum(
+                [find_dyn_dependencies(expr) for expr in self.q_dotdot_in], start=[]
+            )
+            q_de = self.q[n_ind:]
+
+            if all([not symb in dyn_deps for symb in q_de]):
+                if verbose:
+                    print("Reduced model found and completed")
+                self._rhs_reduced = Matrix(list(self.q_dot_in) + list(self.q_dotdot_in))
+                self._rhs = self._rhs_reduced
+                return self._rhs
+            else:
+                if verbose:
+                    print(
+                        "Dependencies found in simplified model on dependent coordinates,"
+                    )
+                    print("Calculating complete model.")
+                self.calculate_RHS_complete()
+                return self._rhs
+        else:
+            M_inv = _invsimplyprint(self._m_d, verbose, simplif, name="M_inv")
+            self.q_dotdot = _simplyprint(M_inv @ self.Q, verbose, simplif, name="RHS")
+            if verbose:
+                print("Model completed")
+            self._rhs = Matrix(list(self.q_dot) + list(self.q_dotdot))
+            return self._rhs
+
+    def calculate_RHS_complete(self):
+        verbose = self._verbose
+        simplif = self._simplif
+        _simplyprint = self._simplyprint
+
+        if self.R is None:
+            self.rhs
+
+        if (self._rhs is None) or (len(self.coneqs) > 0):
+            q_dotdot_de = self.R_dot @ self.q_dot_in + self.R @ self.q_dotdot_in
+
+            self.q_dotdot_de = _simplyprint(
+                q_dotdot_de, verbose, simplif, name="Dependent Variables"
+            )
+            self._rhs = Matrix(
+                list(self.q_dot) + list(self.q_dotdot_in) + list(self.q_dotdot_de)
+            )
+
+        return self._rhs
+
+    @property
+    def rhs_reduced(self):
+        """Returns equations that can be solved numerically.
+        Parameters
+        ==========
+        
+        """
+        if self.eom is None:
+            raise ValueError("Need to compute the equations of motion first")
+        if self._rhs is None:
+            self.rhs
+        if self._rhs_reduced is None:
+            raise ValueError(
+                "System could not be reduced to a lower number of variables, use rhs instead"
+            )
+        else:
+            return self._rhs_reduced
+
+    @property
+    def lambda_vector(self):
+        if self._lambda_vec is None:
+            if len(self.coneqs) == 0:
+                self._lambda_vec = []
+            else:
+                if self._verbose:
+                    print("Generating and simplifiying Lambdas vector")
+                self._lambda_vec = simplify(
+                    self.phi_q_de_inv @ (self.Q_de - self.M_de @ self.q_dotdot_de)
+                )
+        return self._lambda_vec
+
+    @property
+    def rhs_full(self):
+        """Returns equations that can be solved numerically.
+        Parameters
+        ==========
+        
+        """
+        if self.eom is None:
+            raise ValueError("Need to compute the equations of motion first")
+        if self._rhs_full is None:
+            self.calculate_RHS_complete()
+
+            self._rhs_full = Matrix(list(self.rhs) + list(self.lambda_vector))
+        return self._rhs_full
+
+    def sym_pinv_dyn(self, ext_forces):
+        """Symbolic pseudo-inverse dynamics. If system is fully actuated, will 
+        be the exact inverse dynamics.
+        Parameters
+        ----------
+        ext_forces : list of symbols
+            list of actuation symbols respect to which the inverse dynamics
+            should be calculated
+        """
+        if self.eom is None:
+            raise ValueError("Need to compute the equations of motion first")
+        ext_forces = Matrix(ext_forces)
+        _E = self.forcing.jacobian(ext_forces)
+        subs_list = [[uu, 0] for uu in ext_forces]
+        _f = self.forcing.subs(subs_list)
+        _Z = self.mass_matrix @ self._qdoubledots - _f
+        _sym_pinv_dyn = _E.pinv() @ _Z
+        return _sym_pinv_dyn
+
+    def num_pinv_dyn(self, ext_forces):
+        """Numeric pseudo-inverse dynamics. If system is fully actuated, will 
+        be the exact inverse dynamics.
+        Parameters
+        ----------
+        ext_forces : list of symbols
+            list of actuation symbols respect to which the inverse dynamics
+            should be calculated
+        Returns
+        -------
+        Function:
+            Numerical function of q, q', q'' and params
+        """
+        if self.eom is None:
+            raise ValueError("Need to compute the equations of motion first")
+        sym_pinv_dyn = list(self.sym_pinv_dyn(ext_forces))
+        exhaustive_expr = list(
+            self.mass_matrix_full @ self.forcing_full
+        )  # Contains all parameters involved
+        param_list = set()
+        _dy_sy = set()
+        for expr in exhaustive_expr:
+            _dy_sy = _dy_sy.union(find_dynamicsymbols(expr))
+        _dy_sy = sorted(_dy_sy, key=derivative_level, reverse=True)
+        # we substitute dynamic symbols with a dummy variable in order to
+        # avoid adding t to the parameter list if it is not a parameter
+        _dumm = symbols("dummy")
+        for expr in exhaustive_expr:
+            subs_list = [[dvar, _dumm] for dvar in _dy_sy]
+            new_expr = expr.subs(subs_list)
+            param_list = param_list.union(new_expr.atoms(Symbol))
+        param_list.remove(_dumm)
+        for act_sym in ext_forces:
+            if act_sym in param_list:
+                param_list.remove(act_sym)
+
+        for ds in _dy_sy:
+            base_sym = find_dyn_dependencies(ds)[0]
+            if base_sym not in self._q and base_sym not in ext_forces:
+                param_list.addn(ds)
+        param_list = sorted(param_list, key=get_str)
+
+        _lambd_pinv_dyn = lambdify(
+            [self._q, self._qdots, self._qdoubledots, param_list], sym_pinv_dyn
+        )
+
+        def _num_pinv_dyn(q, q_dot, q_dotdot, params):
+            return _lambd_pinv_dyn(q, q_dot, q_dotdot, params)
+
+        _num_pinv_dyn.__doc__ = f"""Numeric pseudo-inverse dynamics. If system is fully actuated, will 
+            be the exact inverse dynamics.
+            Parameters
+            ----------
+            q : array of {len(list(self._q))} elements
+                coordinates of point
+            q_dot : array of {len(list(self._q))} elements
+                speeds
+            q_dotdot : array of {len(list(self._q))} elements
+                accelerations
+            params : array of {len(list(param_list))} elements
+                physical parameters of the problem:
+                    {param_list}
+            Returns
+            -------
+            u : array of actuations that produce the accelerations that least
+            diverge from the given
+            """
+        return _num_pinv_dyn
+
+
+class ImplicitLagrangesMethod(LagrangesMethod):
+    """
+    Modification of the Lagranges Method in order to have easy access
+    to its dynamics in implicit formulation.
+    """
+
+    @property
+    def mass_matrix_square(self):
+        """Augments the coefficients of restrictions to the mass_matrix.
+        Returns:
+            | M    A_c|
+            |m_cd   0 |
+        So that the dynamics can be written as 
+            | M    A_c|   | q''  |   |f_d |
+            |         | @ |      | = |    |
+            |m_cd   0 |   |lambda|   |f_dc|
+        """
+
+        if self.eom is None:
+            raise ValueError("Need to compute the equations of motion first")
+        m = len(self.coneqs)
+        row1 = self.mass_matrix
+        if self.coneqs:
+            row2 = self._m_cd.row_join(zeros(m, m))
+            return row1.col_join(row2)
+        else:
+            return row1
+
+    @property
+    def implicit_dynamics_q(self):
+        """Returns a vector of implicit dynamics.
+        Given that the dynamics can be written as:
+            | M    A_c|   | q''  |   |f_d |
+            |         | @ |      | = |    |
+            |m_cd   0 |   |lambda|   |f_dc|
+        Returns a vector D equal to:
+            | M    A_c|   | q''  |   |f_d |
+        D = |         | @ |      | - |    |
+            |m_cd   0 |   |lambda|   |f_dc|
+        so that the dynamics can be defined as:
+            D(q, q', q'', u, lambdas, params) = 0
+        """
+        if self.eom is None:
+            raise ValueError("Need to compute the equations of motion first")
+        M = self.mass_matrix_square
+        if self.coneqs:
+            F = self.forcing.col_join(self._f_cd)
+            Q_exp = self._qdoubledots.col_join(self.lam_vec)
+        else:
+            F = self.forcing
+            Q_exp = self._qdoubledots
+
+        return M @ Q_exp - F
+
+    @property
+    def implicit_dynamics_x(self):
+        """Returns a vector of implicit dynamics.
+        Given that the dynamics can be written as:
+            | M    A_c|   | q''  |   |f_d |
+            |         | @ |      | = |    |
+            |m_cd   0 |   |lambda|   |f_dc|
+        And transforming the variables q and v into x:
+                | q |   | x_q |
+            x = |   | = |     |
+                | v |   | x_v |
+        Expressing the dynammics in terms of x:
+            | I   0    0 |   |      |   |x_v |
+            |            |   | x'   |   |    |
+            | 0   M   A_c| @ |      | = |f_d |
+            |            |   |      |   |    |
+            | 0  m_cd  0 |   |lambda|   |f_dc|
+            
+        Function returns a vector D equal to:
+            | I   0    0 |   |      |   |x_v |
+            |            |   | x'   |   |    |
+        D = | 0   M   A_c| @ |      | - |f_d |
+            |            |   |      |   |    |
+            | 0  m_cd  0 |   |lambda|   |f_dc|
+        so that the dynamics can be defined as:
+            D(x, x', u, lambdas, params) = 0
+        """
+        if self.eom is None:
+            raise ValueError("Need to compute the equations of motion first")
+        M = q_2_x(self.mass_matrix_full, self.q, self._qdots)
+        n = len(self.q)
+        X = Matrix(dynamicsymbols("x_0:" + str(2 * n)))
+        X_dot = X.diff(dynamicsymbols._t)
+        forcing = q_2_x(self.forcing, self.q, self._qdots)
+        if self.coneqs:
+            f_cd = q_2_x(self._f_cd, self.q, self._qdots)
+            F = Matrix(X[n:]).col_join(forcing).col_join(f_cd)
+            X_exp = X_dot.col_join(self.lam_vec)
+        else:
+            F = Matrix(X[n:]).col_join(forcing)
+            X_exp = X_dot
+
+        return M @ X_exp - F
+
+    def sym_pinv_dyn(self, ext_forces):
+        """Symbolic pseudo-inverse dynamics. If system is fully actuated, will 
+        be the exact inverse dynamics.
+        Parameters
+        ----------
+        ext_forces : list of symbols
+            list of actuation symbols respect to which the inverse dynamics
+            should be calculated
+        """
+        if self.eom is None:
+            raise ValueError("Need to compute the equations of motion first")
+        ext_forces = Matrix(ext_forces)
+        _E = self.forcing.jacobian(ext_forces)
+        _f = self.forcing - _E @ ext_forces
+        _Z = self.mass_matrix @ self._qdoubledots - _f
+        _sym_pinv_dyn = _E.pinv() @ _Z
+        return _sym_pinv_dyn
+
+    def num_pinv_dyn(self, ext_forces):
+        """Numeric pseudo-inverse dynamics. If system is fully actuated, will 
+        be the exact inverse dynamics.
+        Parameters
+        ----------
+        ext_forces : list of symbols
+            list of actuation symbols respect to which the inverse dynamics
+            should be calculated
+        Returns
+        -------
+        Function:
+            Numerical function of q, q', q'' and params
+        """
+        if self.eom is None:
+            raise ValueError("Need to compute the equations of motion first")
+        sym_pinv_dyn = list(self.sym_pinv_dyn(ext_forces))
+        param_list = set()
+        _dy_sy = sorted_dynamic_symbols(sym_pinv_dyn)
+        # we substitute dynamic symbols with a dummy variable in order to
+        # avoid adding t to the parameter list if it is not a parameter
+        _dumm = symbols("dummy")
+        for expr in sym_pinv_dyn:
+            subs_list = [[dvar, _dumm] for dvar in _dy_sy]
+            new_expr = expr.subs(subs_list)
+            param_list.union(new_expr.atoms(Symbol))
+        param_list.remove(_dumm)
+
+        for ds in _dy_sy:
+            if find_dyn_dependencies(ds)[0] not in self._q:
+                param_list.addn(ds)
+        param_list = sorted(param_list, key=get_str)
+
+        _lambd_pinv_dyn = lambdify(
+            [self._q, self._qdots, self._qdoubledots, param_list], sym_pinv_dyn
+        )
+
+        def _num_pinv_dyn(q, q_dot, q_dotdot, params):
+            return _lambd_pinv_dyn(q, q_dot, q_dotdot, params)
+
+        _num_pinv_dyn.__doc__ = f"""Numeric pseudo-inverse dynamics. If system is fully actuated, will 
+            be the exact inverse dynamics.
+            Parameters
+            ----------
+            q : array of {len(list(self._q))} elements
+                coordinates of point
+            q_dot : array of {len(list(self._q))} elements
+                speeds
+            q_dotdot : array of {len(list(self._q))} elements
+                accelerations
+            params : array of {len(list(param_list))} elements
+                physical parameters of the problem:
+                    {param_list}
+            Returns
+            -------
+            u : array of actuations that produce the accelerations that least
+            diverge from the given
+            """
+        return _num_pinv_dyn

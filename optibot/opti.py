@@ -46,10 +46,12 @@ _implemented_pseudospectral_schemes = [
 def _get_f_g_funcs(RHS, q_vars, u_vars=None, verbose=False, silent=True):
     """
     Converts an array of symbolic expressions RHS(x, u, params) to the 3 casadi 
-    dynamics residual functions. They have a blind argument "lam" that allows them
+    dynamics residual functions. They have a blind argument "lamba" that allows them
     to share structure with implicit dinamic functions that require lagrange multipliers.
-    Designed to work with systems so that
+    Designed to work with systems so that either
         x' = RHS(x, u, params)
+    or
+        a = RHS(x, u, params)
 
     Parameters
     ----------
@@ -70,13 +72,13 @@ def _get_f_g_funcs(RHS, q_vars, u_vars=None, verbose=False, silent=True):
 
     Returns
     -------
-    Casadi Function D(x, x', u, lag, params) so that
+    Casadi Function D(x, x', u, lamda, params) so that
         D = x'- F(x, u, params)
         
-    Casadi Function D(x, x', u, lag, params) so that
+    Casadi Function D(x, x', u, lamda, params) so that
         D = x'[bottom] - G(x, u, params)
         
-    Casadi Function D(q, q', q'', u, lam, params) so that
+    Casadi Function D(q, q', q'', u, lamda, params) so that
         D = q'' - G(q, q', u, params)
 
     """
@@ -123,7 +125,7 @@ def _get_f_g_funcs(RHS, q_vars, u_vars=None, verbose=False, silent=True):
         "dynamics_f_x",
         [x_sym, x_dot_sym, u_sym, lam_sym, p_sym],
         [x_dot_sym - _F],
-        ["x", "x_dot", "u", "lam", "params"],
+        ["x", "x_dot", "u", "lamda", "params"],
         ["residue"],
     )
 
@@ -131,7 +133,7 @@ def _get_f_g_funcs(RHS, q_vars, u_vars=None, verbose=False, silent=True):
         "dynamics_g_x",
         [x_sym, x_dot_sym, u_sym, lam_sym, p_sym],
         [x_dot_sym[n_q:] - _F[n_q:]],
-        ["x", "x_dot", "u", "lam", "params"],
+        ["x", "x_dot", "u", "lamda", "params"],
         ["residue"],
     )
 
@@ -139,7 +141,7 @@ def _get_f_g_funcs(RHS, q_vars, u_vars=None, verbose=False, silent=True):
         "dynamics_g_q",
         [q_sym, q_dot_sym, q_dot_dot_sym, u_sym, lam_sym, p_sym],
         [q_dot_dot_sym - _G],
-        ["q", "q_dot", "q_dot_dot", "u", "lam", "params"],
+        ["q", "q_dot", "q_dot_dot", "u", "lamda", "params"],
         ["residue"],
     )
 
@@ -151,6 +153,10 @@ def _get_f_g_funcs(RHS, q_vars, u_vars=None, verbose=False, silent=True):
 
 @lru_cache(maxsize=None)
 def _get_cost_obj_trap_int(scheme, N):
+    """ For a given pseudospectral scheme and number of collocation points,
+    returns a function of values in said points that calculates a trapezoidal
+    integration of the squared values.
+    """
     t_arr = (
         [-1,] + coll_points(N, scheme) + [1,]
     )
@@ -176,6 +182,10 @@ def _get_cost_obj_trap_int(scheme, N):
 
 @lru_cache(maxsize=None)
 def _get_cost_obj_trap_int_cas(scheme, N):
+    """ For a given pseudospectral scheme and number of collocation points,
+    returns a casadi function of values in said points that calculates a 
+    trapezoidal integration of the squared values.
+    """
     u_sym = cas.SX.sym("u", N)
     u_sympy = symbols(f"c0:{N}")
     fun = _get_cost_obj_trap_int(scheme, N)
@@ -189,6 +199,27 @@ def _get_cost_obj_trap_int_cas(scheme, N):
 
 
 class _Opti_Problem:
+    """
+    An object that contains a casadi opti problem.
+    
+    Use the methods in this order:
+        
+        problem.dynamic_setup()
+        problem.opti_setup()
+        problem.apply_scheme()
+        
+        additional restrictions and functions, such as:
+            problem.u_sq_cost() [apply a u squared integral cost]
+            problem.opti.subject_to(conditions)
+            
+        problem.simple_solve() or problem.chrono_solve()
+        
+    Important points and arrays of the opti problem generated after opti_setup()
+    are stored at problem.opti_arrs and problem.opti_points
+    
+    Results obtained after solving are stored at problem.results
+    """
+
     def __init__(
         self,
         LM,
@@ -224,6 +255,8 @@ class _Opti_Problem:
             pass
 
     def _ini_guess_start(self):
+        """ Tries to find optimization arrays in the object
+        """
         try:
             q_opti = self.opti_arrs["q"]
             v_opti = self.opti_arrs["v"]
@@ -235,11 +268,26 @@ class _Opti_Problem:
         return q_opti, v_opti, a_opti
 
     def _save_results(self):
+        """Saves results of optimization in dictionary 'results'
+        """
         for key in self.opti_arrs.keys():
             opti_arr = self.opti_arrs[key]
             self.results[key] = self.sol.value(opti_arr)
 
     def simple_solve(self):
+        """
+        Calculate the solution of opti problem
+
+        Raises
+        ------
+        RuntimeError
+            If the opti problem has not been properly set up
+
+        Returns
+        -------
+        None.
+
+        """
         try:
             sol = self.opti.solve()
         except AttributeError:
@@ -253,7 +301,8 @@ class _Opti_Problem:
 
     def chrono_solve(self, solve_repetitions):
         """
-        
+        Calculate the solution of opti problem repetedly, measuring the 
+        time required to do so.
 
         Parameters
         ----------
@@ -263,7 +312,7 @@ class _Opti_Problem:
         Raises
         ------
         RuntimeError
-            DESCRIPTION.
+            If the opti problem has not been properly set up
 
         Returns
         -------
@@ -290,6 +339,32 @@ class _Pseudospectral:
     def opti_setup(
         self, col_points, precission=20,
     ):
+        """
+        Creates and links the different opti variables to be used in the problem.
+        Requires the function dynamic_setup() to have been run prior.
+        Arrays will be accesible through self.opti_arrs dictionary.
+        Point will be accesible through self.opti_points dictionary.
+
+        Parameters
+        ----------
+        col_points : int
+            Number of collocation points
+        precission : int, optional
+            Precission decimals in collocation point computation.
+            The default is 20.
+
+        Raises
+        ------
+        NotImplementedError
+            If the selected scheme is not yet available
+        RuntimeError
+            If mistakenly this function is run before dynamic_setup()
+
+        Returns
+        -------
+        None.
+
+        """
 
         scheme = self.scheme
         t_start = self.t_start
@@ -403,6 +478,23 @@ class _Pseudospectral:
         }
 
     def u_sq_cost(self):
+        """
+        Calculates a trapezoidal integration of u squared and sets it 
+        as the optimization cost to minimize
+        
+        Requires the functions dynamic_setup() and opti_setup(), in that order,
+        to have been run prior.
+
+        Raises
+        ------
+        RuntimeError
+            If opti_setup() or dynamic_setup() have not ben run previously
+
+        Returns
+        -------
+        None.
+
+        """
         try:
             U = self.opti_arrs["u"]
         except AttributeError:
@@ -419,6 +511,23 @@ class _Pseudospectral:
         self.opti.minimize(cost)
 
     def apply_scheme(self):
+        """
+        Applies the restrictions corresponding to the selected scheme to
+        the opti variables.
+        
+        Requires the functions dynamic_setup() and opti_setup(), in that order,
+        to have been run prior.
+
+        Raises
+        ------
+        RuntimeError
+            If opti_setup() or dynamic_setup() have not ben run previously
+
+        Returns
+        -------
+        None.
+
+        """
         scheme = self.scheme
         try:
             N = self.N
@@ -508,6 +617,28 @@ class _Pseudospectral:
 
 class _Equispaced:
     def opti_setup(self, segment_number):
+        """
+        Creates and links the different opti variables to be used in the problem.
+        Requires the function dynamic_setup() to have been run prior.
+        Arrays will be accesible through self.opti_arrs dictionary.
+        Point will be accesible through self.opti_points dictionary.
+
+        Parameters
+        ----------
+        segment_number : int
+            Number of equal seegments in which solution is divided.
+        
+
+        Raises
+        ------
+        RuntimeError
+            If mistakenly this function is run before dynamic_setup()
+
+        Returns
+        -------
+        None.
+
+        """
 
         N = segment_number
         self.N = N
@@ -589,6 +720,23 @@ class _Equispaced:
             }
 
     def u_sq_cost(self):
+        """
+        Calculates a trapezoidal integration of u squared and sets it 
+        as the optimization cost to minimize
+        
+        Requires the functions dynamic_setup() and opti_setup(), in that order,
+        to have been run prior.
+
+        Raises
+        ------
+        RuntimeError
+            If opti_setup() or dynamic_setup() have not ben run previously
+
+        Returns
+        -------
+        None.
+
+        """
         try:
             U = self.opti_arrs["u"]
         except AttributeError:
@@ -616,6 +764,23 @@ class _Equispaced:
         self.opti.minimize(cost)
 
     def apply_scheme(self):
+        """
+        Applies the restrictions corresponding to the selected scheme to
+        the opti variables.
+        
+        Requires the functions dynamic_setup() and opti_setup(), in that order,
+        to have been run prior.
+
+        Raises
+        ------
+        RuntimeError
+            If opti_setup() or dynamic_setup() have not ben run previously
+
+        Returns
+        -------
+        None.
+
+        """
         from .casadi import accelrestriction2casadi
         from .schemes import (
             euler_accel_restr,
@@ -743,6 +908,22 @@ class _Equispaced:
 
 class _Explicit_Dynamics:
     def dynamic_setup(self, u_vars=None):
+        """
+        Creates and configures the functions that will be used in 
+        physics restrictions.
+
+        Parameters
+        ----------
+        u_vars : None, int or list of symbols. Default is None.
+            Symbols of external control actions.
+            If None, or int, symbols of the form u_ii where ii is a number
+            will be assumed
+
+        Returns
+        -------
+        None.
+
+        """
 
         q_vars = list(self.LM.q)
         self.n_q = len(q_vars)
@@ -772,6 +953,22 @@ class _Explicit_Dynamics:
 
 class _Implicit_Dynamics:
     def dynamic_setup(self, u_vars=None):
+        """
+        Creates and configures the functions that will be used in 
+        physics restrictions.
+
+        Parameters
+        ----------
+        u_vars : None, int or list of symbols. Default is None.
+            Symbols of external control actions.
+            If None, or int, symbols of the form u_ii where ii is a number
+            will be assumed
+
+        Returns
+        -------
+        None.
+
+        """
 
         from .symbolic import q_2_x
 
@@ -820,6 +1017,35 @@ class _Implicit_Dynamics:
 
 class _Function_Dynamics:
     def dynamic_setup(self, func_kind, n_q, n_u, n_lambdas=0):
+        """
+        Creates and configures the functions that will be used in 
+        physics restrictions.
+
+        Parameters
+        ----------
+        func_kind : str in ['f_x', 'g_q', 'f_x_impl', 'g_q_impl']
+            states the kind of function that was given as physics model:
+                'f_x' if it was F so that x' = F(x, u, params)
+                'f_x_imp' if it was F so that 0 = F(x, x', u, params)
+                'g_q' if it was G so that q'' = G(q, q', u, params)
+                'g_q_imp' if it was G so that 0 = G(q, q', q'', u, params)
+        n_q : int
+            number of q variables in the problem.
+        n_u : int
+            number of u variables in the problem.
+        n_lambdas : int, optional
+            number of lambda variables in the problem. The default is 0.
+
+        Raises
+        ------
+        NotImplementedError
+            if func_kind is not one of the above stated values.
+
+        Returns
+        -------
+        None.
+
+        """
 
         from .schemes import expand_G, reduce_F
 
@@ -906,6 +1132,14 @@ class _Function_Dynamics:
 
 class _Zero_init:
     def initial_guess(self):
+        """
+        Sets initial guess values for q, v and a as zeros.
+
+        Returns
+        -------
+        None.
+
+        """
         q_opti, v_opti, a_opti = self._ini_guess_start()
         self.opti.set_initial(q_opti, 0)
         if self.scheme not in ["LG2", "D2", "LGLm"]:
@@ -916,6 +1150,27 @@ class _Zero_init:
 
 class _Lin_init:
     def initial_guess(self, q_s, q_e):
+        """
+        Sets initial guess values for q, v and a.
+        q is a lineal interpolation between q_s and q_e
+        v is a uniform value = (q_e - q_s)/T
+        a is zero
+        
+        If scheme is an Hermite Simpson variation, inizialization is also
+        applied to central point values.
+
+        Parameters
+        ----------
+        q_s : list, array, or float if problem is 1-d
+            Starting point.
+        q_e : list, array, or float if problem is 1-d
+            Ending point.
+
+        Returns
+        -------
+        None.
+
+        """
         q_opti, v_opti, a_opti = self._ini_guess_start()
         if self.scheme_mode == "equispaced":
             N = self.N + 1  # Number of segments
@@ -944,6 +1199,28 @@ class _Lin_init:
 
 class _Custom_init:
     def initial_guess(self, q_guess, v_guess, a_guess, u_guess):
+        """
+        Sets initial guess values for q, v, a and u.
+
+        If scheme is an Hermite Simpson variation, inizialization is also
+        applied to central point values.
+        
+        Parameters
+        ----------
+        q_guess : numpy array
+            Initial values of q array.
+        v_guess : numpy array
+            Initial values of v array.
+        a_guess : numpy array
+            Initial values of a array.
+        u_guess : numpy array
+            Initial values of u array.
+
+        Returns
+        -------
+        None.
+
+        """
         q_opti, v_opti, a_opti = self._ini_guess_start()
         u_opti = self.opti_arrs["u"]
         self.opti.set_initial(q_opti, q_guess)
