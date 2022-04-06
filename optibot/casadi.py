@@ -4,7 +4,10 @@ Created on Mon May 31 12:52:24 2021
 
 @author: Siro Moreno
 
-sympy2casadi function original author: Joris Gillis
+Here we present some tools and functions dedicated to operate with and
+convert to casadi objects.
+
+sympy2casadi function adapted from Joris Gillis:
 https://gist.github.com/jgillis/80bb594a6c8fcf55891d1d88b12b68b8
 
 """

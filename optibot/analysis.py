@@ -3,6 +3,9 @@
 Created on Mon Jan 17 11:08:53 2022
 
 @author: Siro Moreno
+
+Here we will define functions dedicated to analysis and post-processing
+of obtained solutions.
 """
 
 from .schemes import (

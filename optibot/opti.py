@@ -3,7 +3,32 @@
 """
 Created on Thu Mar  3 18:03:53 2022
 
-@author: smorenom
+@author: Siro Moreno
+
+Here we present some functions and classes designed to contain and interface
+easily a casadi opti problem.
+
+In order to create the object, the factory function Opti_problem must be called,
+which depending on the parameters given will select the appropiate classes 
+from which a new class must inherit. Then, it will return an instance
+of the custom class created.
+
+The class will inherit:
+    - From _Opti_Problem, always. Contains methos common to all problems.
+    
+    - Depending on the scheme: from _Pseudospectral or _Equispaced. They
+      contain the methods that change structure depending on wether the
+      problem use a pseudospectral collocation or an equispaced scheme.
+      
+    - Depending on the physics: from _Explicit_Dynamics, _Implicit_Dynamics or
+      _Function_Dynamics. First one will be used when the physics are passed
+      as an instance of a Lagranges Method or Simplifified Lagranges Method
+      object. Second will be used when they ar passed as an instance of
+      Implicit Lagranges Method object. Third will be used when they are 
+      passed as a function.
+      
+    - Depending on initial guess type: _Zero_init, _Lin_init or _Custom_init.
+      They contain the function appropiate for the chosen kind of initial guess.
 """
 
 from .symbolic import find_arguments
@@ -1329,8 +1354,9 @@ def Opti_Problem(
     from .symbolic import ImplicitLagrangesMethod, SimpLagrangesMethod
     from sympy.physics.mechanics import LagrangesMethod
 
-    inherit = [_Opti_Problem]
+    inherit = [_Opti_Problem]  # Methods common to all problems
 
+    # Depending on the kind of object that contains the physics:
     if isinstance(LM, ImplicitLagrangesMethod):
         inherit.append(_Implicit_Dynamics)
         if verbose:
@@ -1348,6 +1374,7 @@ def Opti_Problem(
             f"LM must be a Lagranges Method object or a function, not: {type(LM)}"
         )
 
+    # Depending on the type of scheme used:
     if scheme in _implemented_equispaced_schemes:
         inherit.append(_Equispaced)
     elif scheme in _implemented_pseudospectral_schemes:
@@ -1358,6 +1385,7 @@ def Opti_Problem(
             f"scheme {scheme} not implemented. Valid methods are {_v}."
         )
 
+    # Depending on the inicialization type:
     if ini_guess == "zero":
         inherit.append(_Zero_init)
     elif ini_guess == "lin":

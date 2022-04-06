@@ -4,6 +4,10 @@
 Created on Thu Nov 11 12:11:43 2021
 
 @author: Siro Moreno
+
+Here we define functions needed to operate with pseudospectral collocations
+schemes. In order to keep the best accuracy in interpolations, barycentric
+formulas are constructed.
 """
 
 from sympy import legendre_poly, symbols, expand, zeros, lambdify
@@ -16,18 +20,18 @@ from .schemes import interp_2d
 # --- Generating Collocation Points ---
 
 
-@lru_cache
+@lru_cache(maxsize=2000)
 def LG(N, precission=20):
     return [ii.evalf(n=precission) for ii in legendre_poly(N, polys=True).real_roots()]
 
 
-@lru_cache
+@lru_cache(maxsize=2000)
 def LGR(N, precission=20):
     pol = legendre_poly(N, polys=True) + legendre_poly(N - 1, polys=True)
     return [ii.evalf(n=precission) for ii in pol.real_roots()]
 
 
-@lru_cache
+@lru_cache(maxsize=2000)
 def LGL(N, precission=20):
     root_list = [
         ii.evalf(n=precission)
@@ -38,17 +42,17 @@ def LGL(N, precission=20):
     )
 
 
-@lru_cache
+@lru_cache(maxsize=2000)
 def LGLm(N, precission=20):
     return LGL(N + 2, precission)[1:-1]
 
 
-@lru_cache
+@lru_cache(maxsize=2000)
 def LG2(N, precission=20):
     return [-1] + LG(N - 2, precission) + [1]
 
 
-@lru_cache
+@lru_cache(maxsize=2000)
 def coll_points(N, scheme, precission=20):
     """
     Generates a list of len N with values of tau for collocation points
@@ -92,7 +96,7 @@ def coll_points(N, scheme, precission=20):
         )
 
 
-@lru_cache
+@lru_cache(maxsize=2000)
 def base_points(N, scheme, precission=20):
     """
     Generates a list of len N with values of tau for lagrange base points
@@ -155,7 +159,7 @@ _product = lambda *args: reduce(mul, *(list(args) + [1]))
 
 # this product may be reusable (when creating many functions on the same domain)
 # therefore, cache the result
-@lru_cache
+@lru_cache(maxsize=2000)
 def lag_pol(labels, j):
     x = symbols("x")
 
@@ -296,7 +300,7 @@ def v_coef_coll(N, i, scheme, precission=20):
     return _v_sum(taus, i)
 
 
-@lru_cache
+@lru_cache(maxsize=2000)
 def matrix_D_bary(N, scheme, precission=20):
     """
     Generates the Derivation Matrix for the given scheme from
@@ -483,7 +487,7 @@ def get_bary_extreme_f(scheme, N, mode="u", point="start"):
     return extpoint
 
 
-# @lru_cache
+# @lru_cache(maxsize=2000)
 # def LG_end_p_fun(N, precission=20):
 #     coefs = symbols(f"c_0:{N}")
 #     taus = base_points(N, "LG", precission)
@@ -493,7 +497,7 @@ def get_bary_extreme_f(scheme, N, mode="u", point="start"):
 #     return lambdify(coefs, res)
 
 
-@lru_cache
+@lru_cache(maxsize=2000)
 def LG_diff_end_p_fun(N, precission=20):
     coefs = symbols(f"c_0:{N}")
     taus = base_points(N, "LG", precission)
@@ -503,7 +507,7 @@ def LG_diff_end_p_fun(N, precission=20):
     return lambdify(coefs, res)
 
 
-# @lru_cache
+# @lru_cache(maxsize=2000)
 # def LG_inv_start_p_fun(N, precission=20):
 #     coefs = symbols(f"c_0:{N}")
 #     taus = base_points(N, "LG_inv", precission)
@@ -513,7 +517,7 @@ def LG_diff_end_p_fun(N, precission=20):
 #     return lambdify(coefs, res)
 
 
-@lru_cache
+@lru_cache(maxsize=2000)
 def LG_inv_diff_start_p_fun(N, precission=20):
     coefs = symbols(f"c_0:{N}")
     taus = base_points(N, "LG_inv", precission)
@@ -523,7 +527,7 @@ def LG_inv_diff_start_p_fun(N, precission=20):
     return lambdify(coefs, res)
 
 
-@lru_cache
+@lru_cache(maxsize=2000)
 def LG_end_p_fun_cas(N, precission=20):
     from casadi import SX, vertsplit, Function
     from .casadi import sympy2casadi
@@ -537,7 +541,7 @@ def LG_end_p_fun_cas(N, precission=20):
     return cas_f
 
 
-@lru_cache
+@lru_cache(maxsize=2000)
 def LG_diff_end_p_fun_cas(N, precission=20):
     from casadi import SX, vertsplit, Function
     from .casadi import sympy2casadi
@@ -552,7 +556,7 @@ def LG_diff_end_p_fun_cas(N, precission=20):
     return Function("dynamics_x", [x_cas], [res_cas])
 
 
-@lru_cache
+@lru_cache(maxsize=2000)
 def LG_inv_start_p_fun_cas(N, precission=20):
     _f = LG_end_p_fun_cas(N, precission)
 
@@ -562,7 +566,7 @@ def LG_inv_start_p_fun_cas(N, precission=20):
     return cas_f
 
 
-@lru_cache
+@lru_cache(maxsize=2000)
 def LG_inv_diff_start_p_fun_cas(N, precission=20):
     from casadi import SX, vertsplit, Function
     from .casadi import sympy2casadi

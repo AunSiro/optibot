@@ -4,6 +4,10 @@
 Created on Mon May 31 14:52:34 2021
 
 @author: Siro Moreno
+
+Here we present a collection of functions that describe different numerical
+schemes, expressed explicitly and implicitly. Related interpolation and 
+auxiliar functions are also defined here.
 """
 
 from scipy.optimize import root, minimize
