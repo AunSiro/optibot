@@ -868,8 +868,8 @@ class _Equispaced:
                     == half_x(
                         x_opti[ii, :],
                         x_opti[ii + 1, :],
-                        x_dot_opti[ii, :],
-                        x_dot_opti[ii + 1, :],
+                        a_opti[ii, :],
+                        a_opti[ii + 1, :],
                         T / N,
                     )
                 )
@@ -1073,6 +1073,9 @@ class _Function_Dynamics:
         """
 
         from .schemes import expand_G, reduce_F
+
+        if n_lambdas != 0:
+            raise NotImplementedError("Problems with lambdas are not implemented yet")
 
         n_p = len(self.params)
 

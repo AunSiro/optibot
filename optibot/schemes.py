@@ -769,7 +769,16 @@ def trapz_mod_accel_restr(x, x_n, a, a_n, dt, scheme_params):
     return x_n - res
 
 
-def hs_half_x(x, x_n, x_d, x_d_n, dt):
+def hs_half_x(x, x_n, a, a_n, dt):
+    first_ind, last_ind = index_div(x)
+    x_d = copy(x)
+    x_d[first_ind] = x[last_ind]
+    x_d[last_ind] = a
+
+    x_d_n = copy(x)
+    x_d_n[first_ind] = x_n[last_ind]
+    x_d_n[last_ind] = a_n
+
     x_c = (x + x_n) / 2 + dt / 8 * (x_d - x_d_n)
     return x_c
 
@@ -785,7 +794,7 @@ def hs_accel_restr(x, x_n, a, a_n, dt, scheme_params):
     x_d_n[first_ind] = x_n[last_ind]
     x_d_n[last_ind] = a_n
 
-    x_c = hs_half_x(x, x_n, x_d, x_d_n, dt)
+    x_c = hs_half_x(x, x_n, a, a_n, dt)
     x_d_c = copy(x)
     x_d_c[first_ind] = x_c[last_ind]
     x_d_c[last_ind] = a_c
@@ -992,7 +1001,9 @@ def _newpoint_u(U, h, t, u_scheme, scheme_params={}):
         u_interp = U[n + 1]
     else:
         u, u_n = U[n], U[n + 1]
-        if u_scheme == "parab":
+        if u_scheme == "lin":
+            u_interp = (u * (h - tau) + u_n * tau) / h
+        elif u_scheme == "parab":
             U_c = scheme_params["u_c"]
             u_c = U_c[n]
             u_interp = interp_parab(tau, h, u, u_c, u_n)
@@ -1158,7 +1169,7 @@ def _calculate_missing_arrays(
             raise ValueError("X_dot and F cannot be None at the same time")
         X_dot = array([list(F(X[ii], U[ii], params)) for ii in range(X.shape[0])])
 
-    if "hs" in scheme:
+    if "hs" in scheme and scheme != "hs_scipy":
         if "x_dot_c" not in scheme_params:
             if "x_c" not in scheme_params:
                 if "mod" in scheme:
@@ -1256,7 +1267,7 @@ def interpolated_array(
             "hs": Hermite-Simpson scheme compatible interpolation
             "hs_mod": modified Hermite-Simpson scheme compatible interpolation
             "hs_parab": Hermite-Simpson scheme compatible interpolation with parabolic U
-        "hs_mod_parab": modified Hermite-Simpson scheme compatible interpolation with parabolic U
+            "hs_mod_parab": modified Hermite-Simpson scheme compatible interpolation with parabolic U
     u_scheme : string, optional
         Model of the interpolation that must be used. The default is "lin".
         Acceptable values are:
