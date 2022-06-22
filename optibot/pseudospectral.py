@@ -607,7 +607,7 @@ def get_pol_u(scheme, uu):
     u, valid in tau = (-1, 1)
     """
     N = len(uu)
-    taus = coll_points(N, scheme)
+    taus = array(coll_points(N, scheme), dtype="float")
     pol_u = bary_poly_2d(taus, uu)
     return pol_u
 
