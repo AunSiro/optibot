@@ -90,7 +90,7 @@ def dhlink_rot_mod_to_symbody(
     return body0, Nbody, P1
 
 
-def robot_to_sympy(robot, replacedict_list, end_effector=None):
+def robot_to_sympy(robot, replacedict_list, end_effector=None, simplif=True):
 
     if end_effector is None:
         pass
@@ -111,16 +111,14 @@ def robot_to_sympy(robot, replacedict_list, end_effector=None):
 
     for ii, link in enumerate(robot.links):
         replacedict = replacedict_list[ii]
+        if "q" in replacedict.keys():
+            q = replacedict["q"]
+        else:
+            q = qq[ii]
         if link.mdh:
             if link.isrevolute:
                 _b1, _N1, _P1 = dhlink_rot_mod_to_symbody(
-                    link,
-                    frames[-1],
-                    points[-1],
-                    N_in,
-                    P0,
-                    qq[ii],
-                    replacedict=replacedict,
+                    link, frames[-1], points[-1], N_in, P0, q, replacedict=replacedict,
                 )
             else:
                 raise NotImplementedError("Only revolute links are already implemented")
@@ -131,6 +129,9 @@ def robot_to_sympy(robot, replacedict_list, end_effector=None):
         bodies.append(_b1)
 
     Lag = Lagrangian(N_in, *bodies)
+
+    if simplif:
+        Lag = Lag.simplify()
 
     FL = []
     for ii in range(N_Links):
@@ -147,12 +148,15 @@ def robot_to_sympy(robot, replacedict_list, end_effector=None):
     return LM_small
 
 
-def Panda_Simp(end_effector=None):
+def Panda_Simp(
+    end_effector=None, simplif=True, replacedict_list=[{} for j in range(7)]
+):
     from sympy import pi
 
     hpi = pi / 2
     alpha_arr = [0, -hpi, hpi, hpi, -hpi, hpi, hpi]
-    replacedict_list = [{"alpha": alpha_arr[ii]} for ii in range(7)]
+    for ii, replacedict in enumerate(replacedict_list):
+        replacedict["alpha"] = alpha_arr[ii]
 
     from roboticstoolbox.models.DH import Panda
 
@@ -174,4 +178,4 @@ def Panda_Simp(end_effector=None):
     for ii, link in enumerate(panda.links):
         link.r = r_arr[ii, :]
 
-    return robot_to_sympy(panda, replacedict_list, end_effector)
+    return robot_to_sympy(panda, replacedict_list, end_effector, simplif)
