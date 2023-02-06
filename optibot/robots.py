@@ -118,7 +118,13 @@ def robot_to_sympy(robot, replacedict_list, end_effector=None, simplif=True):
         if link.mdh:
             if link.isrevolute:
                 _b1, _N1, _P1 = dhlink_rot_mod_to_symbody(
-                    link, frames[-1], points[-1], N_in, P0, q, replacedict=replacedict,
+                    link,
+                    frames[-1],
+                    points[-1],
+                    N_in,
+                    P0,
+                    q,
+                    replacedict=replacedict,
                 )
             else:
                 raise NotImplementedError("Only revolute links are already implemented")

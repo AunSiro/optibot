@@ -156,7 +156,11 @@ def expand_F(F, mode="numpy"):
             if is_iterable(a):
                 new_a = array(a)
             else:
-                new_a = array([a,])
+                new_a = array(
+                    [
+                        a,
+                    ]
+                )
             if len(new_a.shape) != len(v.shape):
                 if new_a.shape[0] == v.shape[0]:
                     new_a = expand_dims(new_a, axis=1)
@@ -340,7 +344,7 @@ def trapz_mod_opti_step(x_n, x, u, u_n, F, dt, params):
     f_n = F(x_n, u_n, params)[dim:]
     res = copy(x)
     res[dim:] = x[dim:] + dt / 2 * (f + f_n) - x_n[dim:]
-    res[:dim] = x[:dim] + dt * x[dim:] + dt ** 2 / 6 * (f_n + 2 * f) - x_n[:dim]
+    res[:dim] = x[:dim] + dt * x[dim:] + dt**2 / 6 * (f_n + 2 * f) - x_n[:dim]
     return res
 
 
@@ -393,7 +397,7 @@ def hs_mod_opti_step(x_n, x, u, u_n, F, dt, params):
     q_n = x_n[:dim]
     v_n = x_n[dim:]
     u_c = (u + u_n) / 2
-    q_c = (13 * q + 3 * q_n) / 16 + 5 * dt / 16 * v + dt ** 2 / 96 * (4 * f - f_n)
+    q_c = (13 * q + 3 * q_n) / 16 + 5 * dt / 16 * v + dt**2 / 96 * (4 * f - f_n)
     v_c = (v + v_n) / 2 + dt / 8 * (f - f_n)
     x_c = copy(x)
     x_c[:dim] = q_c
@@ -401,7 +405,7 @@ def hs_mod_opti_step(x_n, x, u, u_n, F, dt, params):
     f_c = F(x_c, u_c, params)[dim:]
     res = copy(x)
     res[dim:] = v + dt / 6 * (f + 4 * f_c + f_n) - v_n
-    res[:dim] = q + dt * v + dt ** 2 / 6 * (f + 2 * f_c) - q_n
+    res[:dim] = q + dt * v + dt**2 / 6 * (f + 2 * f_c) - q_n
     return res
 
 
@@ -452,7 +456,7 @@ def hs_mod_parab_opti_step(x_n, x, u, u_n, F, dt, params, u_c):
     v = x[dim:]
     q_n = x_n[:dim]
     v_n = x_n[dim:]
-    q_c = (13 * q + 3 * q_n) / 16 + 5 * dt / 16 * v + dt ** 2 / 96 * (4 * f - f_n)
+    q_c = (13 * q + 3 * q_n) / 16 + 5 * dt / 16 * v + dt**2 / 96 * (4 * f - f_n)
     v_c = (v + v_n) / 2 + dt / 8 * (f - f_n)
     x_c = copy(x)
     x_c[:dim] = q_c
@@ -460,7 +464,7 @@ def hs_mod_parab_opti_step(x_n, x, u, u_n, F, dt, params, u_c):
     f_c = F(x_c, u_c, params)[dim:]
     res = copy(x)
     res[dim:] = v + dt / 6 * (f + 4 * f_c + f_n) - v_n
-    res[:dim] = q + dt * v + dt ** 2 / 6 * (f + 2 * f_c) - q_n
+    res[:dim] = q + dt * v + dt**2 / 6 * (f + 2 * f_c) - q_n
     return res
 
 
@@ -667,7 +671,7 @@ def trapz_mod_restr(x, x_n, u, u_n, F, dt, params):
     f = F(x, u, params)[last_ind]
     f_n = F(x_n, u_n, params)[last_ind]
     res[last_ind] = x[last_ind] + dt / 2 * (f + f_n)
-    res[first_ind] = x[first_ind] + dt * x[last_ind] + dt ** 2 / 6 * (f_n + 2 * f)
+    res[first_ind] = x[first_ind] + dt * x[last_ind] + dt**2 / 6 * (f_n + 2 * f)
     return x_n - res
 
 
@@ -691,13 +695,13 @@ def hs_mod_restr(x, x_n, u, u_n, F, dt, params):
     q_n = x_n[first_ind]
     v_n = x_n[last_ind]
     u_c = (u + u_n) / 2
-    q_c = (13 * q + 3 * q_n) / 16 + 5 * dt / 16 * v + dt ** 2 / 96 * (4 * f - f_n)
+    q_c = (13 * q + 3 * q_n) / 16 + 5 * dt / 16 * v + dt**2 / 96 * (4 * f - f_n)
     v_c = (v + v_n) / 2 + dt / 8 * (f - f_n)
     x_c[first_ind] = q_c
     x_c[last_ind] = v_c
     f_c = F(x_c, u_c, params)[last_ind]
     res[last_ind] = v + dt / 6 * (f + 4 * f_c + f_n)
-    res[first_ind] = q + dt * v + dt ** 2 / 6 * (f + 2 * f_c)
+    res[first_ind] = q + dt * v + dt**2 / 6 * (f + 2 * f_c)
     return x_n - res
 
 
@@ -721,13 +725,13 @@ def hs_mod_parab_restr(x, x_n, u, u_n, F, dt, params, scheme_params):
     q_n = x_n[first_ind]
     v_n = x_n[last_ind]
     u_c = scheme_params
-    q_c = (13 * q + 3 * q_n) / 16 + 5 * dt / 16 * v + dt ** 2 / 96 * (4 * f - f_n)
+    q_c = (13 * q + 3 * q_n) / 16 + 5 * dt / 16 * v + dt**2 / 96 * (4 * f - f_n)
     v_c = (v + v_n) / 2 + dt / 8 * (f - f_n)
     x_c[first_ind] = q_c
     x_c[last_ind] = v_c
     f_c = F(x_c, u_c, params)[last_ind]
     res[last_ind] = v + dt / 6 * (f + 4 * f_c + f_n)
-    res[first_ind] = q + dt * v + dt ** 2 / 6 * (f + 2 * f_c)
+    res[first_ind] = q + dt * v + dt**2 / 6 * (f + 2 * f_c)
     return x_n - res
 
 
@@ -765,7 +769,7 @@ def trapz_mod_accel_restr(x, x_n, a, a_n, dt, scheme_params):
     res = copy(x)
     first_ind, last_ind = index_div(x)
     res[last_ind] = x[last_ind] + dt / 2 * (a + a_n)
-    res[first_ind] = x[first_ind] + dt * x[last_ind] + dt ** 2 / 6 * (a_n + 2 * a)
+    res[first_ind] = x[first_ind] + dt * x[last_ind] + dt**2 / 6 * (a_n + 2 * a)
     return x_n - res
 
 
@@ -808,7 +812,7 @@ def hs_mod_half_x(x, x_n, a, a_n, dt):
     v = x[last_ind]
     q_n = x_n[first_ind]
     v_n = x_n[last_ind]
-    q_c = (13 * q + 3 * q_n) / 16 + 5 * dt / 16 * v + dt ** 2 / 96 * (4 * a - a_n)
+    q_c = (13 * q + 3 * q_n) / 16 + 5 * dt / 16 * v + dt**2 / 96 * (4 * a - a_n)
     v_c = (v + v_n) / 2 + dt / 8 * (a - a_n)
     x_c[first_ind] = q_c
     x_c[last_ind] = v_c
@@ -822,7 +826,7 @@ def hs_mod_accel_restr(x, x_n, a, a_n, dt, scheme_params):
     q = x[first_ind]
     v = x[last_ind]
     res[last_ind] = v + dt / 6 * (a + 4 * a_c + a_n)
-    res[first_ind] = q + dt * v + dt ** 2 / 6 * (a + 2 * a_c)
+    res[first_ind] = q + dt * v + dt**2 / 6 * (a + 2 * a_c)
     return x_n - res
 
 
@@ -841,22 +845,22 @@ def _gen_basic_values(dim, x, x_n, x_dot, x_dot_n, params):
 
 def interp_parab(tau, h, y_0, y_c, y_n):
     xi = tau / h
-    return y_0 + xi * (-3 * y_0 + 4 * y_c - y_n) + 2 * xi ** 2 * (y_0 - 2 * y_c + y_n)
+    return y_0 + xi * (-3 * y_0 + 4 * y_c - y_n) + 2 * xi**2 * (y_0 - 2 * y_c + y_n)
 
 
 def trap_mod_interp(x, x_n, x_dot, x_dot_n, tau, h, params):
     dim = vec_len(x) // 2
     q, q_n, v, v_n, f, f_n = _gen_basic_values(dim, x, x_n, x_dot, x_dot_n, params)
-    q_interp = q + v * tau + 1 / 2 * f * tau ** 2 + 1 / (6 * h) * tau ** 3 * (f_n - f)
-    v_interp = v + tau * f + tau ** 2 / (2 * h) * (f_n - f)
+    q_interp = q + v * tau + 1 / 2 * f * tau**2 + 1 / (6 * h) * tau**3 * (f_n - f)
+    v_interp = v + tau * f + tau**2 / (2 * h) * (f_n - f)
     return concatenate([q_interp, v_interp])
 
 
 def trap_interp(x, x_n, x_dot, x_dot_n, tau, h, params):
     dim = vec_len(x) // 2
     q, q_n, v, v_n, f, f_n = _gen_basic_values(dim, x, x_n, x_dot, x_dot_n, params)
-    q_interp = q + v * tau + 1 / (2 * h) * tau ** 2 * (v_n - v)
-    v_interp = v + f * tau + 1 / (2 * h) * tau ** 2 * (f_n - f)
+    q_interp = q + v * tau + 1 / (2 * h) * tau**2 * (v_n - v)
+    v_interp = v + f * tau + 1 / (2 * h) * tau**2 * (f_n - f)
     return concatenate([q_interp, v_interp])
 
 
@@ -872,7 +876,7 @@ def hs_mod_midpoint(x, x_n, x_dot, x_dot_n, h, params):
     dim = vec_len(x) // 2
     q, q_n, v, v_n, f, f_n = _gen_basic_values(dim, x, x_n, x_dot, x_dot_n, params)
     v_c = (v + v_n) / 2 + h / 8 * (f - f_n)
-    q_c = (13 * q + 3 * q_n + 5 * v * h) / 16 + h ** 2 / 96 * (4 * f - f_n)
+    q_c = (13 * q + 3 * q_n + 5 * v * h) / 16 + h**2 / 96 * (4 * f - f_n)
     return concatenate([q_c, v_c])
 
 
@@ -887,14 +891,14 @@ def hs_interp(x, x_n, x_dot, x_dot_n, tau, h, params, scheme_params):
     q_interp = (
         q
         + v * tau
-        + 1 / 2 * (-3 * v + 4 * v_c - v_n) * tau ** 2 / h
-        + 1 / 3 * (2 * v - 4 * v_c + 2 * v_n) * tau ** 3 / (h ** 2)
+        + 1 / 2 * (-3 * v + 4 * v_c - v_n) * tau**2 / h
+        + 1 / 3 * (2 * v - 4 * v_c + 2 * v_n) * tau**3 / (h**2)
     )
     v_interp = (
         v
         + f * tau
-        + 1 / 2 * (-3 * f + 4 * f_c - f_n) * tau ** 2 / h
-        + 1 / 3 * (2 * f - 4 * f_c + 2 * f_n) * tau ** 3 / (h ** 2)
+        + 1 / 2 * (-3 * f + 4 * f_c - f_n) * tau**2 / h
+        + 1 / 3 * (2 * f - 4 * f_c + 2 * f_n) * tau**3 / (h**2)
     )
     return concatenate([q_interp, v_interp])
 
@@ -910,15 +914,15 @@ def hs_mod_interp(x, x_n, x_dot, x_dot_n, tau, h, params, scheme_params):
     q_interp = (
         q
         + v * tau
-        + 1 / 2 * f * tau ** 2
-        + 1 / 6 * (-3 * f + 4 * f_c - f_n) * tau ** 3 / h
-        + 1 / 12 * (2 * f - 4 * f_c + 2 * f_n) * tau ** 4 / (h ** 2)
+        + 1 / 2 * f * tau**2
+        + 1 / 6 * (-3 * f + 4 * f_c - f_n) * tau**3 / h
+        + 1 / 12 * (2 * f - 4 * f_c + 2 * f_n) * tau**4 / (h**2)
     )
     v_interp = (
         v
         + f * tau
-        + 1 / 2 * (-3 * f + 4 * f_c - f_n) * tau ** 2 / h
-        + 1 / 3 * (2 * f - 4 * f_c + 2 * f_n) * tau ** 3 / (h ** 2)
+        + 1 / 2 * (-3 * f + 4 * f_c - f_n) * tau**2 / h
+        + 1 / 3 * (2 * f - 4 * f_c + 2 * f_n) * tau**3 / (h**2)
     )
     return concatenate([q_interp, v_interp])
 
@@ -935,14 +939,14 @@ def hs_parab_interp(x, x_n, x_dot, x_dot_n, tau, h, params, scheme_params):
     q_interp = (
         q
         + v * tau
-        + 1 / 2 * (-3 * v + 4 * v_c - v_n) * tau ** 2 / h
-        + 1 / 3 * (2 * v - 4 * v_c + 2 * v_n) * tau ** 3 / (h ** 2)
+        + 1 / 2 * (-3 * v + 4 * v_c - v_n) * tau**2 / h
+        + 1 / 3 * (2 * v - 4 * v_c + 2 * v_n) * tau**3 / (h**2)
     )
     v_interp = (
         v
         + f * tau
-        + 1 / 2 * (-3 * f + 4 * f_c - f_n) * tau ** 2 / h
-        + 1 / 3 * (2 * f - 4 * f_c + 2 * f_n) * tau ** 3 / (h ** 2)
+        + 1 / 2 * (-3 * f + 4 * f_c - f_n) * tau**2 / h
+        + 1 / 3 * (2 * f - 4 * f_c + 2 * f_n) * tau**3 / (h**2)
     )
     return concatenate([q_interp, v_interp])
 
@@ -958,15 +962,15 @@ def hs_mod_parab_interp(x, x_n, x_dot, x_dot_n, tau, h, params, scheme_params):
     q_interp = (
         q
         + v * tau
-        + 1 / 2 * f * tau ** 2
-        + 1 / 6 * (-3 * f + 4 * f_c - f_n) * tau ** 3 / h
-        + 1 / 12 * (2 * f - 4 * f_c + 2 * f_n) * tau ** 4 / (h ** 2)
+        + 1 / 2 * f * tau**2
+        + 1 / 6 * (-3 * f + 4 * f_c - f_n) * tau**3 / h
+        + 1 / 12 * (2 * f - 4 * f_c + 2 * f_n) * tau**4 / (h**2)
     )
     v_interp = (
         v
         + f * tau
-        + 1 / 2 * (-3 * f + 4 * f_c - f_n) * tau ** 2 / h
-        + 1 / 3 * (2 * f - 4 * f_c + 2 * f_n) * tau ** 3 / (h ** 2)
+        + 1 / 2 * (-3 * f + 4 * f_c - f_n) * tau**2 / h
+        + 1 / 3 * (2 * f - 4 * f_c + 2 * f_n) * tau**3 / (h**2)
     )
     return concatenate([q_interp, v_interp])
 
@@ -1237,7 +1241,7 @@ def interpolated_array(
     It is assumed that X and U start at t = 0 and are equispaced in time
     with a dt = h.
     Either F or X_dot must be provided
-    
+
 
     Parameters
     ----------
@@ -1362,7 +1366,7 @@ def trap_dot_interp(x, x_n, x_dot, x_dot_n, tau, h, params):
 def trap_mod_dot_interp(x, x_n, x_dot, x_dot_n, tau, h, params):
     dim = vec_len(x) // 2
     q, q_n, v, v_n, f, f_n = _gen_basic_values(dim, x, x_n, x_dot, x_dot_n, params)
-    q_interp = v + f * tau + 1 / (2 * h) * tau ** 2 * (f_n - f)
+    q_interp = v + f * tau + 1 / (2 * h) * tau**2 * (f_n - f)
     v_interp = f + 1 / h * tau * (f_n - f)
     return concatenate([q_interp, v_interp])
 
@@ -1394,12 +1398,12 @@ def hs_dot_interp(x, x_n, x_dot, x_dot_n, tau, h, params, scheme_params):
     q_interp = (
         v
         + tau * (-3 * v + 4 * v_c - v_n) / h
-        + tau ** 2 * (2 * v - 4 * v_c + 2 * v_n) / h ** 2
+        + tau**2 * (2 * v - 4 * v_c + 2 * v_n) / h**2
     )
     v_interp = (
         f
         + tau * (-3 * f + 4 * f_c - f_n) / h
-        + tau ** 2 * (2 * f - 4 * f_c + 2 * f_n) / h ** 2
+        + tau**2 * (2 * f - 4 * f_c + 2 * f_n) / h**2
     )
     return concatenate([q_interp, v_interp])
 
@@ -1415,12 +1419,12 @@ def hs_parab_dot_interp(x, x_n, x_dot, x_dot_n, tau, h, params, scheme_params):
     q_interp = (
         v
         + tau * (-3 * v + 4 * v_c - v_n) / h
-        + tau ** 2 * (2 * v - 4 * v_c + 2 * v_n) / h ** 2
+        + tau**2 * (2 * v - 4 * v_c + 2 * v_n) / h**2
     )
     v_interp = (
         f
         + tau * (-3 * f + 4 * f_c - f_n) / h
-        + tau ** 2 * (2 * f - 4 * f_c + 2 * f_n) / h ** 2
+        + tau**2 * (2 * f - 4 * f_c + 2 * f_n) / h**2
     )
     return concatenate([q_interp, v_interp])
 
@@ -1436,13 +1440,13 @@ def hs_mod_dot_interp(x, x_n, x_dot, x_dot_n, tau, h, params, scheme_params):
     q_interp = (
         v
         + f * tau
-        + 1 / 2 * (-3 * f + 4 * f_c - f_n) * tau ** 2 / h
-        + 1 / 3 * (2 * f - 4 * f_c + 2 * f_n) * tau ** 3 / (h ** 2)
+        + 1 / 2 * (-3 * f + 4 * f_c - f_n) * tau**2 / h
+        + 1 / 3 * (2 * f - 4 * f_c + 2 * f_n) * tau**3 / (h**2)
     )
     v_interp = (
         f
         + tau * (-3 * f + 4 * f_c - f_n) / h
-        + tau ** 2 * (2 * f - 4 * f_c + 2 * f_n) / h ** 2
+        + tau**2 * (2 * f - 4 * f_c + 2 * f_n) / h**2
     )
     return concatenate([q_interp, v_interp])
 
@@ -1458,13 +1462,13 @@ def hs_mod_parab_dot_interp(x, x_n, x_dot, x_dot_n, tau, h, params, scheme_param
     q_interp = (
         v
         + f * tau
-        + 1 / 2 * (-3 * f + 4 * f_c - f_n) * tau ** 2 / h
-        + 1 / 3 * (2 * f - 4 * f_c + 2 * f_n) * tau ** 3 / (h ** 2)
+        + 1 / 2 * (-3 * f + 4 * f_c - f_n) * tau**2 / h
+        + 1 / 3 * (2 * f - 4 * f_c + 2 * f_n) * tau**3 / (h**2)
     )
     v_interp = (
         f
         + tau * (-3 * f + 4 * f_c - f_n) / h
-        + tau ** 2 * (2 * f - 4 * f_c + 2 * f_n) / h ** 2
+        + tau**2 * (2 * f - 4 * f_c + 2 * f_n) / h**2
     )
     return concatenate([q_interp, v_interp])
 
@@ -1479,10 +1483,10 @@ def hs_dot_dot_interp(x, x_n, x_dot, x_dot_n, tau, h, params, scheme_params):
     v_c = x_c[dim:]
     q_interp = (-3 * v + 4 * v_c - v_n) / h + 2 * tau * (
         2 * v - 4 * v_c + 2 * v_n
-    ) / h ** 2
+    ) / h**2
     v_interp = (-3 * f + 4 * f_c - f_n) / h + 2 * tau * (
         2 * f - 4 * f_c + 2 * f_n
-    ) / h ** 2
+    ) / h**2
     return concatenate([q_interp, v_interp])
 
 
@@ -1497,11 +1501,11 @@ def hs_mod_dot_dot_interp(x, x_n, x_dot, x_dot_n, tau, h, params, scheme_params)
     q_interp = (
         f
         + tau * (-3 * f + 4 * f_c - f_n) / h
-        + tau ** 2 * (2 * f - 4 * f_c + 2 * f_n) / h ** 2
+        + tau**2 * (2 * f - 4 * f_c + 2 * f_n) / h**2
     )
     v_interp = (-3 * f + 4 * f_c - f_n) / h + 2 * tau * (
         2 * f - 4 * f_c + 2 * f_n
-    ) / h ** 2
+    ) / h**2
     return concatenate([q_interp, v_interp])
 
 
@@ -1515,10 +1519,10 @@ def hs_parab_dot_dot_interp(x, x_n, x_dot, x_dot_n, tau, h, params, scheme_param
     v_c = x_c[dim:]
     q_interp = (-3 * v + 4 * v_c - v_n) / h + 2 * tau * (
         2 * v - 4 * v_c + 2 * v_n
-    ) / h ** 2
+    ) / h**2
     v_interp = (-3 * f + 4 * f_c - f_n) / h + 2 * tau * (
         2 * f - 4 * f_c + 2 * f_n
-    ) / h ** 2
+    ) / h**2
     return concatenate([q_interp, v_interp])
 
 
@@ -1533,11 +1537,11 @@ def hs_mod_parab_dot_dot_interp(x, x_n, x_dot, x_dot_n, tau, h, params, scheme_p
     q_interp = (
         f
         + tau * (-3 * f + 4 * f_c - f_n) / h
-        + tau ** 2 * (2 * f - 4 * f_c + 2 * f_n) / h ** 2
+        + tau**2 * (2 * f - 4 * f_c + 2 * f_n) / h**2
     )
     v_interp = (-3 * f + 4 * f_c - f_n) / h + 2 * tau * (
         2 * f - 4 * f_c + 2 * f_n
-    ) / h ** 2
+    ) / h**2
     return concatenate([q_interp, v_interp])
 
 
@@ -1631,13 +1635,13 @@ def interpolated_array_derivative(
     scheme_params={},
 ):
     """
-    Calculates the n-th order derivatives of an interpolation of X using 
+    Calculates the n-th order derivatives of an interpolation of X using
     the appropiate form functions and returns its values at 't_array'.
     It is assumed that X and U start at t = 0 and are equispaced in time
     with a dt = h.
     Either F or X_dot must be provided
-     
-    
+
+
 
     Parameters
     ----------

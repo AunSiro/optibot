@@ -32,11 +32,11 @@ def sympy2casadi(sympy_expr, sympy_var, casadi_var):
     Parameters
     ----------
     sympy_expr : sympy expression
-        
+
     sympy_var : list of sympy symbols
-        
+
     casadi_var : list of casady symbols
-        
+
 
     Returns
     -------
@@ -78,7 +78,7 @@ def rhs_to_casadi_function(
     RHS, q_vars, u_vars=None, verbose=False, mode="x", silent=False
 ):
     """
-    Converts an array of symbolic expressions RHS(x, u, params) to a casadi 
+    Converts an array of symbolic expressions RHS(x, u, params) to a casadi
     function.
     Designed to work with systems so that either
         x' = RHS(x, u, params)
@@ -93,8 +93,8 @@ def rhs_to_casadi_function(
         Determine the symbols that will be searched
         if int, the program will assume q as q_i for q in [0,q_vars]
     u_vars : None, int or list of symbols. Default is None.
-        Symbols that will be sarched and separated. 
-        If None, symbols of the form u_ii where ii is a number will be 
+        Symbols that will be sarched and separated.
+        If None, symbols of the form u_ii where ii is a number will be
         assumed
     verbose : Bool, optional, default = False
         wether to print aditional information of expected and found variables
@@ -175,16 +175,24 @@ def rhs_to_casadi_function(
     for function in funcs:
         cas_funcs.append(sympy2casadi(function, all_vars, cas_all_vars))
     cas_funcs = cas.horzcat(*cas_funcs)
-    return cas.Function("F", f_arg_list, [cas_funcs,], f_arg_names, f_out_names,)
+    return cas.Function(
+        "F",
+        f_arg_list,
+        [
+            cas_funcs,
+        ],
+        f_arg_names,
+        f_out_names,
+    )
 
 
 def implicit_dynamic_x_to_casadi_function(
     D, x_vars, u_vars=None, verbose=False, silent=False
 ):
     """
-    Converts an array D(x, x', u, lambdas, params) of symbolic expressions to a 
+    Converts an array D(x, x', u, lambdas, params) of symbolic expressions to a
     Casadi function.
-    
+
     Symbols in the expressions not found in x_vars, x_dot_vars or u_vars
     will be considered parameters.
 
@@ -252,7 +260,9 @@ def implicit_dynamic_x_to_casadi_function(
     return cas.Function(
         "M",
         [cas_x_args, cas_x_dot_args, cas_u_args, cas_lambda_args, cas_params],
-        [cas_funcs,],
+        [
+            cas_funcs,
+        ],
         ["x", "x_dot", "u", "lambdas", "params"],
         ["residue"],
     )
@@ -262,9 +272,9 @@ def implicit_dynamic_q_to_casadi_function(
     D, q_vars, u_vars=None, verbose=False, silent=False
 ):
     """
-    Converts an array D(q, q', q'', u, lambdas, params) of symbolic expressions to a 
+    Converts an array D(q, q', q'', u, lambdas, params) of symbolic expressions to a
     Casadi function.
-    
+
     Symbols in the expressions not found in x_vars, x_dot_vars or u_vars
     will be considered parameters.
 
@@ -335,7 +345,9 @@ def implicit_dynamic_q_to_casadi_function(
     return cas.Function(
         "F",
         [cas_q_args, cas_v_args, cas_a_args, cas_u_args, cas_lambda_args, cas_params],
-        [cas_funcs,],
+        [
+            cas_funcs,
+        ],
         ["q", "v", "a", "u", "lambda", "params"],
         ["Residue"],
     )
@@ -387,7 +399,9 @@ def restriction2casadi(F_scheme, F, n_vars, n_u, n_params, n_scheme_params=0):
         return cas.Function(
             "Restriction",
             [x, x_n, u, u_n, dt, p],
-            [result,],
+            [
+                result,
+            ],
             ["x", "x_n", "u", "u_n", "dt", "params"],
             ["residue"],
         )
@@ -397,7 +411,9 @@ def restriction2casadi(F_scheme, F, n_vars, n_u, n_params, n_scheme_params=0):
         return cas.Function(
             "Restriction",
             [x, x_n, u, u_n, dt, p, sch_p],
-            [result,],
+            [
+                result,
+            ],
             ["x", "x_n", "u", "u_n", "dt", "params", "scheme_params"],
             ["residue"],
         )
@@ -436,7 +452,9 @@ def accelrestriction2casadi(F_scheme, n_vars, n_scheme_params=0):
     return cas.Function(
         "Restriction",
         [x, x_n, a, a_n, dt, sch_p],
-        [result,],
+        [
+            result,
+        ],
         ["x", "x_n", "a", "a_n", "dt", "scheme_params"],
         ["residue"],
     )
@@ -456,7 +474,7 @@ def doub_pend_F(x, u, params=[1, 1, 1, 1, 1]):
     result.append(
         (
             l_0
-            * (l_1 * m_1 * (g * sin(q_1) - l_0 * v_0 ** 2 * sin(q_0 - q_1)) - u_1)
+            * (l_1 * m_1 * (g * sin(q_1) - l_0 * v_0**2 * sin(q_0 - q_1)) - u_1)
             * cos(q_0 - q_1)
             + l_1
             * (
@@ -464,18 +482,18 @@ def doub_pend_F(x, u, params=[1, 1, 1, 1, 1]):
                 * (
                     g * m_0 * sin(q_0)
                     + g * m_1 * sin(q_0)
-                    + l_1 * m_1 * v_1 ** 2 * sin(q_0 - q_1)
+                    + l_1 * m_1 * v_1**2 * sin(q_0 - q_1)
                 )
                 + u_0
             )
         )
-        / (l_0 ** 2 * l_1 * (m_0 - m_1 * cos(q_0 - q_1) ** 2 + m_1))
+        / (l_0**2 * l_1 * (m_0 - m_1 * cos(q_0 - q_1) ** 2 + m_1))
     )
     result.append(
         (
             -l_0
             * (m_0 + m_1)
-            * (l_1 * m_1 * (g * sin(q_1) - l_0 * v_0 ** 2 * sin(q_0 - q_1)) - u_1)
+            * (l_1 * m_1 * (g * sin(q_1) - l_0 * v_0**2 * sin(q_0 - q_1)) - u_1)
             + l_1
             * m_1
             * (
@@ -483,13 +501,13 @@ def doub_pend_F(x, u, params=[1, 1, 1, 1, 1]):
                 * (
                     g * m_0 * sin(q_0)
                     + g * m_1 * sin(q_0)
-                    + l_1 * m_1 * v_1 ** 2 * sin(q_0 - q_1)
+                    + l_1 * m_1 * v_1**2 * sin(q_0 - q_1)
                 )
                 - u_0
             )
             * cos(q_0 - q_1)
         )
-        / (l_0 * l_1 ** 2 * m_1 * (m_0 - m_1 * cos(q_0 - q_1) ** 2 + m_1))
+        / (l_0 * l_1**2 * m_1 * (m_0 - m_1 * cos(q_0 - q_1) ** 2 + m_1))
     )
 
     return cas.horzcat(*result)

@@ -55,21 +55,21 @@ def dynamic_error(
 ):
     """
     Generate arrays of equispaced points with values of dynamic error.
-    
+
     If x(t) = [q(t), v(t)], and the physics equation states that x' = F(x, u),
-    which is equivalent to [q', v'] = [v , G(q, v, u)] we can define the 
+    which is equivalent to [q', v'] = [v , G(q, v, u)] we can define the
     dynamic errors at a point t as:
         dyn_q_err = q'(t) - v(t)
         dyn_v_err = v'(t) - G(q(t), v(t), u(t))
         dyn_2_err_a = q''(t) - G(q(t), v(t), u(t))
         dyn_2_err_b = q''(t) - G(q(t), q'(t), u(t))
-        
+
     'scheme' and 'u_scheme' define the way in which we interpolate the values
     of q, v and u between the given points.
-        
+
     It is assumed that X and U start at t = 0 and are equispaced in time
     in the interval (0, t_end).
-    
+
 
     Parameters
     ----------
@@ -139,6 +139,7 @@ def dynamic_error(
         h,
         t_interp,
         params,
+        X_dot=X_dot,
         F=F,
         scheme=scheme,
         u_scheme=u_scheme,
@@ -151,6 +152,7 @@ def dynamic_error(
         t_interp,
         params,
         F=F,
+        X_dot=X_dot,
         scheme=scheme,
         order=1,
         scheme_params=scheme_params,
@@ -162,6 +164,7 @@ def dynamic_error(
         t_interp,
         params,
         F=F,
+        X_dot=X_dot,
         scheme=scheme,
         order=2,
         scheme_params=scheme_params,
@@ -182,16 +185,16 @@ def dynamic_error(
 
 def generate_G(M, F_impl):
     """
-    Generate a function G from M and F, so that from 
+    Generate a function G from M and F, so that from
 
             | q''  |   |                | -1   |                 |
             |      | = |  M(x, params)  |    @ | F(x, u, params) |
             |lambda|   |                |      |                 |,
-    
+
     we can get a function G so that:
-        
+
          q'' = G(x, u) = (M(x)^-1 @  F(x, u)) [upperside]
-            
+
     Parameters
     ----------
     M : Function of (x, params)
@@ -231,44 +234,44 @@ def dynamic_error_implicit(
 ):
     """
     Generate arrays of equispaced points with values of dynamic error.
-    
+
     If x(t) = [q(t), v(t)], and the dynamics can be written as:
             | M    A_c|   | q''  |   |f_d (q, v, u)|
             |         | @ |      | = |             |
             |m_cd   0 |   |lambda|   |f_dc(q, v)   |,
-            
+
     and therefore:
             | q''  |   | M    A_c| -1   |f_d (q, v, u)|
             |      | = |         |    @ |             |
             |lambda|   |m_cd   0 |      |f_dc(q, v)   |,
-            
+
     Calling M_comp to the whole inversed matrix, the first equation is:
-        
+
         q''= (M_comp ^-1 @ [f_d  f_dc]^T) [upperside]
-        
+
     We define F(q, v, u) = [f_d(q, v, u)  f_dc(q, v)]^T
-    
+
     we can define G(q, v, u) = (M_comp(q, v) ^-1 @  F(q, v, u)) [upperside]
-    For notation simplicity, we will from now on extend the notation of 
+    For notation simplicity, we will from now on extend the notation of
     M to encompass the whole M_comp, resulting in:
-        
+
         q'' = G(q, v, u) = (M(q, v)^-1 @  F(q, v, u)) [upperside]
-        
+
     so that the equation plus the definition of v(t) as q'(t)
-    is equivalent to [q', v'] = [v , G(x, u)] 
-    
+    is equivalent to [q', v'] = [v , G(x, u)]
+
     we can define the dynamic errors at a point t as:
         dyn_q_err = q'(t) - v(t)
         dyn_v_err = v'(t) - G(x(t), u(t))
         dyn_2_err_a = q''(t) - G(x(t), u(t))
         dyn_2_err_b = q''(t) - G(q(t), q'(t), u(t))
-        
+
     'scheme' and 'u_scheme' define the way in which we interpolate the values
     of q, v and u between the given points.
-        
+
     It is assumed that X and U start at t = 0 and are equispaced in time
     in the interval (0, t_end).
-    
+
 
     Parameters
     ----------
@@ -286,7 +289,7 @@ def dynamic_error_implicit(
     M : Function of (x, params)
         Calculates the numerical value of the complete mass matrix at a given configuration
     lambda_arr : Numpy Array
-        If the problem has restrictions, they are taken into account on the 
+        If the problem has restrictions, they are taken into account on the
         lagrangian through the term: A_c @ lambda
     X_dot : Numpy Array, optional, shape = (W, 2N), default = None
         Known values of X'
@@ -427,14 +430,14 @@ def F_point(
     """
     Calculate the value of F(X_q(t), u(t), params), interpolating X_q(t) and u(t)
     first.
-    
+
     If X(t) = [q(t), v(t)], we define X_q(t) as [q(t), q'(t)]
-        
+
     'scheme' and 'u_scheme' define the way in which we interpolate the values
     of q, v and u between the given points.
-        
-    
-    
+
+
+
 
     Parameters
     ----------

@@ -83,8 +83,8 @@ def RHS2numpy(RHS, q_vars, u_vars=None, verbose=False, mode="x"):
         Determine the symbols that will be searched
         if int, the program will assume q as q_i for q in [0,q_vars]
     u_vars : None, int or list of symbols. Default is None.
-        Symbols that will be sarched and separated. 
-        If None, symbols of the form u_ii where ii is a number will be 
+        Symbols that will be sarched and separated.
+        If None, symbols of the form u_ii where ii is a number will be
         assumed
     verbose : Bool, optional
         wether to print aditional information of expected and found variables
@@ -178,7 +178,7 @@ def doub_pend_F(x, u, params=[1, 1, 1, 1, 1]):
     result.append(
         (
             l_0
-            * (l_1 * m_1 * (g * sin(q_1) - l_0 * v_0 ** 2 * sin(q_0 - q_1)) - u_1)
+            * (l_1 * m_1 * (g * sin(q_1) - l_0 * v_0**2 * sin(q_0 - q_1)) - u_1)
             * cos(q_0 - q_1)
             + l_1
             * (
@@ -186,18 +186,18 @@ def doub_pend_F(x, u, params=[1, 1, 1, 1, 1]):
                 * (
                     g * m_0 * sin(q_0)
                     + g * m_1 * sin(q_0)
-                    + l_1 * m_1 * v_1 ** 2 * sin(q_0 - q_1)
+                    + l_1 * m_1 * v_1**2 * sin(q_0 - q_1)
                 )
                 + u_0
             )
         )
-        / (l_0 ** 2 * l_1 * (m_0 - m_1 * cos(q_0 - q_1) ** 2 + m_1))
+        / (l_0**2 * l_1 * (m_0 - m_1 * cos(q_0 - q_1) ** 2 + m_1))
     )
     result.append(
         (
             -l_0
             * (m_0 + m_1)
-            * (l_1 * m_1 * (g * sin(q_1) - l_0 * v_0 ** 2 * sin(q_0 - q_1)) - u_1)
+            * (l_1 * m_1 * (g * sin(q_1) - l_0 * v_0**2 * sin(q_0 - q_1)) - u_1)
             + l_1
             * m_1
             * (
@@ -205,13 +205,13 @@ def doub_pend_F(x, u, params=[1, 1, 1, 1, 1]):
                 * (
                     g * m_0 * sin(q_0)
                     + g * m_1 * sin(q_0)
-                    + l_1 * m_1 * v_1 ** 2 * sin(q_0 - q_1)
+                    + l_1 * m_1 * v_1**2 * sin(q_0 - q_1)
                 )
                 - u_0
             )
             * cos(q_0 - q_1)
         )
-        / (l_0 * l_1 ** 2 * m_1 * (m_0 - m_1 * cos(q_0 - q_1) ** 2 + m_1))
+        / (l_0 * l_1**2 * m_1 * (m_0 - m_1 * cos(q_0 - q_1) ** 2 + m_1))
     )
 
     return congruent_concatenate(result)

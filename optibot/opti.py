@@ -70,7 +70,7 @@ _implemented_pseudospectral_schemes = [
 
 def _get_f_g_funcs(RHS, q_vars, u_vars=None, verbose=False, silent=True):
     """
-    Converts an array of symbolic expressions RHS(x, u, params) to the 3 casadi 
+    Converts an array of symbolic expressions RHS(x, u, params) to the 3 casadi
     dynamics residual functions. They have a blind argument "lamba" that allows them
     to share structure with implicit dinamic functions that require lagrange multipliers.
     Designed to work with systems so that either
@@ -86,8 +86,8 @@ def _get_f_g_funcs(RHS, q_vars, u_vars=None, verbose=False, silent=True):
         Determine the symbols that will be searched
         if int, the program will assume q as q_i for q in [0,q_vars]
     u_vars : None, int or list of symbols. Default is None.
-        Symbols that will be sarched and separated. 
-        If None, symbols of the form u_ii where ii is a number will be 
+        Symbols that will be sarched and separated.
+        If None, symbols of the form u_ii where ii is a number will be
         assumed
     verbose : Bool, optional, default = False
         wether to print aditional information of expected and found variables
@@ -99,10 +99,10 @@ def _get_f_g_funcs(RHS, q_vars, u_vars=None, verbose=False, silent=True):
     -------
     Casadi Function D(x, x', u, lamda, params) so that
         D = x'- F(x, u, params)
-        
+
     Casadi Function D(x, x', u, lamda, params) so that
         D = x'[bottom] - G(x, u, params)
-        
+
     Casadi Function D(q, q', q'', u, lamda, params) so that
         D = q'' - G(q, q', u, params)
 
@@ -178,12 +178,18 @@ def _get_f_g_funcs(RHS, q_vars, u_vars=None, verbose=False, silent=True):
 
 @lru_cache(maxsize=None)
 def _get_cost_obj_trap_int(scheme, N):
-    """ For a given pseudospectral scheme and number of collocation points,
+    """For a given pseudospectral scheme and number of collocation points,
     returns a function of values in said points that calculates a trapezoidal
     integration of the squared values.
     """
     t_arr = (
-        [-1,] + coll_points(N, scheme) + [1,]
+        [
+            -1,
+        ]
+        + coll_points(N, scheme)
+        + [
+            1,
+        ]
     )
     t_arr = [float(ii) for ii in t_arr]
     start_p_f = get_bary_extreme_f(scheme, N, mode="u", point="start")
@@ -207,8 +213,8 @@ def _get_cost_obj_trap_int(scheme, N):
 
 @lru_cache(maxsize=None)
 def _get_cost_obj_trap_int_cas(scheme, N):
-    """ For a given pseudospectral scheme and number of collocation points,
-    returns a casadi function of values in said points that calculates a 
+    """For a given pseudospectral scheme and number of collocation points,
+    returns a casadi function of values in said points that calculates a
     trapezoidal integration of the squared values.
     """
     u_sym = cas.SX.sym("u", N)
@@ -216,7 +222,15 @@ def _get_cost_obj_trap_int_cas(scheme, N):
     fun = _get_cost_obj_trap_int(scheme, N)
     sympy_expr = fun(u_sympy)
     cas_expr = sympy2casadi(sympy_expr, u_sympy, cas.vertsplit(u_sym))
-    cas_f = cas.Function("cost_func", [u_sym,], [cas_expr,])
+    cas_f = cas.Function(
+        "cost_func",
+        [
+            u_sym,
+        ],
+        [
+            cas_expr,
+        ],
+    )
     return cas_f
 
 
@@ -226,22 +240,22 @@ def _get_cost_obj_trap_int_cas(scheme, N):
 class _Opti_Problem:
     """
     An object that contains a casadi opti problem.
-    
+
     Use the methods in this order:
-        
+
         problem.dynamic_setup()
         problem.opti_setup()
         problem.apply_scheme()
-        
+
         additional restrictions and functions, such as:
             problem.u_sq_cost() [apply a u squared integral cost]
             problem.opti.subject_to(conditions)
-            
+
         problem.simple_solve() or problem.chrono_solve()
-        
+
     Important points and arrays of the opti problem generated after opti_setup()
     are stored at problem.opti_arrs and problem.opti_points
-    
+
     Results obtained after solving are stored at problem.results
     """
 
@@ -280,8 +294,7 @@ class _Opti_Problem:
             pass
 
     def _ini_guess_start(self):
-        """ Tries to find optimization arrays in the object
-        """
+        """Tries to find optimization arrays in the object"""
         try:
             q_opti = self.opti_arrs["q"]
             v_opti = self.opti_arrs["v"]
@@ -293,8 +306,7 @@ class _Opti_Problem:
         return q_opti, v_opti, a_opti
 
     def _save_results(self):
-        """Saves results of optimization in dictionary 'results'
-        """
+        """Saves results of optimization in dictionary 'results'"""
         for key in self.opti_arrs.keys():
             opti_arr = self.opti_arrs[key]
             self.results[key] = self.sol.value(opti_arr)
@@ -321,12 +333,23 @@ class _Opti_Problem:
             )
         cpudt = None
         self.sol = sol
-        self.results = {"cpudt": cpudt}
+
+        if self.cost is None:
+            cost_out = None
+        else:
+            cost_out = sol.value(self.cost)
+
+        self.results = {
+            "cpudt": cpudt,
+            "iter_count": self.opti.stats()["iter_count"],
+            "cost": cost_out,
+            "opti_stats": self.opti.stats(),
+        }
         self._save_results()
 
     def chrono_solve(self, solve_repetitions):
         """
-        Calculate the solution of opti problem repetedly, measuring the 
+        Calculate the solution of opti problem repetedly, measuring the
         time required to do so.
 
         Parameters
@@ -356,13 +379,26 @@ class _Opti_Problem:
         cput1 = time()
         cpudt = (cput1 - cput0) / solve_repetitions
         self.sol = sol
-        self.results = {"cpudt": cpudt, "cost": sol.value(self.cost)}
+
+        if self.cost is None:
+            cost_out = None
+        else:
+            cost_out = sol.value(self.cost)
+
+        self.results = {
+            "cpudt": cpudt,
+            "iter_count": self.opti.stats()["iter_count"],
+            "cost": cost_out,
+            "opti_stats": self.opti.stats(),
+        }
         self._save_results()
 
 
 class _Pseudospectral:
     def opti_setup(
-        self, col_points, precission=20,
+        self,
+        col_points,
+        precission=20,
     ):
         """
         Creates and links the different opti variables to be used in the problem.
@@ -405,13 +441,27 @@ class _Pseudospectral:
         self.opti = opti
 
         opt_dict = {
-            "LGL": [col_points,],
-            "D2": [col_points,],
-            "LG2": [col_points + 2,],
-            "LGLm": [col_points + 2,],
-            "LG": [col_points + 1,],
-            "LGR": [col_points + 1,],
-            "LGR_inv": [col_points + 1,],
+            "LGL": [
+                col_points,
+            ],
+            "D2": [
+                col_points,
+            ],
+            "LG2": [
+                col_points + 2,
+            ],
+            "LGLm": [
+                col_points + 2,
+            ],
+            "LG": [
+                col_points + 1,
+            ],
+            "LGR": [
+                col_points + 1,
+            ],
+            "LGR_inv": [
+                col_points + 1,
+            ],
         }
         N = opt_dict[scheme][0]
         self.N = N
@@ -506,9 +556,9 @@ class _Pseudospectral:
 
     def u_sq_cost(self):
         """
-        Calculates a trapezoidal integration of u squared and sets it 
+        Calculates a trapezoidal integration of u squared and sets it
         as the optimization cost to minimize
-        
+
         Requires the functions dynamic_setup() and opti_setup(), in that order,
         to have been run prior.
 
@@ -541,7 +591,7 @@ class _Pseudospectral:
         """
         Applies the restrictions corresponding to the selected scheme to
         the opti variables.
-        
+
         Requires the functions dynamic_setup() and opti_setup(), in that order,
         to have been run prior.
 
@@ -644,7 +694,10 @@ class _Pseudospectral:
 
 class _Pseudospectral_multi:
     def opti_setup(
-        self, col_points, segment_num, precission=20,
+        self,
+        col_points,
+        segment_num,
+        precission=20,
     ):
         """
         Creates and links the different opti variables to be used in the problem.
@@ -689,10 +742,18 @@ class _Pseudospectral_multi:
         self.opti = opti
 
         opt_dict = {
-            "LGL_m": [col_points,],
-            "D2_m": [col_points,],
-            "LG2_m": [col_points + 2,],
-            "LG_m": [col_points + 1,],
+            "LGL_m": [
+                col_points,
+            ],
+            "D2_m": [
+                col_points,
+            ],
+            "LG2_m": [
+                col_points + 2,
+            ],
+            "LG_m": [
+                col_points + 1,
+            ],
         }
         N = opt_dict[scheme][0]
         self.N = N
@@ -790,9 +851,9 @@ class _Pseudospectral_multi:
 
     def u_sq_cost(self):
         """
-        Calculates a trapezoidal integration of u squared and sets it 
+        Calculates a trapezoidal integration of u squared and sets it
         as the optimization cost to minimize
-        
+
         Requires the functions dynamic_setup() and opti_setup(), in that order,
         to have been run prior.
 
@@ -825,7 +886,7 @@ class _Pseudospectral_multi:
         """
         Applies the restrictions corresponding to the selected scheme to
         the opti variables.
-        
+
         Requires the functions dynamic_setup() and opti_setup(), in that order,
         to have been run prior.
 
@@ -927,7 +988,7 @@ class _Pseudospectral_multi:
 
 
 class _Equispaced:
-    def opti_setup(self, segment_number):
+    def opti_setup(self, segment_number, tol=1e-26):
         """
         Creates and links the different opti variables to be used in the problem.
         Requires the function dynamic_setup() to have been run prior.
@@ -938,7 +999,7 @@ class _Equispaced:
         ----------
         segment_number : int
             Number of equal seegments in which solution is divided.
-        
+
 
         Raises
         ------
@@ -965,7 +1026,7 @@ class _Equispaced:
             p_opts = {"expand": True, "ipopt.print_level": 0, "print_time": 0}
         s_opts = {
             "max_iter": 10000,
-            "tol": 1e-26,
+            "tol": tol,
         }  # investigate how to make it work adding 'linear_solver' : "MA27"}
         opti.solver("ipopt", p_opts, s_opts)
         self.opti = opti
@@ -1032,9 +1093,9 @@ class _Equispaced:
 
     def u_sq_cost(self):
         """
-        Calculates a trapezoidal integration of u squared and sets it 
+        Calculates a trapezoidal integration of u squared and sets it
         as the optimization cost to minimize
-        
+
         Requires the functions dynamic_setup() and opti_setup(), in that order,
         to have been run prior.
 
@@ -1078,7 +1139,7 @@ class _Equispaced:
         """
         Applies the restrictions corresponding to the selected scheme to
         the opti variables.
-        
+
         Requires the functions dynamic_setup() and opti_setup(), in that order,
         to have been run prior.
 
@@ -1220,7 +1281,7 @@ class _Equispaced:
 class _Explicit_Dynamics:
     def dynamic_setup(self, u_vars=None):
         """
-        Creates and configures the functions that will be used in 
+        Creates and configures the functions that will be used in
         physics restrictions.
 
         Parameters
@@ -1265,7 +1326,7 @@ class _Explicit_Dynamics:
 class _Implicit_Dynamics:
     def dynamic_setup(self, u_vars=None):
         """
-        Creates and configures the functions that will be used in 
+        Creates and configures the functions that will be used in
         physics restrictions.
 
         Parameters
@@ -1329,7 +1390,7 @@ class _Implicit_Dynamics:
 class _Function_Dynamics:
     def dynamic_setup(self, func_kind, n_q, n_u, n_lambdas=0):
         """
-        Creates and configures the functions that will be used in 
+        Creates and configures the functions that will be used in
         physics restrictions.
 
         Parameters
@@ -1469,7 +1530,7 @@ class _Lin_init:
         q is a lineal interpolation between q_s and q_e
         v is a uniform value = (q_e - q_s)/T
         a is zero
-        
+
         If scheme is an Hermite Simpson variation, inizialization is also
         applied to central point values.
 
@@ -1518,7 +1579,7 @@ class _Custom_init:
 
         If scheme is an Hermite Simpson variation, inizialization is also
         applied to central point values.
-        
+
         Parameters
         ----------
         q_guess : numpy array
@@ -1570,22 +1631,22 @@ def Opti_Problem(
 ):
     """
     Creates an object that contains a casadi opti problem.
-    
+
     Use the methods in this order:
-        
+
         problem.dynamic_setup()
         problem.opti_setup()
         problem.apply_scheme()
-        
+
         additional restrictions and functions, such as:
             problem.u_sq_cost() [apply a u squared integral cost]
             problem.opti.subject_to(conditions)
-            
+
         problem.simple_solve() or problem.chrono_solve()
-        
+
     Important points and arrays of the opti problem generated after opti_setup()
     are stored at problem.opti_arrs and problem.opti_points
-    
+
     Results obtained after solving are stored at problem.results
 
     Parameters
@@ -1597,14 +1658,14 @@ def Opti_Problem(
         Contains the values of the parameters of the problem
     scheme : str
         Discretization scheme. The default is "trapz". Acceptable values are:
-            
-            "trapz" : trapezoidal scheme 
-            "trapz_mod": modified 2nd order compatible trapezoidal scheme 
-            "hs": Hermite-Simpson scheme 
-            "hs_mod": modified 2nd order compatible Hermite-Simpson scheme 
+
+            "trapz" : trapezoidal scheme
+            "trapz_mod": modified 2nd order compatible trapezoidal scheme
+            "hs": Hermite-Simpson scheme
+            "hs_mod": modified 2nd order compatible Hermite-Simpson scheme
             "hs_parab": Hermite-Simpson scheme compatible with parabolic U
             "hs_mod_parab": 2nd order compatible Hermite-Simpson scheme with parabolic U
-            
+
             "LG" Legendre-Gauss Collocation
             "LG_inv" LG Colocation with enpoint instead of startpoint as node point
             "LGR" Legendre-Gauss-Radau Collocation
@@ -1612,7 +1673,7 @@ def Opti_Problem(
             "LGL" Legendre-Gauss-Lobato Collocation
             "LGLm" 2nd order modified LGL that only uses interior points as collocation
             "LG2" 2nd order modified LG that adds endpoint as node point
-            "D2" 2nd order modified LGL 
+            "D2" 2nd order modified LGL
     ini_guess : ["zero", "lin", "custom"] The default is "zero".
         initial guess strategy for the optimization. Valid values are:
             "zero": All arrays initialised as zeroes.
@@ -1689,6 +1750,15 @@ def Opti_Problem(
     class Adequate_Problem(*inherit):
         pass
 
-    return Adequate_Problem(
-        LM, params, scheme, ini_guess, t_start, t_end, verbose, silent,
+    problem = Adequate_Problem(
+        LM,
+        params,
+        scheme,
+        ini_guess,
+        t_start,
+        t_end,
+        verbose,
+        silent,
     )
+    problem.cost = None
+    return problem

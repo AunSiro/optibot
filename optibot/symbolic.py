@@ -67,7 +67,7 @@ def make_list(x):
 def q_2_x(expr, qs, qdots):
     """
     Substitutes qs[i] for dynamic symbol x_i and qdots[i] for dynamic symbol
-    x_(n+i) in a symbolic expression 
+    x_(n+i) in a symbolic expression
     """
     assert len(qs) == len(qdots)
     n = len(qs)
@@ -150,9 +150,9 @@ def lagrange(L_expr, var):
     Parameters
     ----------
     L_expr : Symbolic Expression of Lagrange Function
-        
+
     var : Symbol of a variable
-        
+
 
     Returns
     -------
@@ -263,7 +263,7 @@ def diff_to_symb_expr(expr):
 
 def standard_notation(expr):
     """
-    Finds symbols formuled as "nii" and replaces them with symbols of 
+    Finds symbols formuled as "nii" and replaces them with symbols of
     the form n_ii, where n = [q, v, a, u, x] and ii is a number.
 
     Parameters
@@ -305,7 +305,7 @@ def lagr_to_RHS(lagr_eqs, output_msgs=True):
     ----------
     lagr_eqs : List of symbolic expressions
         Lagrange Equations.
-        
+
     output_msgs : Bool
         Wether to print information messages during execution
 
@@ -335,13 +335,19 @@ def lagr_to_RHS(lagr_eqs, output_msgs=True):
             rest = rest - a * expr2
         coeff_mat.append(coeff_line)
         acc_mat.append(
-            [symbols(f"a_{ii}"),]
+            [
+                symbols(f"a_{ii}"),
+            ]
         )
         u_mat.append(
-            [symbols(f"u_{ii}"),]
+            [
+                symbols(f"u_{ii}"),
+            ]
         )
         c_mat.append(
-            [simplify(rest),]
+            [
+                simplify(rest),
+            ]
         )
     coeff_mat = Matrix(coeff_mat)
     acc_mat = Matrix(acc_mat)
@@ -380,9 +386,9 @@ def find_arguments(
     verbose=False,
 ):
     """
-    Given an iterable of sympy expressions, search in it looking for 
+    Given an iterable of sympy expressions, search in it looking for
     certain symbols.
-    
+
 
     Parameters
     ----------
@@ -392,14 +398,14 @@ def find_arguments(
         Determine the symbols that will be searched
         if int, the program will assume q as q_i for q in [0,q_vars]
     u_vars : None, int or list of symbols. Default is None.
-        Symbols that will be sarched and separated. 
-        If None, symbols of the form u_ii where ii is a number will be 
+        Symbols that will be sarched and separated.
+        If None, symbols of the form u_ii where ii is a number will be
         assumed
     separate_lambdas : Bool, optional
-        Wether to separate symbols of the form "lamNN" from the rest of 
+        Wether to separate symbols of the form "lamNN" from the rest of
         parameters, where NN is a number. The default is False.
     separate_as : Bool, optional
-        Wether to separate symbols of the form "a_NN" from the rest of 
+        Wether to separate symbols of the form "a_NN" from the rest of
         parameters, where NN is a number. The default is False.
     verbose : Bool, optional
         wether to print aditional information of expected and found variables
@@ -416,26 +422,26 @@ def find_arguments(
         symbols equal to q_vars if q_var is a list, or symbols determined from
         q_var id q_var is an integer
     v_args : list of symbols
-        if q_args are symbols of the form q_ii, where ii is a number, 
+        if q_args are symbols of the form q_ii, where ii is a number,
         v_args will be a list o symbols of the form v_ii where ii is the same
         numbers in q_args.
-        if not, v_args will be a list of symbols of the form "S_dot", where 
+        if not, v_args will be a list of symbols of the form "S_dot", where
         S is the name of each symbol in q_args.
     a_args : list of symbols
         if separate_as is True:
-            If elements of q_args are q_ii, will be a list of symbols a_ii where ii is 
+            If elements of q_args are q_ii, will be a list of symbols a_ii where ii is
             a number, the same as in q_args.
-            If not, will be a list of symbols of the form "S_dot_dot", where 
+            If not, will be a list of symbols of the form "S_dot_dot", where
             S is the name of each symbol in q_args.
         else, will be an empty list
     u_args : list os symbols
         If u_vars is a list of symbols, will be the same list.
-        If u_vars is an int, will be a list of symbols of the form u_ii where 
+        If u_vars is an int, will be a list of symbols of the form u_ii where
         ii is a number in [0, u_vars]
         If u_vars is None (default), will be a list of all found symbols
         of the form u_ii where ii is a number
     params : List of symbols
-       A list of all the symbols in the expressions that don't fit in any 
+       A list of all the symbols in the expressions that don't fit in any
        other category
     lambda_args_found : list of symbols
         If separate_lambdas is True, a list of all found symbols
@@ -573,15 +579,15 @@ def print_funcs_RHS(RHS, q_vars, u_vars=None, flavour="np", verbose=False):
     Parameters
     ----------
     RHS : Matrix or list of symbolic expressions
-        
+
     q_vars : int or list of symbols
         Number of q variables or list of q variables as symbols.
         If int, will search variables of form q_i
-        
+
     u_vars : None or list of symbols
         Number of u variables or list of q variables as symbols.
         If None, will search variables of form u_i
-    
+
     flavour : str in ["numpy", "np", "casadi"], default = "np"
         experimental feature, converts common functions like sin(x)
         to numpy.sin(x), np.sin(x) or cas.sin(x) respectively
@@ -621,18 +627,18 @@ def print_funcs(expr_list, q_vars=0, flavour="np", verbose=False):
     """
     Prints the given expression list or matrix as a function of x-variables,
     u-variables and parameters. X-variables are either the dynamic symbols
-    of q_vars and their derivatives, or variables of the form q_i or v_i 
+    of q_vars and their derivatives, or variables of the form q_i or v_i
     detected in the expressions up until i = q_vars if q_vars is an integer.
 
     Parameters
     ----------
     expr_list : Matrix or list of Sympy symbolic expressions
-        
+
     q_vars : int or list of symbols, default = 0
         Number of q variables or list of q variables as symbols.
         If int, will search variables of form q_i and qi
         If set to 0, all detected variables will be considered parameters
-    
+
     flavour : str in ["numpy", "np", "casadi"], default = "np"
         experimental feature, converts common functions like sin(x)
         to numpy.sin(x), np.sin(x) or cas.sin(x) respectively
@@ -706,7 +712,13 @@ class SimpLagrangesMethod(LagrangesMethod):
         verbose=True,
     ):
         super().__init__(
-            Lagrangian, qs, forcelist, bodies, frame, hol_coneqs, nonhol_coneqs,
+            Lagrangian,
+            qs,
+            forcelist,
+            bodies,
+            frame,
+            hol_coneqs,
+            nonhol_coneqs,
         )
         self._verbose = verbose
         self._simplif = simplif
@@ -748,7 +760,7 @@ class SimpLagrangesMethod(LagrangesMethod):
         """Returns equations that can be solved numerically.
         Parameters
         ==========
-        
+
         """
         if self.eom is None:
             raise ValueError("Need to compute the equations of motion first")
@@ -859,7 +871,7 @@ class SimpLagrangesMethod(LagrangesMethod):
         """Returns equations that can be solved numerically.
         Parameters
         ==========
-        
+
         """
         if self.eom is None:
             raise ValueError("Need to compute the equations of motion first")
@@ -890,7 +902,7 @@ class SimpLagrangesMethod(LagrangesMethod):
         """Returns equations that can be solved numerically.
         Parameters
         ==========
-        
+
         """
         if self.eom is None:
             raise ValueError("Need to compute the equations of motion first")
@@ -901,7 +913,7 @@ class SimpLagrangesMethod(LagrangesMethod):
         return self._rhs_full
 
     def sym_pinv_dyn(self, ext_forces):
-        """Symbolic pseudo-inverse dynamics. If system is fully actuated, will 
+        """Symbolic pseudo-inverse dynamics. If system is fully actuated, will
         be the exact inverse dynamics.
         Parameters
         ----------
@@ -920,7 +932,7 @@ class SimpLagrangesMethod(LagrangesMethod):
         return _sym_pinv_dyn
 
     def num_pinv_dyn(self, ext_forces):
-        """Numeric pseudo-inverse dynamics. If system is fully actuated, will 
+        """Numeric pseudo-inverse dynamics. If system is fully actuated, will
         be the exact inverse dynamics.
         Parameters
         ----------
@@ -1001,7 +1013,7 @@ class ImplicitLagrangesMethod(LagrangesMethod):
         Returns:
             | M    A_c|
             |m_cd   0 |
-        So that the dynamics can be written as 
+        So that the dynamics can be written as
             | M    A_c|   | q''  |   |f_d |
             |         | @ |      | = |    |
             |m_cd   0 |   |lambda|   |f_dc|
@@ -1060,7 +1072,7 @@ class ImplicitLagrangesMethod(LagrangesMethod):
             | 0   M   A_c| @ |      | = |f_d |
             |            |   |      |   |    |
             | 0  m_cd  0 |   |lambda|   |f_dc|
-            
+
         Function returns a vector D equal to:
             | I   0    0 |   |      |   |x_v |
             |            |   | x'   |   |    |
@@ -1088,7 +1100,7 @@ class ImplicitLagrangesMethod(LagrangesMethod):
         return M @ X_exp - F
 
     def sym_pinv_dyn(self, ext_forces):
-        """Symbolic pseudo-inverse dynamics. If system is fully actuated, will 
+        """Symbolic pseudo-inverse dynamics. If system is fully actuated, will
         be the exact inverse dynamics.
         Parameters
         ----------
@@ -1106,7 +1118,7 @@ class ImplicitLagrangesMethod(LagrangesMethod):
         return _sym_pinv_dyn
 
     def num_pinv_dyn(self, ext_forces):
-        """Numeric pseudo-inverse dynamics. If system is fully actuated, will 
+        """Numeric pseudo-inverse dynamics. If system is fully actuated, will
         be the exact inverse dynamics.
         Parameters
         ----------

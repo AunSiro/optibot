@@ -38,7 +38,13 @@ def LGL(N, precission=20):
         for ii in legendre_poly(N - 1, polys=True).diff().real_roots()
     ]
     return (
-        [-1.0,] + root_list + [1.0,]
+        [
+            -1.0,
+        ]
+        + root_list
+        + [
+            1.0,
+        ]
     )
 
 
@@ -369,7 +375,12 @@ def bary_poly(t_arr, y_arr):
     inf = 0
     for i in range(n):
         inf += v_arr[i] / (t - t_arr[i])
-    poly_fun = lambdify([t,], sup / inf)
+    poly_fun = lambdify(
+        [
+            t,
+        ],
+        sup / inf,
+    )
 
     def new_poly(t):
         t = array(t, dtype="float64")
@@ -413,7 +424,7 @@ def bary_poly_2d(t_arr, y_arr):
 
 def get_bary_extreme_f(scheme, N, mode="u", point="start"):
     """
-    Create a function that calculates the value of a polynomial at 
+    Create a function that calculates the value of a polynomial at
     an extreme point when given the value at construction points.
 
     Parameters
@@ -430,7 +441,7 @@ def get_bary_extreme_f(scheme, N, mode="u", point="start"):
             'D2'
     N : int
         Number of points that construct the polynomial
-    mode : {'u', 'x'} 
+    mode : {'u', 'x'}
         u polynomials are constructed on collocation points, while x polynomials
         are constructed on base points
     point : {'start', 'end'}
@@ -439,7 +450,7 @@ def get_bary_extreme_f(scheme, N, mode="u", point="start"):
     Returns
     -------
     Function(values)
-        A function that will calculate the value at the asked point when the 
+        A function that will calculate the value at the asked point when the
         value of the construction points are [values]
 
     """
@@ -537,7 +548,15 @@ def LG_end_p_fun_cas(N, precission=20):
     fun = get_bary_extreme_f("LG", N, mode="x", point="end")
     sympy_expr = fun(x_sympy)
     cas_expr = sympy2casadi(sympy_expr, x_sympy, vertsplit(x_cas))
-    cas_f = Function("x_poly_endpoint", [x_cas,], [cas_expr,])
+    cas_f = Function(
+        "x_poly_endpoint",
+        [
+            x_cas,
+        ],
+        [
+            cas_expr,
+        ],
+    )
     return cas_f
 
 
@@ -710,15 +729,39 @@ def extend_x_arrays(qq, vv, scheme):
         endp_f = get_bary_extreme_f("LG", N, mode="x", point="end")
         qq_1 = array(endp_f(qq), dtype="float")
         vv_1 = array(endp_f(vv), dtype="float")
-        new_qq = array(list(qq) + [qq_1,], dtype="float64")
-        new_vv = array(list(vv) + [vv_1,], dtype="float64")
+        new_qq = array(
+            list(qq)
+            + [
+                qq_1,
+            ],
+            dtype="float64",
+        )
+        new_vv = array(
+            list(vv)
+            + [
+                vv_1,
+            ],
+            dtype="float64",
+        )
     elif scheme == "LG_inv":
         tau_x = [-1] + base_points(N, scheme)
         startp_f = get_bary_extreme_f("LG_inv", N, mode="x", point="start")
         qq_1 = array(startp_f(qq), dtype="float")
         vv_1 = array(startp_f(vv), dtype="float")
-        new_qq = array(list(qq) + [qq_1,], dtype="float64")
-        new_vv = array(list(vv) + [vv_1,], dtype="float64")
+        new_qq = array(
+            list(qq)
+            + [
+                qq_1,
+            ],
+            dtype="float64",
+        )
+        new_vv = array(
+            list(vv)
+            + [
+                vv_1,
+            ],
+            dtype="float64",
+        )
     else:
         tau_x = base_points(N, scheme)
         new_qq = qq
@@ -728,11 +771,11 @@ def extend_x_arrays(qq, vv, scheme):
 
 def extend_u_array(uu, scheme, N):
     """
-    In the case that the scheme doesn't consider either extreme point as a 
+    In the case that the scheme doesn't consider either extreme point as a
     collocation point, the value of u at said points is extrapolated by
     duplicating the nearest known value and added to the array.
     A modified tau list compatible is also calculated.
-    If both extremes are collocation points for the given scheme, unmodified 
+    If both extremes are collocation points for the given scheme, unmodified
     array of u are returned along with the usual tau list.
 
     Parameters
@@ -831,10 +874,10 @@ def interpolations_pseudospectral(
 ):
     """
     Generates arrays of equispaced points with values of interpolations.
-    
+
     x(t) = [q(t), v(t)], and the physics equation states that x' = F(x, u),
-    which is equivalent to [q', v'] = [v , G(q, v, u)] 
-    
+    which is equivalent to [q', v'] = [v , G(q, v, u)]
+
     'x_interp' and 'u_interp' define the way in which we interpolate the values
     of q, v and u between the given points.
 
@@ -990,14 +1033,14 @@ def dynamic_error_pseudospectral(
 ):
     """
     Generates arrays of equispaced points with values of dynamic error.
-    
+
     If x(t) = [q(t), v(t)], and the physics equation states that x' = F(x, u),
-    which is equivalent to [q', v'] = [v , G(q, v, u)] we can define the 
+    which is equivalent to [q', v'] = [v , G(q, v, u)] we can define the
     dynamic errors at a point t as:
         dyn_q_err = q'(t) - v(t)
         dyn_v_err = v'(t) - G(q(t), v(t), u(t))
         dyn_2_err = q''(t) - G(q(t), v(t), u(t))
-        
+
     'x_interp' and 'u_interp' define the way in which we interpolate the values
     of q, v and u between the given points.
 
@@ -1060,7 +1103,17 @@ def dynamic_error_pseudospectral(
 
     """
     q_arr, q_arr_d, v_arr, v_arr_d, q_arr_d_d, u_arr = interpolations_pseudospectral(
-        qq, vv, uu, scheme, t0, t1, u_interp, x_interp, g_func, params, n_interp,
+        qq,
+        vv,
+        uu,
+        scheme,
+        t0,
+        t1,
+        u_interp,
+        x_interp,
+        g_func,
+        params,
+        n_interp,
     )
     g_func = try_array_f(g_func)
     err_q = q_arr_d - v_arr
