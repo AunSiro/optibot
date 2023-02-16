@@ -1,10 +1,10 @@
-# optibot
+# CHORDS
 **Collocation methods for second or higher order systems**
 
 [![license](https://img.shields.io/badge/license-MIT-blue.svg?style=flat-square)](https://raw.githubusercontent.com/AunSiro/optibot/main/LICENSE)
 [![Code style: black](https://img.shields.io/badge/code%20style-black-000000.svg)](https://github.com/psf/black)
 
-Optibot is a python package for trajectory optimization and control of second or higher order dynamic systems, such as robots. It provides collocation schemes specifically developed to deal with such systems.
+*Chords* is a python package for trajectory optimization and control of second or higher order dynamic systems, such as robots. It provides collocation schemes specifically developed to deal with such systems.
 
 An easy interface is provided to create Casadi opti problems and apply automatically different collocation schemes to a variety of dynamics models, including Sympy Lagrangian objects and function-defined physics, both explicit and implicit.
 
