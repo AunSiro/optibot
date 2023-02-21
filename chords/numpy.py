@@ -5,7 +5,7 @@ Created on Mon May 31 12:52:22 2021
 @author: Siro Moreno
 
 Here we present some tools and functions designed to operate with and
-conert to numpy arrays.
+convert to numpy arrays.
 """
 
 import numpy as np

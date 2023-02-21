@@ -4,7 +4,7 @@ with open("README.md", "r") as fh:
     long_description = fh.read()
 
 setuptools.setup(
-    name="Chords", 
+    name="chords", 
     version="0.0.2",
     author="Siro Moreno-Martín",
     author_email="siro.moreno.martin@upc.edu",
