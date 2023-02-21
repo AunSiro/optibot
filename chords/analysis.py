@@ -8,7 +8,7 @@ Here we will define functions dedicated to analysis and post-processing
 of obtained solutions.
 """
 
-from .schemes import (
+from .piecewise import (
     interpolated_array,
     interpolated_array_derivative,
     _newpoint,

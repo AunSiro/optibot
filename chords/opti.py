@@ -1154,7 +1154,7 @@ class _Equispaced:
 
         """
         from .casadi import accelrestriction2casadi
-        from .schemes import (
+        from .piecewise import (
             euler_accel_restr,
             trapz_accel_restr,
             trapz_mod_accel_restr,
@@ -1188,11 +1188,11 @@ class _Equispaced:
             a_c_opti = self.opti_arrs["a_c"]
             lam_c_opti = self.opti_arrs["lam_c"]
             if "mod" in scheme:
-                from .schemes import hs_mod_half_x
+                from .piecewise import hs_mod_half_x
 
                 half_x = hs_mod_half_x
             else:
-                from .schemes import hs_half_x
+                from .piecewise import hs_half_x
 
                 half_x = hs_half_x
 
@@ -1419,7 +1419,7 @@ class _Function_Dynamics:
 
         """
 
-        from .schemes import expand_G, reduce_F
+        from .piecewise import expand_G, reduce_F
 
         if n_lambdas != 0:
             raise NotImplementedError("Problems with lambdas are not implemented yet")

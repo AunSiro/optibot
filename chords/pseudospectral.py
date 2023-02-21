@@ -14,7 +14,7 @@ from sympy import legendre_poly, symbols, expand, zeros, lambdify
 from functools import lru_cache
 from numpy import array, piecewise, linspace, expand_dims, squeeze
 from .numpy import combinefunctions
-from .schemes import interp_2d
+from .piecewise import interp_2d
 
 
 # --- Generating Collocation Points ---
