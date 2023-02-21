@@ -4,9 +4,9 @@ with open("README.md", "r") as fh:
     long_description = fh.read()
 
 setuptools.setup(
-    name="optibot", # Replace with your own username
-    version="0.0.1",
-    author="Siro Moreno",
+    name="Chords", 
+    version="0.0.2",
+    author="Siro Moreno-Martín",
     author_email="siro.moreno.martin@upc.edu",
     description="Small package containing models and functions for using collocation methods for trajectory optimization and control",
     long_description=long_description,
