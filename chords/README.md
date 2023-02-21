@@ -17,16 +17,16 @@ convert to numpy arrays are defined here.
 - **opti.py:** Here there are functions and classes designed to create, contain and interface
 easily with a casadi opti problem.
 
+- **piecewise.py:** Here, a collection of functions that describe different piecewise polynomial
+schemes, expressed explicitly and implicitly can be found. Related interpolation and 
+auxiliar functions are also defined here.
+
 - **pseudospectral.py:** Contains functions needed to operate with pseudospectral collocations
 schemes. In order to keep the best accuracy in interpolations, barycentric
 formulas are constructed.
 
 - **robots.py:** Functions designed to operate and interface with 
 Robotic Toolbox models can be found here.
-
-- **schemes.py:** Here, a collection of functions that describe different numerical
-schemes, expressed explicitly and implicitly can be found. Related interpolation and 
-auxiliar functions are also defined here.
 
 - **symbolic.py:** Contains functions and classes that operate with SymPy symbolic objects.
 There are handy auxiliary functions, functions that convert expressions
