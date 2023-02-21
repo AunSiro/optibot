@@ -519,17 +519,17 @@ def F_point(
             _newpoint(x_arr, x_dot_arr, h, t, params, scheme, scheme_params)
         ).flatten()
 
-    if u_scheme == "lin":
-        if len(u_arr.shape) == 1:
-            u = interp(t, t_arr, u_arr)
-        elif len(u_arr.shape) == 2:
-            u = interp_2d(t, t_arr, u_arr)
-        else:
-            raise ValueError(
-                f"U has {len(u_arr.shape)} dimensions, values accepted are 1 and 2"
-            )
-    else:
-        u = array(_newpoint_u(u_arr, h, t, u_scheme, scheme_params)).flatten()
+    # if u_scheme == "lin":
+    #     if len(u_arr.shape) == 1:
+    #         u = interp(t, t_arr, u_arr)
+    #     elif len(u_arr.shape) == 2:
+    #         u = interp_2d(t, t_arr, u_arr)
+    #     else:
+    #         raise ValueError(
+    #             f"U has {len(u_arr.shape)} dimensions, values accepted are 1 and 2"
+    #         )
+    # else:
+    u = array(_newpoint_u(u_arr, h, t, u_scheme, scheme_params)).flatten()
 
     if scheme == "hs_scipy":
         X_interp = hermite(t_arr, x_arr, x_dot_arr)
@@ -555,11 +555,16 @@ def quad_problem(
     scheme,
     u_scheme,
     scheme_params,
+    x_dot_arr = None,
     discont_at_t_arr=True,
     sub_div_limit=250,
 ):
 
     dim = x_arr.shape[-1] // 2
+    h = (t_arr[-1] - t_arr[0])/(t_arr.shape[0]-1)
+    x_dot_arr = _calculate_missing_arrays(
+        x_arr, u_arr, h, params, F, x_dot_arr, scheme, u_scheme, scheme_params
+    )
 
     @lru_cache(maxsize=None)
     def dummy_F(t):
@@ -574,7 +579,10 @@ def quad_problem(
             u_scheme=u_scheme,
             scheme_params=scheme_params,
         )
-        return E
+        x_d = array(
+            _newpoint_der(x_arr, x_dot_arr, h, t, params, scheme, 1, scheme_params)
+        ).flatten()
+        return abs(E - x_d[dim:])
 
     errors = []
 
@@ -590,7 +598,8 @@ def quad_problem(
         else:
             E, E_e = quad(dummy_prob, t_arr[0], t_arr[-1], limit=sub_div_limit)
 
-        E = x_arr[-1, dim + ii] - x_arr[0, dim + ii] - E
+        #E = x_arr[-1, dim + ii] - x_arr[0, dim + ii] - E
+        #Integral of (a-F) == delta v -integral(F)
 
         errors.append(E)
 
