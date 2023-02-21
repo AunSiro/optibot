@@ -5,7 +5,9 @@
 ## Related Papers
 **Second or higher order piecewise polynomial collocation methods:**
 
-Collocation Methods for Second Order Systems [Full Text](http://www.roboticsproceedings.org/rss18/p038.html)
+Collocation Methods for Second Order Systems 
+
+[Full Text](http://www.roboticsproceedings.org/rss18/p038.html)
 ```bibtex
 @INPROCEEDINGS{Moreno-Martin-RSS-22, 
     AUTHOR    = {Siro Moreno-Martin AND Lluís Ros AND Enric Celaya}, 
@@ -19,7 +21,9 @@ Collocation Methods for Second Order Systems [Full Text](http://www.roboticsproc
 ```
 
 
-Collocation methods for second and higher order systems[Full Text (preprint)](https://arxiv.org/abs/2302.09056) 
+Collocation methods for second and higher order systems
+
+[Full Text (preprint)](https://arxiv.org/abs/2302.09056) 
 ```bibtex
 @misc{https://doi.org/10.48550/arxiv.2302.09056,
     doi = {10.48550/ARXIV.2302.09056},
@@ -36,8 +40,9 @@ Collocation methods for second and higher order systems[Full Text (preprint)](ht
 **Second Order Pseudospectral Collocation Methods:**
 
 A Legendre-Gauss Pseudospectral Collocation Method for Trajectory Optimization in Second Order Systems
+
 [Full Text (preprint)](https://arxiv.org/abs/2302.09036) 
-[Full Text](https://ieeexplore.ieee.org/document/9981255)
+[Full Text (IEEE)](https://ieeexplore.ieee.org/document/9981255)
 ```bibtex
 @INPROCEEDINGS{9981255,
     author={Moreno-Martín, Siro and Ros, Lluís and Celaya, Enric},
