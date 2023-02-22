@@ -21,7 +21,7 @@ Pseudospectral schemes:
 - Legendre-Gauss-Lobatto
 - Legendre-Gauss-Radau
 
-For the piecewise polynomial schemes, and for the pseudospectral Legendre-Gauss scheme, the package implements the methods for second order systems as described in [1,2,3]. Conventional versions for first order systems are available for all methods. In the future, we plan to add the trapezoidal and Hermite-Simpson methods for Mth order systems given in [2].
+For the piecewise polynomial schemes, and for the pseudospectral Legendre-Gauss scheme, the package implements the methods for second order systems as described in [[1,2,3]](https://github.com/AunSiro/optibot#related-papers). Conventional versions for first order systems are available for all methods. In the future, we plan to add the trapezoidal and Hermite-Simpson methods for Mth order systems given in [[2]](https://github.com/AunSiro/optibot#related-papers).
 
 The library also contains tools for:
 
