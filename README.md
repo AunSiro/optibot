@@ -4,7 +4,7 @@
 [![license](https://img.shields.io/badge/license-MIT-blue.svg?style=flat-square)](https://raw.githubusercontent.com/AunSiro/optibot/main/LICENSE)
 [![Code style: black](https://img.shields.io/badge/code%20style-black-000000.svg)](https://github.com/psf/black)
 
-*Chords* is a python package for trajectory optimization on second or higher order systems. A simple interface is provided to create Casadi opti problems and to apply different collocation schemes to dynamical models described by user-defined functions or via Sympy Lagrangian objects.
+*Chords* is a Python package for trajectory optimization on second or higher order systems. A simple interface is provided to create Casadi Opti problems and to apply different collocation schemes to dynamical models described by user-defined functions or via Sympy Lagrangian objects.
 
 The package implements direct collocation methods that (1) respect the differential relationships between the state variables and (2) ensure that the actual dynamics is imposed at the collocation points, two properties that are not guaranteed when conventional collocation methods are applied to second or higher order systems. In most cases, the new methods in *Chords* reduce significantly the dynamic error of the trajectories, without noticeably increasing the cost of solving the associated NLP problems.
 
@@ -35,8 +35,8 @@ The library also contains tools for:
 - Dynamic error analysis of the obtained solutions
 
 
-## Related Papers
-**Second or higher order piecewise polynomial collocation methods:**
+## Related papers
+**Second or higher order piecewise polynomial methods:**
 
 1. Siro Moreno-Martín, Lluís Ros and Enric Celaya,
 "Collocation Methods for Second Order Systems",
@@ -47,15 +47,15 @@ The library also contains tools for:
 
 2. Siro Moreno-Martín, Lluís Ros and Enric Celaya,
 "Collocation Methods for Second and Higher Order Systems",
-*preprint*  
+*preprint.*  
 [<ins>Full Text (preprint)</ins>](https://arxiv.org/abs/2302.09056) -
 [<ins>Bibtex</ins>](https://raw.githubusercontent.com/AunSiro/optibot/main/bibtex/Collocation-Moreno-preprint23.bib)
 
-**Second Order Pseudospectral Collocation Methods:**
+**Second order pseudospectral methods:**
 
 3. Siro Moreno-Martín, Lluís Ros and Enric Celaya,
  "A Legendre-Gauss Pseudospectral Collocation Method for Trajectory Optimization in Second Order Systems",
- *2022 IEEE/RSJ International Conference on Intelligent Robots and Systems (IROS), Kyoto, Japan, 2022, pp. 13335-13340*  
+ *2022 IEEE/RSJ International Conference on Intelligent Robots and Systems (IROS), Kyoto, Japan, 2022, pp. 13335-13340.*  
 [<ins>Full Text (preprint)</ins>](https://arxiv.org/abs/2302.09036) -
 [<ins>Full Text (IEEE)</ins>](https://ieeexplore.ieee.org/document/9981255) -
 [<ins>Bibtex</ins>](https://raw.githubusercontent.com/AunSiro/optibot/main/bibtex/Pseudospectral-Moreno-IROS22.bib)
