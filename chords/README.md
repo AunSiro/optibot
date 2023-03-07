@@ -1,34 +1,33 @@
 # CHORDS
 **Collocation methods for second or higher order systems**
 
-Here we offer a brief explanation of each file in 
-alphabetical order and what you can expect to find in them.
+Brief explanation of the contents of each file:
 
-- **analysis.py:** Contains functions dedicated to analysis and post-processing
+- **analysis.py:** Functions dedicated to analysis and post-processing
 of obtained solutions.
 
-- **casadi.py:** Here there are some tools and functions dedicated to operate with and
-convert to casadi objects. Also contains a version of sympy2casadi function adapted from Joris Gillis:
+- **casadi.py:** Tools and functions dedicated to operate with and
+convert to Casadi objects. Also contains a version of the sympy2casadi function adapted from Joris Gillis:
 https://gist.github.com/jgillis/80bb594a6c8fcf55891d1d88b12b68b8
 
-- **numpy.py:** Some tools and functions designed to operate with and
-convert to numpy arrays are defined here.
+- **numpy.py:** Tools and functions designed to operate with and
+convert to NumPy arrays.
 
-- **opti.py:** Here there are functions and classes designed to create, contain and interface
-easily with a casadi opti problem.
+- **opti.py:** Functions and classes designed to create, contain and interface
+easily with a Casadi Opti problem.
 
-- **piecewise.py:** Here, a collection of functions that describe different piecewise polynomial
-schemes, expressed explicitly and implicitly can be found. Related interpolation and 
-auxiliar functions are also defined here.
+- **piecewise.py:** A collection of functions that describe different piecewise polynomial
+schemes, expressed both with explicit and implicit dynamics formulations. Related interpolation and 
+auxiliary functions are also defined here.
 
-- **pseudospectral.py:** Contains functions needed to operate with pseudospectral collocations
+- **pseudospectral.py:** Functions needed to operate with pseudospectral collocation
 schemes. In order to keep the best accuracy in interpolations, barycentric
 formulas are constructed.
 
 - **robots.py:** Functions designed to operate and interface with 
-Robotic Toolbox models can be found here.
+models from the Robotic Toolbox by P. Corke.
 
-- **symbolic.py:** Contains functions and classes that operate with SymPy symbolic objects.
-There are handy auxiliary functions, functions that convert expressions
-between notations, and classes that inherit from Lagranges Method and expand
+- **symbolic.py:** Functions and classes that operate with SymPy symbolic objects, 
+including auxiliary functions, functions that convert expressions
+between different notations, and classes that inherit from `sympy.physics.mechanics.LagrangesMethod` and expand
 it in various ways. 
