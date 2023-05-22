@@ -452,7 +452,9 @@ def accelrestriction2casadi(F_scheme, n_vars, n_scheme_params=0):
     return cas.Function(
         "Restriction",
         [x, x_n, a, a_n, dt, sch_p],
-        [result,],
+        [
+            result,
+        ],
         ["x", "x_n", "a", "a_n", "dt", "scheme_params"],
         ["residue"],
     )

@@ -10,7 +10,7 @@ schemes. In order to keep the best accuracy in interpolations, barycentric
 formulas are constructed.
 """
 
-from sympy import legendre_poly, symbols, expand, zeros, lambdify
+from sympy import legendre_poly, jacobi_poly, symbols, expand, zeros, lambdify
 from functools import lru_cache
 from numpy import array, piecewise, linspace, expand_dims, squeeze
 from .numpy import combinefunctions
@@ -59,6 +59,18 @@ def LG2(N, precission=20):
 
 
 @lru_cache(maxsize=2000)
+def JG(N, precission=20):
+    return [
+        ii.evalf(n=precission) for ii in jacobi_poly(N, 1, 0, polys=True).real_roots()
+    ]
+
+
+@lru_cache(maxsize=2000)
+def JG2(N, precission=20):
+    return [-1] + JG(N - 2, precission) + [1]
+
+
+@lru_cache(maxsize=2000)
 def coll_points(N, scheme, precission=20):
     """
     Generates a list of len N with values of tau for collocation points
@@ -76,6 +88,7 @@ def coll_points(N, scheme, precission=20):
             'LGLm'
             'LG2'
             'D2'
+            'JG'
     precission: int, default 20
         number of decimal places of precission
 
@@ -96,6 +109,8 @@ def coll_points(N, scheme, precission=20):
         return LGLm(N, precission)
     elif scheme == "LG2":
         return LG(N, precission)
+    elif scheme == "JG":
+        return JG(N, precission)
     else:
         raise ValueError(
             f"Unsupported scheme {scheme}, valid schemes are: LG, LGR, LGR_inv, LGL, LGLm, LG2, D2"
@@ -121,6 +136,7 @@ def base_points(N, scheme, precission=20):
             'LGLm'
             'LG2'
             'D2'
+            'JG'
     precission: int, default 20
         number of decimal places of precission
 
@@ -143,6 +159,8 @@ def base_points(N, scheme, precission=20):
         return LGL(N, precission)
     elif scheme == "LG2":
         return LG2(N, precission)
+    elif scheme == "JG":
+        return JG2(N, precission)
     else:
         raise ValueError(
             f"Unsupported scheme {scheme}, valid schemes are: LG, LG_inv LGR, LGR_inv, LGL, LGLm, LG2, D2"
@@ -326,6 +344,7 @@ def matrix_D_bary(N, scheme, precission=20):
             'LGLm'
             'LG2'
             'D2'
+            'JG'
     precission: int, default 20
         number of decimal places of precission
 
@@ -439,6 +458,7 @@ def get_bary_extreme_f(scheme, N, mode="u", point="start"):
             'LGLm'
             'LG2'
             'D2'
+            'JG'
     N : int
         Number of points that construct the polynomial
     mode : {'u', 'x'}
@@ -460,7 +480,7 @@ def get_bary_extreme_f(scheme, N, mode="u", point="start"):
             if scheme in ["LGL", "D2", "LGR"]:
                 return lambda coefs: coefs[0]
         elif mode == "x":
-            if scheme in ["LGL", "D2", "LGR", "LGR_inv", "LG", "LG2", "LGLm"]:
+            if scheme in ["LGL", "D2", "LGR", "LGR_inv", "LG", "LG2", "LGLm", "JG"]:
                 return lambda coefs: coefs[0]
         else:
             raise ValueError(f"Invalid mode {mode}, accepted are u and x")
@@ -469,7 +489,7 @@ def get_bary_extreme_f(scheme, N, mode="u", point="start"):
             if scheme in ["LGL", "D2", "LGR_inv"]:
                 return lambda coefs: coefs[-1]
         elif mode == "x":
-            if scheme in ["LGL", "D2", "LGR", "LGR_inv", "LG_inv", "LG2", "LGLm"]:
+            if scheme in ["LGL", "D2", "LGR", "LGR_inv", "LG_inv", "LG2", "LGLm", "JG"]:
                 return lambda coefs: coefs[-1]
         else:
             raise ValueError(f"Invalid mode {mode}, accepted are u and x")
@@ -649,6 +669,7 @@ def get_pol_x(scheme, qq, vv, t0, t1):
             'LGLm'
             'LG2'
             'D2'
+            'JG'
     qq : Numpy Array
         Values known of q(t)
     vv : Numpy Array
@@ -712,6 +733,7 @@ def extend_x_arrays(qq, vv, scheme):
             'LGLm'
             'LG2'
             'D2'
+            'JG'
 
     Returns
     -------
@@ -793,6 +815,7 @@ def extend_u_array(uu, scheme, N):
             'LGLm'
             'LG2'
             'D2'
+            'JG'
 
     Returns
     -------
@@ -822,6 +845,8 @@ def extend_u_array(uu, scheme, N):
         new_uu = array([uu_0] + list(uu), dtype="float64")
     elif scheme in ["LGL", "D2"]:
         new_uu = uu
+    elif scheme == "JG":
+        new_uu = array([uu_0] + list(uu) + [uu_e], dtype="float64")
     else:
         raise ValueError("Unrecognized scheme")
     return tau_u, new_uu
@@ -900,6 +925,7 @@ def interpolations_pseudospectral(
             'LGLm'
             'LG2'
             'D2'
+            'JG'
     t0 : float
         starting time of interval of analysis
     t1 : float
@@ -942,7 +968,7 @@ def interpolations_pseudospectral(
     from scipy.interpolate import CubicHermiteSpline as hermite
     from numpy import interp, gradient, zeros_like
 
-    scheme_opts = ["LG", "LG_inv", "LGR", "LGR_inv", "LGL", "D2", "LG2", "LGLm"]
+    scheme_opts = ["LG", "LG_inv", "LGR", "LGR_inv", "LGL", "D2", "LG2", "LGLm", "JG"]
     if scheme not in scheme_opts:
         NameError(f"Invalid scheme.\n valid options are {scheme_opts}")
 
@@ -1063,6 +1089,7 @@ def dynamic_error_pseudospectral(
             'LGLm'
             'LG2'
             'D2'
+            'JG'
     t0 : float
         starting time of interval of analysis
     t1 : float

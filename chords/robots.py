@@ -91,7 +91,6 @@ def dhlink_rot_mod_to_symbody(
 
 
 def robot_to_sympy(robot, replacedict_list, end_effector=None, simplif=True):
-
     if end_effector is None:
         pass
     else:

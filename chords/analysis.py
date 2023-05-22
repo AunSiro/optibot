@@ -385,7 +385,6 @@ def dynamic_error_implicit(
     f_arr_a = zeros([n_interp, dim])
     f_arr_b = zeros([n_interp, dim])
     for ii in range(n_interp):
-
         f_arr_a[ii, :] = G(x_interp[ii], u_interp[ii], params).flatten()
         x_q = x_interp[ii].copy()
         x_q[dim:] = x_dot_interp[ii, :dim]
@@ -555,13 +554,12 @@ def quad_problem(
     scheme,
     u_scheme,
     scheme_params,
-    x_dot_arr = None,
+    x_dot_arr=None,
     discont_at_t_arr=True,
     sub_div_limit=250,
 ):
-
     dim = x_arr.shape[-1] // 2
-    h = (t_arr[-1] - t_arr[0])/(t_arr.shape[0]-1)
+    h = (t_arr[-1] - t_arr[0]) / (t_arr.shape[0] - 1)
     x_dot_arr = _calculate_missing_arrays(
         x_arr, u_arr, h, params, F, x_dot_arr, scheme, u_scheme, scheme_params
     )
@@ -598,8 +596,8 @@ def quad_problem(
         else:
             E, E_e = quad(dummy_prob, t_arr[0], t_arr[-1], limit=sub_div_limit)
 
-        #E = x_arr[-1, dim + ii] - x_arr[0, dim + ii] - E
-        #Integral of (a-F) == delta v -integral(F)
+        # E = x_arr[-1, dim + ii] - x_arr[0, dim + ii] - E
+        # Integral of (a-F) == delta v -integral(F)
 
         errors.append(E)
 
@@ -618,7 +616,6 @@ def doub_quad_problem(
     discont_at_t_arr=True,
     sub_div_limit=250,
 ):
-
     dim = x_arr.shape[-1] // 2
 
     @lru_cache(maxsize=None)
