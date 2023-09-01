@@ -145,6 +145,15 @@ def roundize(expr, n=4):
     return expr2
 
 
+def deletezeros(expr, tol=1e-14):
+    expr2 = expr
+    for a in preorder_traversal(expr):
+        if isinstance(a, Float):
+            if abs(a) < tol:
+                expr2 = expr2.subs(a, 0)
+    return expr2
+
+
 def lagrange(L_expr, var):
     """
     Parameters

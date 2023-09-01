@@ -14,7 +14,7 @@ from which a new class must inherit. Then, it will return an instance
 of the custom class created.
 
 The class will inherit:
-    - From _Opti_Problem, always. Contains methos common to all problems.
+    - From _Opti_Problem, always. Contains methods common to all problems.
     
     - Depending on the scheme: from _Pseudospectral or _Equispaced. They
       contain the methods that change structure depending on wether the
@@ -40,10 +40,11 @@ from .pseudospectral import (
     LG_end_p_fun_cas,
     LG_inv_diff_start_p_fun_cas,
     get_bary_extreme_f,
+    vector_interpolator,
 )
 
 import casadi as cas
-from numpy import array, linspace, expand_dims, ones
+from numpy import array, linspace, expand_dims, ones, ndarray, alltrue
 from sympy import symbols
 from time import time
 from functools import lru_cache
@@ -56,6 +57,9 @@ _implemented_equispaced_schemes = [
     "hs_mod",
     "hs_parab",
     "hs_mod_parab",
+    "hsj",
+    "hsj_parab",
+    "hsj_parab_mod",
 ]
 _implemented_pseudospectral_schemes = [
     "LG",
@@ -63,6 +67,7 @@ _implemented_pseudospectral_schemes = [
     "D2",
     "LG2",
     "LGLm",
+    "JG",
 ]
 
 # --- Explicit Dynamics ---
@@ -462,6 +467,9 @@ class _Pseudospectral:
             "LGR_inv": [
                 col_points + 1,
             ],
+            "JG": [
+                col_points + 2,
+            ],
         }
         N = opt_dict[scheme][0]
         self.N = N
@@ -477,7 +485,7 @@ class _Pseudospectral:
                 v_opti = x_opti[:, self.n_q :]
                 a_opti = x_dot_opti[:, self.n_q :]
 
-            elif scheme in ["LG2", "D2", "LGLm"]:
+            elif scheme in ["LG2", "D2", "LGLm", "JG"]:
                 q_opti = opti.variable(N, self.n_q)
                 v_opti = 2 / (t_end - t_start) * D_mat @ q_opti
                 a_opti = 2 / (t_end - t_start) * D_mat @ v_opti
@@ -674,6 +682,19 @@ class _Pseudospectral:
                     == 0
                 )
         elif scheme == "LGLm":
+            for ii in range(1, N - 1):
+                self.opti.subject_to(
+                    dynam_g_q(
+                        q_opti[ii, :],
+                        v_opti[ii, :],
+                        a_opti[ii, :],
+                        u_opti[ii - 1, :],
+                        lam_opti[ii - 1, :],
+                        params,
+                    )
+                    == 0
+                )
+        elif scheme == "JG":
             for ii in range(1, N - 1):
                 self.opti.subject_to(
                     dynam_g_q(
@@ -1032,12 +1053,22 @@ class _Equispaced:
         self.opti = opti
 
         try:
-            x_opti = opti.variable(N + 1, 2 * self.n_q)
-            x_dot_opti = opti.variable(N + 1, 2 * self.n_q)
+            order = self.order
+            x_opti = opti.variable(N + 1, order * self.n_q)
+            x_dot_opti = opti.variable(N + 1, order * self.n_q)
             u_opti = opti.variable(N + 1, self.n_u)
-            q_opti = x_opti[:, : self.n_q]
-            v_opti = x_opti[:, self.n_q :]
-            a_opti = x_dot_opti[:, self.n_q :]
+            q_and_ders = []
+            for _ii in range(order):
+                q_and_ders.append(x_opti[:, self.n_q * _ii : self.n_q * (_ii + 1)])
+            q_and_ders.append(x_dot_opti[:, -self.n_q :])
+            # q_opti = x_opti[:, : self.n_q]
+            # v_opti = x_opti[:, self.n_q :]
+            # a_opti = x_dot_opti[:, -self.n_q :]
+            q_and_ders_names = ["q", "v", "a", "jerk", "snap", "crackle", "pop"]
+            for _ii in range(7, order + 1):
+                q_and_ders_names.append(f"d{_ii}q")
+            self.q_and_ders_names = q_and_ders_names[: order + 1]
+
             t_arr = linspace(t_start, t_end, N + 1)
         except AttributeError:
             raise RuntimeError(
@@ -1049,9 +1080,9 @@ class _Equispaced:
         self.opti_arrs = {
             "x": x_opti,
             "x_d": x_dot_opti,
-            "q": q_opti,
-            "v": v_opti,
-            "a": a_opti,
+            # "q": q_opti,
+            # "v": v_opti,
+            # "a": a_opti,
             "u": u_opti,
             "t": t_arr,
             "lam": lam_opti,
@@ -1062,34 +1093,550 @@ class _Equispaced:
             "x_e": x_opti[-1, :],
             "x_d_s": x_dot_opti[0, :],
             "x_d_e": x_dot_opti[-1, :],
-            "q_s": q_opti[0, :],
-            "q_e": q_opti[-1, :],
-            "v_s": v_opti[0, :],
-            "v_e": v_opti[-1, :],
-            "a_s": a_opti[0, :],
-            "a_e": a_opti[-1, :],
+            # "q_s": q_opti[0, :],
+            # "q_e": q_opti[-1, :],
+            # "v_s": v_opti[0, :],
+            # "v_e": v_opti[-1, :],
+            # "a_s": a_opti[0, :],
+            # "a_e": a_opti[-1, :],
         }
+
+        for _ii in range(order + 1):
+            _name = q_and_ders_names[_ii]
+            _arr = q_and_ders[_ii]
+            self.opti_arrs[_name] = _arr
+            self.opti_points[_name + "_s"] = _arr[0, :]
+            self.opti_points[_name + "_e"] = _arr[-1, :]
 
         if "hs" in scheme:
             u_c_opti = opti.variable(N, self.n_u)
-            x_c_opti = opti.variable(N, 2 * self.n_q)
-            x_dot_c_opti = opti.variable(N, 2 * self.n_q)
-            q_c_opti = x_c_opti[:, : self.n_q]
-            v_c_opti = x_c_opti[:, self.n_q :]
-            a_c_opti = x_dot_c_opti[:, self.n_q :]
-            t_c_arr = (t_arr[:-1] + t_arr[1:]) / 2
+            x_c_opti = opti.variable(N, order * self.n_q)
+            x_dot_c_opti = opti.variable(N, order * self.n_q)
+            q_and_ders_c = []
+            for _ii in range(order):
+                q_and_ders_c.append(x_c_opti[:, self.n_q * _ii : self.n_q * (_ii + 1)])
+            q_and_ders_c.append(x_dot_c_opti[:, -self.n_q :])
+            # q_c_opti = x_c_opti[:, : self.n_q]
+            # v_c_opti = x_c_opti[:, self.n_q :]
+            # a_c_opti = x_dot_c_opti[:, self.n_q :]
+            if "j" in scheme:
+                t_c_arr = 0.6 * t_arr[:-1] + 0.4 * t_arr[1:]
+            else:
+                t_c_arr = (t_arr[:-1] + t_arr[1:]) / 2
             lam_c_opti = opti.variable(N, self.n_lambdas)
             self.opti_arrs = {
                 **self.opti_arrs,
                 "x_c": x_c_opti,
                 "x_d_c": x_dot_c_opti,
-                "q_c": q_c_opti,
-                "v_c": v_c_opti,
-                "a_c": a_c_opti,
+                # "q_c": q_c_opti,
+                # "v_c": v_c_opti,
+                # "a_c": a_c_opti,
                 "u_c": u_c_opti,
                 "t_c": t_c_arr,
                 "lam_c": lam_c_opti,
             }
+
+            for _ii in range(order + 1):
+                _name = q_and_ders_names[_ii]
+                _arr = q_and_ders_c[_ii]
+                self.opti_arrs[_name + "_c"] = _arr
+
+            if scheme == "hsj_parab_mod":
+                u_j_opti = opti.variable(N, self.n_u)
+                self.opti_arrs["u_j"] = u_j_opti
+
+    def u_sq_cost(self):
+        """
+        Calculates a trapezoidal integration of u squared and sets it
+        as the optimization cost to minimize
+
+        Requires the functions dynamic_setup() and opti_setup(), in that order,
+        to have been run prior.
+
+        Raises
+        ------
+        RuntimeError
+            If opti_setup() or dynamic_setup() have not ben run previously
+
+        Returns
+        -------
+        None.
+
+        """
+        try:
+            U = self.opti_arrs["u"]
+        except AttributeError:
+            raise RuntimeError(
+                "opti must be set up before defining cost, use opti_setup()"
+            )
+
+        dt = self.t_end - self.t_start
+        U_sq = U**2
+
+        if "parab" in self.scheme:
+            U_c = self.opti_arrs["u_c"]
+            if self.scheme == "hsj_parab_mod":
+                U_c = self.opti_arrs["u_j"]
+                U_j = self.opti_arrs["u_c"]  # OJO EN arrs están guardados al revés!
+                # self.opti.subject_to(U_c == (25*U_j + 2*U[1:, :] - 3*U[:-1, :])/24)
+                self.opti.subject_to(
+                    U_j == (24 * U_c - 2 * U[1:, :] + 3 * U[:-1, :]) / 25
+                )
+
+            U_c_sq = U_c**2
+
+            if "j" in self.scheme and self.scheme != "hsj_parab_mod":
+                cost = dt * cas.sum2(
+                    (
+                        25 * cas.sum1(U_c_sq[:, :])
+                        + 3 * cas.sum1(U_sq[:-1, :])
+                        + 8 * cas.sum1(U_sq[1:, :])
+                    )
+                    / (18 * self.N)
+                )
+            else:
+                cost = dt * cas.sum2(
+                    (
+                        4 * cas.sum1(U_c_sq[:, :])
+                        + cas.sum1(U_sq[:, :])
+                        + cas.sum1(U_sq[1:-1, :])
+                    )
+                    / (3 * self.N)
+                )
+        else:
+            cost = dt * cas.sum2(
+                (cas.sum1(U_sq[:, :]) + cas.sum1(U_sq[1:-1, :])) / self.N
+            )
+        self.cost = cost
+        self.opti.minimize(cost)
+
+    def apply_scheme(self):
+        """
+        Applies the restrictions corresponding to the selected scheme to
+        the opti variables.
+
+        Requires the functions dynamic_setup() and opti_setup(), in that order,
+        to have been run prior.
+
+        Raises
+        ------
+        RuntimeError
+            If opti_setup() or dynamic_setup() have not ben run previously
+
+        Returns
+        -------
+        None.
+
+        """
+        from .casadi import accelrestriction2casadi
+        from .piecewise import (
+            euler_accel_restr,
+            trapz_accel_restr,
+            trapz_mod_accel_restr,
+            hs_mod_accel_restr,
+            hs_mod_half_x,
+            hs_accel_restr,
+            hs_half_x,
+            hsj_accel_restr,
+            hsj_half_x,
+        )
+
+        scheme = self.scheme
+        try:
+            N = self.N
+        except AttributeError:
+            raise RuntimeError(
+                "opti must be set up before applying constraints, use opti_setup()"
+            )
+        q_and_ders_names = self.q_and_ders_names
+        T = self.t_end - self.t_start
+        dynam_f_x = self.dyn_f_restr
+        # dynam_g_q = self.dyn_g_restr
+        x_opti = self.opti_arrs["x"]
+        x_dot_opti = self.opti_arrs["x_d"]
+        # q_opti = self.opti_arrs["q"]
+        # v_opti = self.opti_arrs["v"]
+        highest_q_d_opti = self.opti_arrs[q_and_ders_names[-1]]
+        u_opti = self.opti_arrs["u"]
+        lam_opti = self.opti_arrs["lam"]
+        params = self.params
+        if "hs" in scheme:
+            x_c_opti = self.opti_arrs["x_c"]
+            x_c_dot_opti = self.opti_arrs["x_d_c"]
+            u_c_opti = self.opti_arrs["u_c"]
+            a_c_opti = self.opti_arrs["a_c"]
+            lam_c_opti = self.opti_arrs["lam_c"]
+
+            if "j" in scheme:
+                half_x = hsj_half_x
+            elif "mod" in scheme:
+                half_x = hs_mod_half_x
+            else:
+                half_x = hs_half_x
+
+        # Dynamics Constraints:
+        for ii in range(N + 1):
+            self.opti.subject_to(
+                dynam_f_x(
+                    x_opti[ii, :],
+                    x_dot_opti[ii, :],
+                    u_opti[ii, :],
+                    lam_opti[ii, :],
+                    params,
+                )
+                == 0
+            )
+        if "hs" in scheme:
+            for ii in range(N):
+                self.opti.subject_to(
+                    x_c_opti[ii, :]
+                    == half_x(
+                        x_opti[ii, :],
+                        x_opti[ii + 1, :],
+                        highest_q_d_opti[ii, :],
+                        highest_q_d_opti[ii + 1, :],
+                        T / N,
+                    )
+                )
+                self.opti.subject_to(
+                    dynam_f_x(
+                        x_c_opti[ii, :],
+                        x_c_dot_opti[ii, :],
+                        u_c_opti[ii, :],
+                        lam_c_opti[ii, :],
+                        params,
+                    )
+                    == 0
+                )
+            if "parab" not in scheme:
+                if "j" in scheme:
+                    for ii in range(N):
+                        self.opti.subject_to(
+                            u_c_opti[ii, :]
+                            == 0.6 * u_opti[ii, :] + 0.4 * u_opti[ii + 1, :]
+                        )
+                else:
+                    for ii in range(N):
+                        self.opti.subject_to(
+                            u_c_opti[ii, :] == (u_opti[ii, :] + u_opti[ii + 1, :]) / 2
+                        )
+
+        # Scheme Constraints
+        restr_schemes = {
+            #'euler': euler_accel_restr, #comprobar compatibilidad
+            "trapz": trapz_accel_restr,
+            "trapz_mod": trapz_mod_accel_restr,
+            "hs": hs_accel_restr,
+            "hs_mod": hs_mod_accel_restr,
+            "hs_parab": hs_accel_restr,
+            "hs_mod_parab": hs_mod_accel_restr,
+            "hsj": hsj_accel_restr,
+            "hsj_parab": hsj_accel_restr,
+            "hsj_parab_mod": hsj_accel_restr,
+        }
+        n_q = self.n_q
+        f_restr = restr_schemes[scheme]
+        if "hs" in scheme:
+            cas_accel_restr = accelrestriction2casadi(f_restr, n_q, n_q)
+            for ii in range(N):
+                self.opti.subject_to(
+                    cas_accel_restr(
+                        x_opti[ii, :],
+                        x_opti[ii + 1, :],
+                        highest_q_d_opti[ii, :],
+                        highest_q_d_opti[ii + 1, :],
+                        T / N,
+                        a_c_opti[ii, :],
+                    )
+                    == 0
+                )
+        else:
+            cas_accel_restr = accelrestriction2casadi(f_restr, n_q)
+            for ii in range(N):
+                self.opti.subject_to(
+                    cas_accel_restr(
+                        x_opti[ii, :],
+                        x_opti[ii + 1, :],
+                        highest_q_d_opti[ii, :],
+                        highest_q_d_opti[ii + 1, :],
+                        T / N,
+                        [],
+                    )
+                    == 0
+                )
+
+
+class _Custom:
+    def _check_structure_consistency(
+        self, t_knots_arr, point_structure_q, n_v, n_a, point_structure_v
+    ):
+        """Initial structural checks to ensure compatibilty of given data"""
+
+        n_q = self.n_q
+        if n_v is None:
+            n_v = n_q
+        self.n_v = n_v
+        if n_a is None:
+            n_a = n_q
+        self.n_a = n_a
+
+        # t_knot_arr checks
+        t_knots_arr = array(t_knots_arr, dtype=float)
+        assert len(t_knots_arr.shape) == 1
+        n_segments = t_knots_arr.shape[0] + 1
+        self.n_segments = n_segments
+        t_start = self.t_start
+        t_end = self.t_end
+        assert alltrue(t_knots_arr > t_start)
+        assert alltrue(t_knots_arr < t_end)
+        assert alltrue(t_knots_arr[:-1] <= t_knots_arr[1:])  # is sorted
+
+        # point_structures checks
+        assert type(point_structure_q) == ndarray
+        assert point_structure_q.dtype == int
+
+        if point_structure_v is None:
+            point_structure_v = point_structure_q
+        else:
+            assert type(point_structure_v) == ndarray
+            assert point_structure_v.dtype == int
+
+        q_shape = point_structure_q.shape
+        assert q_shape[1] == n_q
+        assert q_shape[0] == n_segments
+        v_shape = point_structure_v.shape
+        assert v_shape[1] == n_v
+        assert v_shape[0] == n_segments
+
+        self.point_structure_q = point_structure_q
+        self.point_structure_v = point_structure_v
+        return t_knots_arr, point_structure_v, n_v, n_a
+
+    def opti_setup(
+        self,
+        t_knots_arr,
+        local_scheme,
+        point_structure_q,
+        tol=1e-16,
+        n_v=None,
+        n_a=None,
+        point_structure_v=None,
+    ):
+        """
+         Creates and links the different opti variables to be used in the problem.
+         Requires the function dynamic_setup() to have been run prior.
+         Arrays will be accesible through self.opti_arrs dictionary.
+         Point will be accesible through self.opti_points dictionary.
+
+         Parameters
+         ----------
+         t_knots_arr : array or list of floats
+             values of time at the knot points.
+         local_scheme: str
+             Discretization scheme applied to each segment. Default names imply
+             a "derivative" approach, in which q polynomials are modeled and its
+             derivatives obtained. Add "_int" to the end of any scheme name to
+             use an "integral" approach, in which highest order derivatives
+             polynomials are modeled and its integrals obtained.
+             Acceptable values are:
+                 "LG" Legendre-Gauss Collocation
+                 "LG_inv" LG Colocation with enpoint instead of startpoint as node point
+                 "LGR" Legendre-Gauss-Radau Collocation
+                 "LGR_inv" LGR with endpoint instead of start point as collocation point
+                 "LGL" Legendre-Gauss-Lobato Collocation
+                 "LGLm" 2nd order modified LGL that only uses interior points as collocation
+                 "LG2" 2nd order modified LG that adds endpoint as node point
+                 "D2" 2nd order modified LGL
+                 "JG" 2nd order Jacobi-Gauss collocation
+         point_structure_q: array of int
+             Matrix containing the number of collocation points on
+             each segment for each component of the configuration.
+             For example, por M components and L segments:
+                 [[N_q1_s1, N_q2_s1, ... , N:qM_s1],
+                  [N_q1_s2, N_q2_s2, ... , N:qM_s2],
+                  ...,
+                  [N_q1_sL, N_q2_sL, ... , N:qM_sL]]
+         n_v : None or int, default None
+             number of velocity variables. If None, will be equal to
+             the number of configuration variables.
+         n_a : None or int, default None
+            number of acceleration variables. If None, will be equal to
+            the number of configuration variables.
+        point_structure_v: None or array of int, default None
+            If None, will be equal to point_structure_q.
+            Matrix containing the number of collocation points on
+            each segment for each component of the velocity.
+            For example, por M components and L segments:
+                [[N_v1_s1, N_v2_s1, ... , N:vM_s1],
+                 [N_v1_s2, N_v2_s2, ... , N:vM_s2],
+                 ...,
+                 [N_v1_sL, N_v2_sL, ... , N:vM_sL]]
+
+
+         Raises
+         ------
+         RuntimeError
+             If mistakenly this function is run before dynamic_setup()
+
+         Returns
+         -------
+         None.
+
+        """
+        try:
+            n_q = self.n_q
+            n_u = self.n_u
+        except AttributeError:
+            raise RuntimeError(
+                "Dynamics must be computed before opti setup, use dynamic_setup()"
+            )
+
+        if local_scheme[-4:] == "_int":
+            local_scheme = local_scheme[:-4]
+            diff_order = "integral"
+        else:
+            diff_order = "derivative"
+
+        assert local_scheme in _implemented_pseudospectral_schemes
+
+        t_knots_arr, point_structure_v, n_v, n_a = self._check_structure_consistency(
+            t_knots_arr, point_structure_q, n_v, n_a, point_structure_v
+        )
+
+        n_segments = self.n_segments
+        self.local_scheme = local_scheme
+
+        opti = cas.Opti()
+        if self.verbose:
+            opts = {}
+        else:
+            opts = {"ipopt.print_level": 0, "print_time": 0}
+        opti.solver("ipopt", opts)
+        self.opti = opti
+        x_opti = []
+        u_opti = []
+        for segment in range(n_segments):
+            x_opti_line = []
+            u_opti_line = []
+            for coordinate in range(n_q):
+                col_points = point_structure_q[segment, coordinate]
+                opt_dict = {
+                    "LGL": [
+                        col_points,
+                    ],
+                    "D2": [
+                        col_points,
+                    ],
+                    "LG2": [
+                        col_points + 2,
+                    ],
+                    "LGLm": [
+                        col_points + 2,
+                    ],
+                    "LG": [
+                        col_points + 1,
+                    ],
+                    "LGR": [
+                        col_points + 1,
+                    ],
+                    "LGR_inv": [
+                        col_points + 1,
+                    ],
+                    "JG": [
+                        col_points + 2,
+                    ],
+                }
+                N = opt_dict[local_scheme][0]
+                D_mat = sympy2casadi(
+                    matrix_D_bary(N, local_scheme, precission=20), [], []
+                )
+
+                try:
+                    if scheme in ["LGL", "LG"]:
+                        x_opti = opti.variable(N, 2 * self.n_q)
+                        x_dot_opti = 2 / (t_end - t_start) * D_mat @ x_opti
+                        q_opti = x_opti[:, : self.n_q]
+                        v_opti = x_opti[:, self.n_q :]
+                        a_opti = x_dot_opti[:, self.n_q :]
+
+                    elif scheme in ["LG2", "D2", "LGLm", "JG"]:
+                        q_opti = opti.variable(N, self.n_q)
+                        v_opti = 2 / (t_end - t_start) * D_mat @ q_opti
+                        a_opti = 2 / (t_end - t_start) * D_mat @ v_opti
+                        x_opti = cas.horzcat(q_opti, v_opti)
+                        x_dot_opti = cas.horzcat(v_opti, a_opti)
+                    else:
+                        raise NotImplementedError(
+                            f"scheme {scheme} not implemented in opti_setup."
+                        )
+                except AttributeError:
+                    raise RuntimeError(
+                        "Dynamics must be computed before opti setup, use dynamic_setup()"
+                    )
+
+                u_opti = opti.variable(col_points, self.n_u)
+                tau_arr = array(base_points(N, scheme, precission), dtype=float)
+                col_arr = array(
+                    coll_points(col_points, scheme, precission), dtype=float
+                )
+                t_arr = ((t_end - t_start) * tau_arr + (t_start + t_end)) / 2
+                t_col_arr = ((t_end - t_start) * col_arr + (t_start + t_end)) / 2
+                lam_opti = opti.variable(col_points, self.n_lambdas)
+
+        self.opti_arrs = {
+            "x": x_opti,
+            "x_d": x_dot_opti,
+            "q": q_opti,
+            "v": v_opti,
+            "a": a_opti,
+            "u": u_opti,
+            "lam": lam_opti,
+            "tau": tau_arr,
+            "tau_col": col_arr,
+            "t": t_arr,
+            "t_col": t_col_arr,
+        }
+
+        if scheme == "LGinv":
+            start_p_func = LG_inv_diff_start_p_fun_cas(N)
+            x_start = start_p_func(x_opti)
+            x_dot_start = start_p_func(x_dot_opti)
+            q_start = start_p_func(q_opti)
+            v_start = start_p_func(v_opti)
+            a_start = start_p_func(a_opti)
+        else:
+            x_start = x_opti[0, :]
+            x_dot_start = x_dot_opti[0, :]
+            q_start = q_opti[0, :]
+            v_start = v_opti[0, :]
+            a_start = a_opti[0, :]
+
+        if scheme == "LG":
+            end_p_func = LG_end_p_fun_cas(N)
+            x_end = end_p_func(x_opti)
+            x_dot_end = end_p_func(x_dot_opti)
+            q_end = end_p_func(q_opti)
+            v_end = end_p_func(v_opti)
+            a_end = end_p_func(a_opti)
+        else:
+            x_end = x_opti[-1, :]
+            x_dot_end = x_dot_opti[-1, :]
+            q_end = q_opti[-1, :]
+            v_end = v_opti[-1, :]
+            a_end = a_opti[-1, :]
+
+        self.opti_points = {
+            "x_s": x_start,
+            "x_e": x_end,
+            "x_d_s": x_dot_start,
+            "x_d_e": x_dot_end,
+            "q_s": q_start,
+            "q_e": q_end,
+            "v_s": v_start,
+            "v_e": v_end,
+            "a_s": a_start,
+            "a_e": a_end,
+        }
 
     def u_sq_cost(self):
         """
@@ -1321,6 +1868,7 @@ class _Explicit_Dynamics:
         self.dyn_g_restr = dynam_g_q
         self.n_u = dynam_f_x.mx_in()[2].shape[0]
         self.n_lambdas = 0
+        self.order = 2
 
 
 class _Implicit_Dynamics:
@@ -1385,10 +1933,11 @@ class _Implicit_Dynamics:
         self.dyn_g_restr = dynam_g_q
         self.n_u = dynam_f_x.mx_in()[2].shape[0]
         self.n_lambdas = dynam_f_x.mx_in()[3].shape[0]
+        self.order = 2
 
 
 class _Function_Dynamics:
-    def dynamic_setup(self, func_kind, n_q, n_u, n_lambdas=0):
+    def dynamic_setup(self, func_kind, n_q, n_u, n_lambdas=0, order=2):
         """
         Creates and configures the functions that will be used in
         physics restrictions.
@@ -1407,6 +1956,9 @@ class _Function_Dynamics:
             number of u variables in the problem.
         n_lambdas : int, optional
             number of lambda variables in the problem. The default is 0.
+        order : int, default 2
+            differential order of the problem. For example, if the function
+            is: q''' = G(q, q', q'', u, params), order must be set to 3
 
         Raises
         ------
@@ -1426,47 +1978,61 @@ class _Function_Dynamics:
 
         n_p = len(self.params)
 
-        x_sym = cas.SX.sym("x", n_q * 2).T
-        x_dot_sym = cas.SX.sym("x_dot", n_q * 2).T
-        q_sym = cas.SX.sym("q", n_q).T
-        q_dot_sym = cas.SX.sym("q_dot", n_q).T
-        q_dot_dot_sym = cas.SX.sym("q_dot_dot", n_q).T
+        x_sym = cas.SX.sym("x", n_q * order).T
+        x_dot_sym = cas.SX.sym("x_dot", n_q * order).T
+        # q_sym = cas.SX.sym("q", n_q).T
+        # q_dot_sym = cas.SX.sym("q_dot", n_q).T
+        # q_dot_dot_sym = cas.SX.sym("q_dot_dot", n_q).T
+        q_and_ders = []
+        q_and_ders_names = []
+        for _ii in range(order + 1):
+            _name = "q" + (_ii) * "_dot"
+            q_and_ders.append(cas.SX.sym(_name, n_q).T)
+            q_and_ders_names.append(_name)
         u_sym = cas.SX.sym("u", n_u).T
         p_sym = cas.SX.sym("p", n_p)
         lam_sym = cas.SX.sym("lam", n_lambdas).T
 
         if func_kind == "f_x":
             F_x = self.LM
-            G_q = reduce_F(F_x, "casadi")
+            G_q = reduce_F(F_x, "casadi", order=order)
 
         elif func_kind == "g_q":
             G_q = self.LM
-            F_x = expand_G(G_q, "casadi")
+            F_x = expand_G(G_q, "casadi", order=order)
 
         elif func_kind == "f_x_impl":
             F_restr = self.LM
-            x_restr = F_restr(x_sym, x_dot_sym, u_sym, p_sym)
+            x_restr = F_restr(x_sym, x_dot_sym, u_sym, lam_sym, p_sym)
             if x_restr.shape[0] != 1:
                 x_restr = x_restr.T
 
-            x_union = cas.horzcat(q_sym, q_dot_sym)
-            x_dot_union = cas.horzcat(q_dot_sym, q_dot_dot_sym)
+            x_union = cas.horzcat(*q_and_ders[:-1])
+            x_dot_union = cas.horzcat(*q_and_ders[1:])
 
-            q_restr = F_restr(x_union, x_dot_union, u_sym, p_sym)
+            q_restr = F_restr(x_union, x_dot_union, u_sym, lam_sym, p_sym)
             if q_restr.shape[0] != 1:
                 q_restr = q_restr.T
             q_restr = q_restr[:n_q]
 
         elif func_kind == "g_q_impl":
             G_restr = self.LM
-            q_restr = G_restr(q_sym, q_dot_sym, q_dot_dot_sym, u_sym, p_sym)
+            q_restr = G_restr(*q_and_ders, u_sym, lam_sym, p_sym)
             if q_restr.shape[0] != 1:
                 q_restr = q_restr.T
 
-            x_restr = G_restr(x_sym[:n_q], x_sym[n_q:], x_dot_sym[n_q:], u_sym, p_sym)
+            x_list = []
+            x_dot_list = []
+            for _ii in range(order):
+                _jj = _ii + 1
+                x_list.append(x_sym[n_q * _ii : n_q * _jj])
+                x_dot_list.append(x_dot_sym[n_q * _ii : n_q * _jj])
+
+            x_restr = G_restr(*x_list, x_dot_list[-1], u_sym, lam_sym, p_sym)
             if x_restr.shape[0] != 1:
                 x_restr = x_restr.T
-            x_restr = cas.horzcat(x_restr, x_dot_sym[:n_q] - x_sym[n_q:])
+            x_d_difs = [x_dot_list[_ii] - x_list[_ii + 1] for _ii in range(order - 1)]
+            x_restr = cas.horzcat(x_restr, *x_d_difs)
         else:
             raise NotImplementedError(
                 f"function kind {func_kind} not implemented. Implemented kinds are f_x, g_q, f_x_imp and g_q_impl"
@@ -1474,13 +2040,13 @@ class _Function_Dynamics:
 
         if func_kind in ["f_x", "g_q"]:
             _F = F_x(x_sym, u_sym, p_sym)
-            _G = G_q(q_sym, q_dot_sym, u_sym, p_sym)
+            _G = G_q(*q_and_ders[:-1], u_sym, p_sym)
             if _F.shape[0] != 1:
                 _F = _F.T
             if _G.shape[0] != 1:
                 _G = _G.T
             x_restr = x_dot_sym - _F
-            q_restr = q_dot_dot_sym - _G
+            q_restr = q_and_ders[-1] - _G
 
         dynam_f_x = cas.Function(
             "dynamics_f_x",
@@ -1492,9 +2058,9 @@ class _Function_Dynamics:
 
         dynam_g_q = cas.Function(
             "dynamics_g_q",
-            [q_sym, q_dot_sym, q_dot_dot_sym, u_sym, lam_sym, p_sym],
+            q_and_ders + [u_sym, lam_sym, p_sym],
             [q_restr],
-            ["q", "q_dot", "q_dot_dot", "u", "lam", "params"],
+            q_and_ders_names + ["u", "lam", "params"],
             ["residue"],
         )
         self.params_sym = symbols(f"p_0:{n_p}")
@@ -1503,6 +2069,7 @@ class _Function_Dynamics:
         self.n_u = n_u
         self.n_lambdas = n_lambdas
         self.n_q = n_q
+        self.order = order
 
 
 class _Zero_init:
@@ -1517,7 +2084,7 @@ class _Zero_init:
         """
         q_opti, v_opti, a_opti = self._ini_guess_start()
         self.opti.set_initial(q_opti, 0)
-        if self.scheme not in ["LG2", "D2", "LGLm"]:
+        if self.scheme not in ["LG2", "D2", "LGLm", "JG"]:
             self.opti.set_initial(v_opti, 0)
             if self.scheme_mode == "equispaced":
                 self.opti.set_initial(a_opti, 0)
@@ -1560,7 +2127,7 @@ class _Lin_init:
         )
         q_dot_guess = (q_e - q_s) * ones([N, 1]) / T
         self.opti.set_initial(q_opti, q_guess)
-        if self.scheme not in ["LG2", "D2", "LGLm"]:
+        if self.scheme not in ["LG2", "D2", "LGLm", "JG"]:
             self.opti.set_initial(v_opti, q_dot_guess)
             if self.scheme_mode == "equispaced":
                 self.opti.set_initial(a_opti, 0)
@@ -1600,7 +2167,7 @@ class _Custom_init:
         u_opti = self.opti_arrs["u"]
         self.opti.set_initial(q_opti, q_guess)
         self.opti.set_initial(u_opti, u_guess)
-        if self.scheme not in ["LG2", "D2", "LGLm"]:
+        if self.scheme not in ["LG2", "D2", "LGLm", "JG"]:
             self.opti.set_initial(v_opti, v_guess)
             if self.scheme_mode == "equispaced":
                 self.opti.set_initial(a_opti, 0)
@@ -1674,6 +2241,7 @@ def Opti_Problem(
             "LGLm" 2nd order modified LGL that only uses interior points as collocation
             "LG2" 2nd order modified LG that adds endpoint as node point
             "D2" 2nd order modified LGL
+            "JG" 2nd order Jacobi-Gauss collocation
     ini_guess : ["zero", "lin", "custom"] The default is "zero".
         initial guess strategy for the optimization. Valid values are:
             "zero": All arrays initialised as zeroes.

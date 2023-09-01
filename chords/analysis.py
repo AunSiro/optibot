@@ -98,11 +98,16 @@ def dynamic_error(
             "hs_mod": modified Hermite-Simpson scheme compatible interpolation
             "hs_parab": Hermite-Simpson scheme compatible interpolation with parabolic U
             "hs_mod_parab": modified Hermite-Simpson scheme compatible interpolation with parabolic U
+            "hsj":Hermite-Simpson-Jacobi scheme compatible interpolation
+            "hsj_parab":Hermite-Simpson-Jacobi scheme compatible interpolation with parabolic U
     u_scheme : string, optional
         Model of the interpolation that must be used. The default is "lin".
         Acceptable values are:
             "lin": lineal interpolation
             "parab": parabolic interpolation, requires central points array
+            as scheme params[0]
+            "parab_j": parabolic interpolation, with the intermediate point
+            at 2h/5, for work with HSJ. Requires central points array
             as scheme params[0]
     scheme_params :dict, optional
         Aditional parameters of the scheme. The default is {}.
@@ -128,6 +133,13 @@ def dynamic_error(
     if "parab" in u_scheme and "parab" not in scheme:
         warnings.warn(
             "You are currently using a parabolic interpolation for u with a non u-parabolic interpolation of x"
+        )
+    if ("j" in u_scheme and "j" not in scheme) or (
+        "j" not in u_scheme and "j" in scheme
+    ):
+        warnings.warn(
+            f"Scheme {scheme} incompatible with u_scheme{u_scheme}"
+            + ", 'parab_j' must be used with 'hsj'."
         )
     N = x_arr.shape[0] - 1
     dim = x_arr.shape[1] // 2
@@ -304,11 +316,16 @@ def dynamic_error_implicit(
             "hs_mod": modified Hermite-Simpson scheme compatible interpolation
             "hs_parab": Hermite-Simpson scheme compatible interpolation with parabolic U
             "hs_mod_parab": modified Hermite-Simpson scheme compatible interpolation with parabolic U
+            "hsj":Hermite-Simpson-Jacobi scheme compatible interpolation
+            "hsj_parab":Hermite-Simpson-Jacobi scheme compatible interpolation with parabolic U
     u_scheme : string, optional
         Model of the interpolation that must be used. The default is "lin".
         Acceptable values are:
             "lin": lineal interpolation
             "parab": parabolic interpolation, requires central points array
+            as scheme params[0]
+            "parab_j": parabolic interpolation, with the intermediate point
+            at 2h/5, for work with HSJ. Requires central points array
             as scheme params[0]
     scheme_params :dict, optional
         Aditional parameters of the scheme. The default is {}.
@@ -327,13 +344,20 @@ def dynamic_error_implicit(
         equispaced values of dynamic error q''(t) - G(q(t), q'(t), u(t)).
 
     """
-    if "parab" in scheme and u_scheme != "parab":
+    if "parab" in scheme and "parab" not in u_scheme:
         warnings.warn(
             "You are currently using a u-parabolic interpolation for x with a lineal interpolation of u"
         )
     if "parab" in u_scheme and "parab" not in scheme:
         warnings.warn(
             "You are currently using a parabolic interpolation for u with a non u-parabolic interpolation of x"
+        )
+    if ("j" in u_scheme and "j" not in scheme) or (
+        "j" not in u_scheme and "j" in scheme
+    ):
+        warnings.warn(
+            f"Scheme {scheme} incompatible with u_scheme{u_scheme}"
+            + ", 'parab_j' must be used with 'hsj'."
         )
     N = x_arr.shape[0]
     dim = x_arr.shape[1] // 2
@@ -467,11 +491,16 @@ def F_point(
             "hs_mod": modified Hermite-Simpson scheme compatible interpolation
             "hs_parab": Hermite-Simpson scheme compatible interpolation with parabolic U
             "hs_mod_parab": modified Hermite-Simpson scheme compatible interpolation with parabolic U
+            "hsj":Hermite-Simpson-Jacobi scheme compatible interpolation
+            "hsj_parab":Hermite-Simpson-Jacobi scheme compatible interpolation with parabolic U
     u_scheme : string, optional
         Model of the interpolation that must be used. The default is "lin".
         Acceptable values are:
             "lin": lineal interpolation
             "parab": parabolic interpolation, requires central points array
+            as scheme params[0]
+            "parab_j": parabolic interpolation, with the intermediate point
+            at 2h/5, for work with HSJ. Requires central points array
             as scheme params[0]
     scheme_params :dict, optional
         Aditional parameters of the scheme. The default is {}.
@@ -490,6 +519,13 @@ def F_point(
     if "parab" in u_scheme and "parab" not in scheme:
         warnings.warn(
             "You are currently using a parabolic interpolation for u with a non u-parabolic interpolation of x"
+        )
+    if ("j" in u_scheme and "j" not in scheme) or (
+        "j" not in u_scheme and "j" in scheme
+    ):
+        warnings.warn(
+            f"Scheme {scheme} incompatible with u_scheme{u_scheme}"
+            + ", 'parab_j' must be used with 'hsj'."
         )
     N = x_arr.shape[0] - 1
     dim = x_arr.shape[1] // 2

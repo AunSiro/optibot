@@ -259,7 +259,8 @@ def _v_sum(t_arr, i):
 @lru_cache(maxsize=None)
 def v_coef(N, i, scheme, precission=20):
     """
-    Generates the coefficient V for barycentric coordinates
+    Generates the coefficient V for barycentric coordinates for
+    Polynomials constructed over base points.
 
     Parameters
     ----------
@@ -277,6 +278,7 @@ def v_coef(N, i, scheme, precission=20):
             'LGLm'
             'LG2'
             'D2'
+            'JG'
     precission: int, default 20
         number of decimal places of precission
 
@@ -293,7 +295,8 @@ def v_coef(N, i, scheme, precission=20):
 @lru_cache(maxsize=None)
 def v_coef_coll(N, i, scheme, precission=20):
     """
-    Generates the coefficient V for barycentric coordinates
+    Generates the coefficient V for barycentric coordinates for
+    Polynomials constructed over collocation points.
 
     Parameters
     ----------
@@ -311,6 +314,7 @@ def v_coef_coll(N, i, scheme, precission=20):
             'LGLm'
             'LG2'
             'D2'
+            'JG'
     precission: int, default 20
         number of decimal places of precission
 
@@ -436,6 +440,68 @@ def bary_poly_2d(t_arr, y_arr):
     dim = y_arr.shape[-1]
     pols = [bary_poly(t_arr, y_arr[:, ii]) for ii in range(dim)]
     return combinefunctions(*pols)
+
+
+@lru_cache(maxsize=2000)
+def unit_Lag_pol(N, scheme, n, kind="q", precission=20):
+    assert kind in ["q", "u"]
+    if kind == "q":
+        x = base_points(N, scheme, precission)
+    else:
+        x = coll_points(N, scheme, precission)
+
+    y = zeros(N)
+    y[n] = 1
+    return bary_poly(x, y)
+
+
+@lru_cache(maxsize=2000)
+def vector_interpolator(
+    N_from, N_to, scheme_from, scheme_to, n, kind="q", precission=20
+):
+    """
+    Generates a vector that multiplied by the q coordinates gives the value
+    at the n-th point of a different scheme
+
+    Parameters
+    ----------
+    N_from : Int
+        DESCRIPTION.
+    N_to : Int
+        DESCRIPTION.
+    scheme_from : str
+        DESCRIPTION.
+    scheme_to : str
+        DESCRIPTION.
+    n : int
+        DESCRIPTION.
+    kind : str "q" or "u", optional
+        DESCRIPTION. The default is 'q'.
+    precission : int, optional
+        DESCRIPTION. The default is 20.
+
+    Returns
+    -------
+    vec : numpy array
+        DESCRIPTION.
+
+    """
+
+    assert kind in ["q", "u"]
+    vec = zeros(N_from)
+    if N_from == N_to and scheme_from == scheme_to:
+        vec[n] = 1
+    else:
+        if kind == "q":
+            node_points_to = base_points(N_to, scheme_to, precission)
+        else:
+            node_points_to = coll_points(N_to, scheme_to, precission)
+        point_to = node_points_to[n]
+        for ii in range(N_from):
+            Lag_pol_ii = unit_Lag_pol(N_from, scheme_from, ii, kind, precission)
+            vec[ii] = Lag_pol_ii(point_to)
+
+    return vec
 
 
 # --- Extreme points of LG scheme ---
