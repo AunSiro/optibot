@@ -5,13 +5,15 @@ Created on Tue Aug 29 12:52:01 2023
 @author: Siro Moreno
 
 Here we present some useful functions that whose objective is to simplify
-the workflow and to streamline the utilization of Chords.
+the workflow and to streamline the utilization of Chords and plotting the results.
 """
 import matplotlib.pyplot as plt
 import numpy as np
 
 # Uniform output style functions
 
+    
+oct_fig_size = [10, 6]
 
 def sch_to_lab(sch):
     label_dict = {
@@ -68,16 +70,13 @@ def sch_to_color(sch):
             "trapz_mod",
             "trapz",
             "hs_mod",
-            "hs_parab",
-            "hs_mod_parab",
-            "hsj_parab",
             "hsj",
             "rk4",
             "hsj_mod",
-            "hsj_parab_mod",
         ]
     ):
         color_dict[sc_name] = f"C{ii}"
+    sch = sch.replace("_parab", "")
     return color_dict[sch]
 
 
@@ -86,7 +85,7 @@ def scheme_kwargs(sch, longlabel=False, colors_for_parab=False):
         color = sch_to_color(sch)
         ls = "-"
     else:
-        color = sch_to_color(sch.replace("_parab", ""))
+        color = sch_to_color(sch)
         if "hs" in sch and "parab" not in sch:
             ls = "--"
         else:
@@ -106,8 +105,7 @@ def set_fonts():
     matplotlib.rcParams["ps.fonttype"] = 42
 
 
-plt.rcParams.update({"font.size": 15})
-oct_fig_size = [10, 6]
+    plt.rcParams.update({"font.size": 15})
 
 
 def plot_by_segments(

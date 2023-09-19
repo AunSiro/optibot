@@ -1081,7 +1081,7 @@ def hsj_accel_restr(x, x_n, a, a_n, dt, scheme_params):
 
 
 def get_x_divisions(x, order=2):
-    dim = vec_len(x) // order
+    dim = x.shape[-1] // order
     x_list = []
     if is2d(x):
         for ii in range(order):
@@ -1450,7 +1450,7 @@ def _newpoint_u(U, h, t, u_scheme, scheme_params={}):
             params = scheme_params["params"]
             x_interp = _newpoint(X, X_dot, h, t, params, scheme, scheme_params)
             x_dot_interp = _newpoint_der(
-                X, X_dot, h, t, params, scheme, 1, scheme_params
+                X, X_dot, h, t, scheme, 1, scheme_params
             )
             xi = tau / h
             u_0 = u_n * xi + u * (1 - xi)
@@ -1466,7 +1466,7 @@ def _newpoint_u(U, h, t, u_scheme, scheme_params={}):
             params = scheme_params["params"]
             x_interp = _newpoint(X, X_dot, h, t, params, scheme, scheme_params)
             x_dot_interp = _newpoint_der(
-                X, X_dot, h, t, params, scheme, 1, scheme_params
+                X, X_dot, h, t, scheme, 1, scheme_params
             )
             pinv_F = scheme_params["pinv_f"]
             dim = vec_len(x_interp) // 2
@@ -1663,7 +1663,6 @@ def _calculate_missing_arrays(
                                     X_dot[ii],
                                     X_dot[ii + 1],
                                     h,
-                                    params,
                                 )
                             )
                             for ii in range(X.shape[0] - 1)
@@ -2205,7 +2204,7 @@ def interpolated_array_derivative(
         for ii in range(N):
             new_X[ii] = array(
                 _newpoint_der(
-                    X, X_dot, h, t_array[ii], params, scheme, order, scheme_params
+                    X, X_dot, h, t_array[ii], scheme, order, scheme_params
                 )
             ).flatten()
     return new_X
