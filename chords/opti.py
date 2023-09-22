@@ -1145,9 +1145,49 @@ class _Equispaced:
                 u_j_opti = opti.variable(N, self.n_u)
                 self.opti_arrs["u_j"] = u_j_opti
 
+    def sq_cost(self, arr, arr_c = None):
+        """
+        Calculates a quadrature integration of an array squared and sets it
+        as the optimization cost to minimize
+
+        Requires the functions dynamic_setup() and opti_setup(), in that order,
+        to have been run prior.
+
+        Raises
+        ------
+        RuntimeError
+            If opti_setup() or dynamic_setup() have not ben run previously
+
+        Returns
+        -------
+        None.
+
+        """
+        
+
+        dt = self.t_end - self.t_start
+        arr_sq = arr**2
+        if arr_c is None:
+            cost = dt * cas.sum2(
+                (cas.sum1(arr_sq[:, :]) + cas.sum1(arr_sq[1:-1, :])) / self.N
+            )
+        else:
+            arr_c_sq = arr_c**2
+            cost = dt * cas.sum2(
+                (
+                    4 * cas.sum1(arr_c_sq[:, :])
+                    + cas.sum1(arr_sq[:, :])
+                    + cas.sum1(arr_sq[1:-1, :])
+                )
+                / (3 * self.N)
+            )
+            
+        self.cost = cost
+        self.opti.minimize(cost)
+
     def u_sq_cost(self):
         """
-        Calculates a trapezoidal integration of u squared and sets it
+        Calculates a quadrature integration of u squared and sets it
         as the optimization cost to minimize
 
         Requires the functions dynamic_setup() and opti_setup(), in that order,
@@ -1264,7 +1304,8 @@ class _Equispaced:
             x_c_opti = self.opti_arrs["x_c"]
             x_c_dot_opti = self.opti_arrs["x_d_c"]
             u_c_opti = self.opti_arrs["u_c"]
-            a_c_opti = self.opti_arrs["a_c"]
+            #a_c_opti = self.opti_arrs["a_c"]
+            highest_q_d_c_opti = self.opti_arrs[q_and_ders_names[-1]+'_c']
             lam_c_opti = self.opti_arrs["lam_c"]
 
             if "j" in scheme:
@@ -1337,7 +1378,7 @@ class _Equispaced:
         n_q = self.n_q
         f_restr = restr_schemes[scheme]
         if "hs" in scheme:
-            cas_accel_restr = accelrestriction2casadi(f_restr, n_q, n_q)
+            cas_accel_restr = accelrestriction2casadi(f_restr, n_q, n_q, order = self.order)
             for ii in range(N):
                 self.opti.subject_to(
                     cas_accel_restr(
@@ -1346,7 +1387,7 @@ class _Equispaced:
                         highest_q_d_opti[ii, :],
                         highest_q_d_opti[ii + 1, :],
                         T / N,
-                        a_c_opti[ii, :],
+                        highest_q_d_c_opti[ii, :],
                     )
                     == 0
                 )
@@ -2013,7 +2054,7 @@ class _Function_Dynamics:
             q_restr = F_restr(x_union, x_dot_union, u_sym, lam_sym, p_sym)
             if q_restr.shape[0] != 1:
                 q_restr = q_restr.T
-            q_restr = q_restr[:n_q]
+            q_restr = q_restr[-n_q:]
 
         elif func_kind == "g_q_impl":
             G_restr = self.LM

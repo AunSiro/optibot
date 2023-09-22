@@ -298,7 +298,10 @@ def reduce_F(F, mode="numpy", order=2):
 
     """
     old_docstring = str(F.__doc__)
-    old_f_name = str(F.__name__)
+    try:
+        old_f_name = str(F.__name__)
+    except:
+        old_f_name = 'unknown_name'
     if mode == "numpy":
 
         def G(*args):
@@ -310,7 +313,12 @@ def reduce_F(F, mode="numpy", order=2):
             axnum = len(q.shape) - 1
             x = concatenate(q_and_der, axnum)
             res = F(x, u, params)
-            aa = res[:, -dim:]  # This expression probably should depend on axnum, check
+            if axnum == 0:
+                aa = res[-dim:] 
+            elif axnum == 1:
+                aa = res[:, -dim:]
+            else:
+                raise ValueError(f'unsupported shape por q: {q.shape}')
             return aa
 
     elif mode == "casadi":

@@ -419,7 +419,7 @@ def restriction2casadi(F_scheme, F, n_vars, n_u, n_params, n_scheme_params=0):
         )
 
 
-def accelrestriction2casadi(F_scheme, n_vars, n_scheme_params=0):
+def accelrestriction2casadi(F_scheme, n_vars, n_scheme_params=0, order = 2):
     """
     Converts a restriction funtion F to a casadi function that can be
     more efficiently used in casadi
@@ -441,8 +441,8 @@ def accelrestriction2casadi(F_scheme, n_vars, n_scheme_params=0):
         Restriction function that each step has to be equal to zero
 
     """
-    x = cas.SX.sym("x", 2 * n_vars).T
-    x_n = cas.SX.sym("x_n", 2 * n_vars).T
+    x = cas.SX.sym("x", order * n_vars).T
+    x_n = cas.SX.sym("x_n", order * n_vars).T
     a = cas.SX.sym("a", n_vars).T
     a_n = cas.SX.sym("a_n", n_vars).T
     dt = cas.SX.sym("dt")
