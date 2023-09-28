@@ -53,6 +53,7 @@ _implemented_equispaced_schemes = [
     "euler",
     "trapz",
     "trapz_mod",
+    "trapz_n",
     "hs",
     "hs_mod",
     "hs_parab",
@@ -60,6 +61,8 @@ _implemented_equispaced_schemes = [
     "hsj",
     "hsj_parab",
     "hsj_parab_mod",
+    "hsn",
+    "hsn_parab",
 ]
 _implemented_pseudospectral_schemes = [
     "LG",
@@ -1145,7 +1148,7 @@ class _Equispaced:
                 u_j_opti = opti.variable(N, self.n_u)
                 self.opti_arrs["u_j"] = u_j_opti
 
-    def sq_cost(self, arr, arr_c = None):
+    def sq_cost(self, arr, arr_c=None):
         """
         Calculates a quadrature integration of an array squared and sets it
         as the optimization cost to minimize
@@ -1163,7 +1166,6 @@ class _Equispaced:
         None.
 
         """
-        
 
         dt = self.t_end - self.t_start
         arr_sq = arr**2
@@ -1181,7 +1183,7 @@ class _Equispaced:
                 )
                 / (3 * self.N)
             )
-            
+
         self.cost = cost
         self.opti.minimize(cost)
 
@@ -1279,6 +1281,8 @@ class _Equispaced:
             hs_half_x,
             hsj_accel_restr,
             hsj_half_x,
+            generate_hs_m_funcs,
+            generate_trapz_m_func,
         )
 
         scheme = self.scheme
@@ -1304,12 +1308,14 @@ class _Equispaced:
             x_c_opti = self.opti_arrs["x_c"]
             x_c_dot_opti = self.opti_arrs["x_d_c"]
             u_c_opti = self.opti_arrs["u_c"]
-            #a_c_opti = self.opti_arrs["a_c"]
-            highest_q_d_c_opti = self.opti_arrs[q_and_ders_names[-1]+'_c']
+            # a_c_opti = self.opti_arrs["a_c"]
+            highest_q_d_c_opti = self.opti_arrs[q_and_ders_names[-1] + "_c"]
             lam_c_opti = self.opti_arrs["lam_c"]
 
             if "j" in scheme:
                 half_x = hsj_half_x
+            elif "hsn" in scheme:
+                half_x = generate_hs_m_funcs(self.order)[0]
             elif "mod" in scheme:
                 half_x = hs_mod_half_x
             else:
@@ -1367,6 +1373,7 @@ class _Equispaced:
             #'euler': euler_accel_restr, #comprobar compatibilidad
             "trapz": trapz_accel_restr,
             "trapz_mod": trapz_mod_accel_restr,
+            "trapz_n": generate_trapz_m_func(self.order),
             "hs": hs_accel_restr,
             "hs_mod": hs_mod_accel_restr,
             "hs_parab": hs_accel_restr,
@@ -1374,11 +1381,15 @@ class _Equispaced:
             "hsj": hsj_accel_restr,
             "hsj_parab": hsj_accel_restr,
             "hsj_parab_mod": hsj_accel_restr,
+            "hsn": generate_hs_m_funcs(self.order)[1],
+            "hsn_parab": generate_hs_m_funcs(self.order)[1],
         }
         n_q = self.n_q
         f_restr = restr_schemes[scheme]
         if "hs" in scheme:
-            cas_accel_restr = accelrestriction2casadi(f_restr, n_q, n_q, order = self.order)
+            cas_accel_restr = accelrestriction2casadi(
+                f_restr, n_q, n_q, order=self.order
+            )
             for ii in range(N):
                 self.opti.subject_to(
                     cas_accel_restr(
@@ -1392,7 +1403,7 @@ class _Equispaced:
                     == 0
                 )
         else:
-            cas_accel_restr = accelrestriction2casadi(f_restr, n_q)
+            cas_accel_restr = accelrestriction2casadi(f_restr, n_q, order=self.order)
             for ii in range(N):
                 self.opti.subject_to(
                     cas_accel_restr(
@@ -2273,6 +2284,8 @@ def Opti_Problem(
             "hs_mod": modified 2nd order compatible Hermite-Simpson scheme
             "hs_parab": Hermite-Simpson scheme compatible with parabolic U
             "hs_mod_parab": 2nd order compatible Hermite-Simpson scheme with parabolic U
+            "hsn" : Hermite-Simpson scheme adapted to order N
+            "hsn_parab" : Hermite-Simpson scheme adapted to order N with parabolic U
 
             "LG" Legendre-Gauss Collocation
             "LG_inv" LG Colocation with enpoint instead of startpoint as node point

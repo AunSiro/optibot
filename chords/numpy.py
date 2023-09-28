@@ -10,6 +10,7 @@ convert to numpy arrays.
 
 import numpy as np
 from numpy import sin, cos, expand_dims
+from warnings import warn
 
 
 def get_str(x):
@@ -161,6 +162,68 @@ def RHS2numpy(RHS, q_vars, u_vars=None, verbose=False, mode="x"):
                 results.append(func(*all_np_vars))
             return congruent_concatenate(results)
 
+    return New_F
+
+
+def Sym2Fx(RHS, x_vars, u_vars, verbose=False):
+    """
+    Converts an array of symbolic expressions RHS(x, u, params) to a Numpy function.
+    Designed to work with systems so that
+        x' = RHS(x, u, params)
+
+    Parameters
+    ----------
+    RHS : Sympy matrix
+        Vertical symbolic matrix RHS(x, u, lambdas, params)
+    x_vars : int or list of dynamic symbols
+        Determine the symbols that will be searched
+        if int, the program will assume x as x_i for x in [0,x_vars]
+    u_vars : None, int or list of symbols. Default is None.
+        Symbols that will be sarched and separated.
+        If None, symbols of the form u_ii where ii is a number will be
+        assumed
+    verbose : Bool, optional
+        wether to print aditional information of expected and found variables
+        in the given expression
+
+    Returns
+    -------
+    TYPE
+        DESCRIPTION.
+
+    """
+    from sympy import lambdify
+    from .symbolic import find_arguments, standard_notation, diff_to_symb_expr
+
+    RHS = list(RHS)
+    RHS = [standard_notation(diff_to_symb_expr(expr)) for expr in RHS]
+    arguments = find_arguments(RHS, x_vars, u_vars, verbose=verbose)
+    x_args, _, _, u_args, params, _ = arguments
+
+    if len(RHS) != len(x_args):
+        warn(
+            f"The number of x variables is {len(x_args)} but the number of rows in the function is {len(RHS)}"
+        )
+    funcs = RHS
+
+    all_vars = x_args + u_args + params
+    msg = "Function Arguments:\n"
+    msg += f"\tx: {x_args}\n"
+    msg += f"\tu: {u_args}\n"
+    msg += f"\tparams: {params}\n"
+    print(msg)
+    np_funcs = []
+    for function in funcs:
+        np_funcs.append(lambdify(all_vars, function))
+
+    def New_F(x, u, params):
+        all_np_vars = unpack(x) + unpack(u) + unpack(params)
+        results = []
+        for func in np_funcs:
+            results.append(func(*all_np_vars))
+        return congruent_concatenate(results)
+
+    New_F.__doc__ = f"Function created from sympy expression through Sym2Fx. \n{msg}"
     return New_F
 
 

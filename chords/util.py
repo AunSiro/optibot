@@ -12,8 +12,9 @@ import numpy as np
 
 # Uniform output style functions
 
-    
+
 oct_fig_size = [10, 6]
+
 
 def sch_to_lab(sch):
     label_dict = {
@@ -27,6 +28,9 @@ def sch_to_lab(sch):
         "hsj_parab": "HSJ",
         "hsj_parab_mod": "HSJ (sep $u_c$)",
         "rk4": "rk4",
+        "hsn": "HS-3-Topputo",
+        "hsn_parab": "HS-3",
+        "trapz_n": "TZ-3",
     }
     return label_dict[sch]
 
@@ -43,6 +47,9 @@ def sch_to_long_label(sch):
         "Hermite-Simpson-Jacobi",
         "Hermite-Simpson-Jacobi (mod_u)",
         "Runge-Kutta 4",
+        "3rd order Hermite Simpson",
+        "3rd order Hermite Simpson (Topputo)",
+        "3rd order Trapezoidal",
     ]
     schemes = [
         "hs_parab",
@@ -55,6 +62,9 @@ def sch_to_long_label(sch):
         "hsj_parab",
         "hsj_parab_mod",
         "rk4",
+        "hsn_parab",
+        "hsn",
+        "trapz_n",
     ]
     lname_dict = {}
     for ii in range(len(titles)):
@@ -77,6 +87,8 @@ def sch_to_color(sch):
     ):
         color_dict[sc_name] = f"C{ii}"
     sch = sch.replace("_parab", "")
+    sch = sch.replace("trapz_n", "trapz_mod")
+    sch = sch.replace("hsn", "hs_mod")
     return color_dict[sch]
 
 
@@ -103,7 +115,6 @@ def set_fonts():
 
     matplotlib.rcParams["pdf.fonttype"] = 42
     matplotlib.rcParams["ps.fonttype"] = 42
-
 
     plt.rcParams.update({"font.size": 15})
 

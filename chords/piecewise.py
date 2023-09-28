@@ -52,16 +52,16 @@ def is2d(x):
 def vec_len(x):
     if type(x) == int or type(x) == float:
         return 1
-    try:
-        return len(x)
-    except TypeError:
-        if x.size == 1:
-            return 1
+    # try:
+    #     return len(x)
+    # except TypeError:
+    if x.size == 1:
+        return 1
+    else:
+        if x.shape[0] == 1 and len(x.shape) == 2:
+            return x.shape[1]
         else:
-            if x.shape[0] == 1 and len(x.shape) == 2:
-                return x.shape[1]
-            else:
-                return x.shape[0]
+            return x.shape[0]
 
 
 def interp_2d(t_array, old_t_array, Y):
@@ -301,7 +301,7 @@ def reduce_F(F, mode="numpy", order=2):
     try:
         old_f_name = str(F.__name__)
     except:
-        old_f_name = 'unknown_name'
+        old_f_name = "unknown_name"
     if mode == "numpy":
 
         def G(*args):
@@ -314,11 +314,11 @@ def reduce_F(F, mode="numpy", order=2):
             x = concatenate(q_and_der, axnum)
             res = F(x, u, params)
             if axnum == 0:
-                aa = res[-dim:] 
+                aa = res[-dim:]
             elif axnum == 1:
                 aa = res[:, -dim:]
             else:
-                raise ValueError(f'unsupported shape por q: {q.shape}')
+                raise ValueError(f"unsupported shape por q: {q.shape}")
             return aa
 
     elif mode == "casadi":
@@ -1047,7 +1047,7 @@ def hs_mod_half_x(x, x_n, a, a_n, dt):
 
 def hs_mod_accel_restr(x, x_n, a, a_n, dt, scheme_params):
     order = 2  # This scheme is specifically designed for 2nd order
-    a_c = scheme_params.T
+    a_c = scheme_params
     res = copy(x)
     first_ind, last_ind, all_but_first_ind, all_but_last_ind = index_div(x, order)
     q = x[first_ind]
@@ -1075,7 +1075,7 @@ def hsj_half_x(x, x_n, a, a_n, dt):
 
 def hsj_accel_restr(x, x_n, a, a_n, dt, scheme_params):
     order = 2  # This scheme is specifically designed for 2nd order
-    a_c = scheme_params.T
+    a_c = scheme_params
     res = copy(x)
     first_ind, last_ind, all_but_first_ind, all_but_last_ind = index_div(x, order)
     q = x[first_ind]
@@ -1088,18 +1088,48 @@ def hsj_accel_restr(x, x_n, a, a_n, dt, scheme_params):
 # Oder M:
 
 
-def get_x_divisions(x, order=2):
+def get_x_divisions(x, order=2, return_indices=False):
     dim = x.shape[-1] // order
     x_list = []
     if is2d(x):
         for ii in range(order):
             index = (slice(None, None), slice(dim * ii, dim * (ii + 1)))
-            x_list.append(x[index])
+            if return_indices:
+                x_list.append(index)
+            else:
+                x_list.append(x[index])
     else:
         for ii in range(order):
             index = slice(dim * ii, dim * (ii + 1))
-            x_list.append(x[index])
+            if return_indices:
+                x_list.append(index)
+            else:
+                x_list.append(x[index])
     return x_list
+
+
+def _itemequal(arr_to, arr_from, shape, index=()):
+    if len(shape) == 1:
+        for ii in range(shape[0]):
+            index_i = index + (ii,)
+            arr_to[index_i] = arr_from[index_i]
+    else:
+        for ii in range(shape[0]):
+            index_i = index + (ii,)
+            shape_i = shape[1:]
+            _itemequal(arr_to, arr_from, shape_i, index_i)
+
+
+def itemequal(arr_to, arr_from):
+    assert arr_from.shape == arr_to.shape
+    shape = arr_from.shape
+    _itemequal(arr_to, arr_from, shape, index=())
+
+
+def reunite_matrix(arr, arr_list, order):
+    indices = get_x_divisions(arr, order, return_indices=True)
+    for ii in range(len(indices)):
+        arr[indices[ii]] = arr_list[ii]
 
 
 def generate_trapz_m_func(order):
@@ -1116,11 +1146,12 @@ def generate_trapz_m_func(order):
         x_list = get_x_divisions(x, order)
         res_list = get_x_divisions(res, order)
         for l in range(1, M + 1):
-            res_list[M - l][:] = dt**l * g_coefs[l] * (l * a + a_n)
+            _t = dt**l * g_coefs[l] * (l * a + a_n)
+            itemequal(res_list[M - l], _t)
             for i in range(l):
-                res_list[M - l][:] = (
-                    res_list[M - l] + dt**i * q_coefs[i] * x_list[i + M - l]
-                )
+                _t = res_list[M - l] + dt**i * q_coefs[i] * x_list[i + M - l]
+                itemequal(res_list[M - l], _t)
+        reunite_matrix(res, res_list, order)
         return x_n - res
 
     return trapz_m_accel_restr
@@ -1152,31 +1183,30 @@ def generate_hs_m_funcs(order):
         v = x_list[-1]  # V represents here the highest q derivative contained in x
         v_n = x_n_list[-1]
         for l in range(1, M + 1):
-            x_c_list[M - l][:] = (
-                dt ** (l - 1) / g_coefs_c[l, 0] * (3 * v_n + g_coefs_c[l, 1] * v)
-            )
-            x_c_list[M - l][:] = x_c_list[M - l] + dt**l / g_coefs_c[l, 2] * (
+            _t = dt ** (l - 1) / g_coefs_c[l, 0] * (
+                3 * v_n + g_coefs_c[l, 1] * v
+            ) + dt**l / g_coefs_c[l, 2] * (
                 g_coefs_c[l, 3] * a + g_coefs_c[l, 4] * a_n
             )
+            itemequal(x_c_list[M - l], _t)
             for i in range(l - 1):
-                x_c_list[M - l][:] = (
-                    x_c_list[M - l] + dt**i * q_coefs_c[i] * x_list[i + M - l]
-                )
+                _t = x_c_list[M - l] + dt**i * q_coefs_c[i] * x_list[i + M - l]
+                itemequal(x_c_list[M - l], _t)
+        reunite_matrix(x_c, x_c_list, order)
         return x_c
 
     def hs_m_accel_restr(x, x_n, a, a_n, dt, scheme_params):
-        a_c = scheme_params.T
+        a_c = scheme_params
         res = copy(x)
         x_list = get_x_divisions(x, order)
         res_list = get_x_divisions(res, order)
         for l in range(1, M + 1):
-            res_list[M - l][:] = (
-                dt**l / g_coefs[l] * (l**2 * a + 4 * l * a_c + (2 - l) * a_n)
-            )
+            _t = dt**l / g_coefs[l] * (l**2 * a + 4 * l * a_c + (2 - l) * a_n)
+            itemequal(res_list[M - l], _t)
             for i in range(l):
-                res_list[M - l][:] = (
-                    res_list[M - l] + dt**i * q_coefs[i] * x_list[i + M - l]
-                )
+                _t = res_list[M - l] + dt**i * q_coefs[i] * x_list[i + M - l]
+                itemequal(res_list[M - l], _t)
+        reunite_matrix(res, res_list, order)
         return x_n - res
 
     return hs_m_half_x, hs_m_accel_restr
@@ -1457,9 +1487,7 @@ def _newpoint_u(U, h, t, u_scheme, scheme_params={}):
             scheme = scheme_params["scheme"]
             params = scheme_params["params"]
             x_interp = _newpoint(X, X_dot, h, t, params, scheme, scheme_params)
-            x_dot_interp = _newpoint_der(
-                X, X_dot, h, t, scheme, 1, scheme_params
-            )
+            x_dot_interp = _newpoint_der(X, X_dot, h, t, scheme, 1, scheme_params)
             xi = tau / h
             u_0 = u_n * xi + u * (1 - xi)
             u_interp = minimize(
@@ -1473,9 +1501,7 @@ def _newpoint_u(U, h, t, u_scheme, scheme_params={}):
             scheme = scheme_params["scheme"]
             params = scheme_params["params"]
             x_interp = _newpoint(X, X_dot, h, t, params, scheme, scheme_params)
-            x_dot_interp = _newpoint_der(
-                X, X_dot, h, t, scheme, 1, scheme_params
-            )
+            x_dot_interp = _newpoint_der(X, X_dot, h, t, scheme, 1, scheme_params)
             pinv_F = scheme_params["pinv_f"]
             dim = vec_len(x_interp) // 2
             q_interp = x_interp[:dim]
@@ -1506,34 +1532,31 @@ def _newpoint(X, X_dot, h, t, params, scheme, scheme_params={}):
         elif scheme == "trapz":
             f_interp = generate_tz_interp(1, deriv=0)
             x_interp = f_interp(x, x_n, x_dot, x_dot_n, tau, h)
-        elif scheme == "hs":
+        elif scheme == "trapz_n":
+            order = scheme_params["order"]
+            f_interp = generate_tz_interp(order, deriv=0)
+            x_interp = f_interp(x, x_n, x_dot, x_dot_n, tau, h)
+        elif scheme == "hs" or scheme == "hs_parab":
             X_dot_c = scheme_params["x_dot_c"]
             x_dot_c = X_dot_c[n]
             f_interp = generate_hs_interp(1, deriv=0)
             x_interp = f_interp(x, x_n, x_dot, x_dot_n, tau, h, x_dot_c)
-        elif scheme == "hs_mod":
+        elif scheme == "hs_mod" or scheme == "hs_mod_parab":
             X_dot_c = scheme_params["x_dot_c"]
             x_dot_c = X_dot_c[n]
             f_interp = generate_hs_interp(2, deriv=0)
             x_interp = f_interp(x, x_n, x_dot, x_dot_n, tau, h, x_dot_c)
-        elif scheme == "hs_parab":
+        elif scheme == "hsn" or scheme == "hsn_parab":
+            order = scheme_params["order"]
             X_dot_c = scheme_params["x_dot_c"]
             x_dot_c = X_dot_c[n]
-            f_interp = generate_hs_interp(1, deriv=0)
+            f_interp = generate_hs_interp(order, deriv=0)
             x_interp = f_interp(x, x_n, x_dot, x_dot_n, tau, h, x_dot_c)
-        elif scheme == "hs_mod_parab":
-            X_dot_c = scheme_params["x_dot_c"]
-            x_dot_c = X_dot_c[n]
-            f_interp = generate_hs_interp(2, deriv=0)
-            x_interp = f_interp(x, x_n, x_dot, x_dot_n, tau, h, x_dot_c)
-        elif scheme == "hsj":
+        elif scheme == "hsj" or scheme == "hsj_parab":
             X_dot_c = scheme_params["x_dot_c"]
             x_dot_c = X_dot_c[n]
             x_interp = hsj_interp(x, x_n, x_dot, x_dot_n, tau, h, x_dot_c)
-        elif scheme == "hsj_parab":
-            X_dot_c = scheme_params["x_dot_c"]
-            x_dot_c = X_dot_c[n]
-            x_interp = hsj_interp(x, x_n, x_dot, x_dot_n, tau, h, x_dot_c)
+
         else:
             raise NameError(f"scheme {scheme} not recognized")
     return x_interp
@@ -1778,6 +1801,7 @@ def interpolated_array(
     supported_schemes = [
         "trapz",
         "trapz_mod",
+        "trapz_n",
         "hs",
         "hs_scipy",
         "hs_mod",
@@ -1785,6 +1809,8 @@ def interpolated_array(
         "hs_mod_parab",
         "hsj",
         "hsj_parab",
+        "hsn",
+        "hsn_parab",
     ]
     if scheme not in supported_schemes:
         raise ValueError(
@@ -1811,6 +1837,13 @@ def interpolated_array(
             f"Scheme {scheme} incompatible with u_scheme{u_scheme}"
             + ", 'parab_j' must be used with 'hsj'."
         )
+    if "hsn" in scheme or "trapz_n" in scheme:
+        if "order" not in scheme_params:
+            raise ValueError(
+                "If you use an N-order scheme, such as HSN, "
+                + "the order must be present as 'order' in the scheme_params"
+                + " dictionary"
+            )
 
     N, new_X, U, old_t_array = _prepare_interp(X, U, h, t_array)
     X_dot = _calculate_missing_arrays(
@@ -2072,25 +2105,25 @@ def _newpoint_der(X, X_dot, h, t, scheme, order, scheme_params={}):
         elif scheme == "trapz_mod":
             f_interp = generate_tz_interp(2, deriv=order)
             x_interp = f_interp(x, x_n, x_dot, x_dot_n, tau, h)
-        elif scheme == "hs":
+        elif scheme == "trapz_n":
+            order_sch = scheme_params["order"]
+            f_interp = generate_tz_interp(order_sch, deriv=order)
+            x_interp = f_interp(x, x_n, x_dot, x_dot_n, tau, h)
+        elif scheme == "hs" or scheme == "hs_parab":
             X_dot_c = scheme_params["x_dot_c"]
             x_dot_c = X_dot_c[n]
             f_interp = generate_hs_interp(1, deriv=order)
             x_interp = f_interp(x, x_n, x_dot, x_dot_n, tau, h, x_dot_c)
-        elif scheme == "hs_mod":
+        elif scheme == "hs_mod" or scheme == "hs_mod_parab":
             X_dot_c = scheme_params["x_dot_c"]
             x_dot_c = X_dot_c[n]
             f_interp = generate_hs_interp(2, deriv=order)
             x_interp = f_interp(x, x_n, x_dot, x_dot_n, tau, h, x_dot_c)
-        elif scheme == "hs_parab":
+        elif scheme == "hsn" or scheme == "hsn_parab":
+            order_sch = scheme_params["order"]
             X_dot_c = scheme_params["x_dot_c"]
             x_dot_c = X_dot_c[n]
-            f_interp = generate_hs_interp(1, deriv=order)
-            x_interp = f_interp(x, x_n, x_dot, x_dot_n, tau, h, x_dot_c)
-        elif scheme == "hs_mod_parab":
-            X_dot_c = scheme_params["x_dot_c"]
-            x_dot_c = X_dot_c[n]
-            f_interp = generate_hs_interp(2, deriv=order)
+            f_interp = generate_hs_interp(order_sch, deriv=order)
             x_interp = f_interp(x, x_n, x_dot, x_dot_n, tau, h, x_dot_c)
         elif scheme in ["hsj", "hsj_parab"]:
             X_dot_c = scheme_params["x_dot_c"]
@@ -2184,10 +2217,13 @@ def interpolated_array_derivative(
         "hs_mod",
         "hs_parab",
         "hs_mod_parab",
+        "hsn",
+        "hsn_parab",
         "hsj",
         "hsj_parab",
         "trapz",
         "trapz_mod",
+        "trapz_n",
     ]
     if scheme not in supported_schemes:
         raise ValueError(
@@ -2211,8 +2247,6 @@ def interpolated_array_derivative(
     else:
         for ii in range(N):
             new_X[ii] = array(
-                _newpoint_der(
-                    X, X_dot, h, t_array[ii], scheme, order, scheme_params
-                )
+                _newpoint_der(X, X_dot, h, t_array[ii], scheme, order, scheme_params)
             ).flatten()
     return new_X

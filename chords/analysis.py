@@ -53,8 +53,8 @@ def dynamic_error(
     u_scheme="lin",
     scheme_params={},
     n_interp=2000,
-    order = 2,
-    mode = 'q',
+    order=2,
+    mode="q",
 ):
     """
     Generate arrays of equispaced points with values of dynamic error.
@@ -120,7 +120,7 @@ def dynamic_error(
         differential order of the problem
     mode : str, 'q' or 'x', default 'q'.
         if 'q': q and its derivatives will be used in G, such as:
-            G(q(t), q'(t). u(t))
+            G(q(t), q'(t), u(t))
         if 'x': components of x will be used in G, such as:
             G(q(t), v(t), u(t))
 
@@ -157,6 +157,7 @@ def dynamic_error(
     h = t_end / N
     t_interp = linspace(0, t_end, n_interp)
     x_and_derivs = []
+    scheme_params["order"] = order
     x_interp, u_interp = interpolated_array(
         x_arr,
         u_arr,
@@ -169,43 +170,52 @@ def dynamic_error(
         u_scheme=u_scheme,
         scheme_params=scheme_params,
     )
-    
+
     x_and_derivs.append(get_x_divisions(x_interp, order))
-    for jj in range(1, order+1):
-        x_and_derivs.append(get_x_divisions(interpolated_array_derivative(
-            x_arr,
-            u_arr,
-            h,
-            t_interp,
-            params,
-            F=F,
-            X_dot=X_dot,
-            scheme=scheme,
-            order=jj,
-            scheme_params=scheme_params,
-        ), order))
-    
+    for jj in range(1, order + 1):
+        x_and_derivs.append(
+            get_x_divisions(
+                interpolated_array_derivative(
+                    x_arr,
+                    u_arr,
+                    h,
+                    t_interp,
+                    params,
+                    F=F,
+                    X_dot=X_dot,
+                    scheme=scheme,
+                    order=jj,
+                    scheme_params=scheme_params,
+                ),
+                order,
+            )
+        )
+
     q_and_d_interp = copy(x_interp)
     for jj in range(order):
-        q_and_d_interp[:, dim*jj: dim*(jj+1)] = x_and_derivs[jj][0]
-        
-    if mode == 'q':
+        q_and_d_interp[:, dim * jj : dim * (jj + 1)] = x_and_derivs[jj][0]
+
+    if mode == "q":
         x_in_f = q_and_d_interp
-    elif mode == 'x':
+    elif mode == "x":
         x_in_f = x_interp
     else:
-        raise ValueError(f"Value of mode {mode} not valid. Valid values are 'q' and 'x'.")
-        
+        raise ValueError(
+            f"Value of mode {mode} not valid. Valid values are 'q' and 'x'."
+        )
+
     f_interp = zeros([n_interp, dim])
     for ii in range(n_interp):
-        f_interp[ii, :] = F(x_in_f[ii], u_interp[ii], params)[dim:]
+        f_interp[ii, :] = F(x_in_f[ii], u_interp[ii], params)[-dim:]
     x_and_derivs[0].append(f_interp)
-    
+
     dyn_errs = []
     for jj in range(order):
         dyn_errs_order = []
-        for ii in range(order-jj):
-            dyn_errs_order.append(x_and_derivs[jj+1][ii] - x_and_derivs[0][ii+jj+1])
+        for ii in range(order - jj):
+            dyn_errs_order.append(
+                x_and_derivs[jj + 1][ii] - x_and_derivs[0][ii + jj + 1]
+            )
         dyn_errs.append(dyn_errs_order)
     return dyn_errs
 
