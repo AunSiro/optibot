@@ -373,7 +373,9 @@ def trapz_opti_step(x_n, x, u, u_n, F, dt, params):
     return res
 
 
-def trapz_step(x, u, u_n, F, dt, params, root_kwargs={}):
+def trapz_step(x, u, u_n, F, dt, params, root_kwargs=None):
+    if root_kwargs is None:
+        root_kwargs = {}
     x_0 = euler_step(x, u, F, dt, params)
     x_n = root(trapz_opti_step, x_0, (x, u, u_n, F, dt, params), **root_kwargs)
     return x_n.x
@@ -389,7 +391,9 @@ def trapz_mod_opti_step(x_n, x, u, u_n, F, dt, params):
     return res
 
 
-def trapz_mod_step(x, u, u_n, F, dt, params, root_kwargs={}):
+def trapz_mod_step(x, u, u_n, F, dt, params, root_kwargs=None):
+    if root_kwargs is None:
+        root_kwargs = {}
     x_0 = euler_step(x, u, F, dt, params)
     x_n = root(trapz_mod_opti_step, x_0, (x, u, u_n, F, dt, params), **root_kwargs)
     return x_n.x
@@ -414,7 +418,9 @@ def hs_opti_step(x_n, x, u, u_n, F, dt, params):
     return res
 
 
-def hs_step(x, u, u_n, F, dt, params, root_kwargs={}):
+def hs_step(x, u, u_n, F, dt, params, root_kwargs=None):
+    if root_kwargs is None:
+        root_kwargs = {}
     x_0 = euler_step(x, u, F, dt, params)
     x_n = root(hs_opti_step, x_0, (x, u, u_n, F, dt, params), **root_kwargs)
     return x_n.x
@@ -450,7 +456,9 @@ def hs_mod_opti_step(x_n, x, u, u_n, F, dt, params):
     return res
 
 
-def hs_mod_step(x, u, u_n, F, dt, params, root_kwargs={}):
+def hs_mod_step(x, u, u_n, F, dt, params, root_kwargs=None):
+    if root_kwargs is None:
+        root_kwargs = {}
     x_0 = euler_step(x, u, F, dt, params)
     x_n = root(hs_mod_opti_step, x_0, (x, u, u_n, F, dt, params), **root_kwargs)
     return x_n.x
@@ -474,7 +482,9 @@ def hs_parab_opti_step(x_n, x, u, u_n, F, dt, params, u_c):
     return res
 
 
-def hs_parab_step(x, u, u_n, F, dt, params, u_c, root_kwargs={}):
+def hs_parab_step(x, u, u_n, F, dt, params, u_c, root_kwargs=None):
+    if root_kwargs is None:
+        root_kwargs = {}
     x_0 = euler_step(x, u, F, dt, params)
     x_n = root(hs_parab_opti_step, x_0, (x, u, u_n, F, dt, params, u_c), **root_kwargs)
     return x_n.x
@@ -509,7 +519,9 @@ def hs_mod_parab_opti_step(x_n, x, u, u_n, F, dt, params, u_c):
     return res
 
 
-def hs_mod_parab_step(x, u, u_n, F, dt, params, u_c, root_kwargs={}):
+def hs_mod_parab_step(x, u, u_n, F, dt, params, u_c, root_kwargs=None):
+    if root_kwargs is None:
+        root_kwargs = {}
     x_0 = euler_step(x, u, F, dt, params)
     x_n = root(
         hs_mod_parab_opti_step, x_0, (x, u, u_n, F, dt, params, u_c), **root_kwargs
@@ -547,7 +559,9 @@ def hsj_opti_step(x_n, x, u, u_n, F, dt, params):
     return res
 
 
-def hsj_step(x, u, u_n, F, dt, params, root_kwargs={}):
+def hsj_step(x, u, u_n, F, dt, params, root_kwargs=None):
+    if root_kwargs is None:
+        root_kwargs = {}
     x_0 = euler_step(x, u, F, dt, params)
     x_n = root(hsj_opti_step, x_0, (x, u, u_n, F, dt, params), **root_kwargs)
     return x_n.x
@@ -582,7 +596,9 @@ def hsj_parab_opti_step(x_n, x, u, u_n, F, dt, params, u_c):
     return res
 
 
-def hsj_parab_step(x, u, u_n, F, dt, params, u_c, root_kwargs={}):
+def hsj_parab_step(x, u, u_n, F, dt, params, u_c, root_kwargs=None):
+    if root_kwargs is None:
+        root_kwargs = {}
     x_0 = euler_step(x, u, F, dt, params)
     x_n = root(hsj_parab_opti_step, x_0, (x, u, u_n, F, dt, params, u_c), **root_kwargs)
     return x_n.x
@@ -1457,7 +1473,9 @@ def _u_min_err_opti_step(u, x, x_dot, F, params):
     return res
 
 
-def _newpoint_u(U, h, t, u_scheme, scheme_params={}):
+def _newpoint_u(U, h, t, u_scheme, scheme_params=None):
+    if scheme_params is None:
+        scheme_params = {}
     n = int(t // h)
     tau = t % h
     if (n + 1) > U.shape[0]:
@@ -1514,7 +1532,9 @@ def _newpoint_u(U, h, t, u_scheme, scheme_params={}):
     return u_interp
 
 
-def _newpoint(X, X_dot, h, t, params, scheme, scheme_params={}):
+def _newpoint(X, X_dot, h, t, params, scheme, scheme_params=None):
+    if scheme_params is None:
+        scheme_params = {}
     n = int(t // h)
     tau = t % h
     if (n + 1) > X.shape[0]:
@@ -1579,7 +1599,7 @@ def _prepare_interp(X, U, h, t_array):
     return N, new_X, U, old_t_array
 
 
-def interpolate_u(U, old_t_array, t_array, u_scheme="lin", scheme_params={}):
+def interpolate_u(U, old_t_array, t_array, u_scheme="lin", scheme_params=None):
     """
     Interpolates values of U using the appropiate form function
 
@@ -1604,8 +1624,8 @@ def interpolate_u(U, old_t_array, t_array, u_scheme="lin", scheme_params={}):
             will be calculated to minimize dynamical error |q'' - f(q, q', u)|
             "pinv_dyn": for every point in the interpolation, the pseudoinverse
             dynamics are calculated
-    scheme_params : dict, optional
-        Aditional parameters of the scheme. The default is {}.
+    scheme_params : dict or None, optional
+        Aditional parameters of the scheme. The default is None.
 
     Raises
     ------
@@ -1619,6 +1639,8 @@ def interpolate_u(U, old_t_array, t_array, u_scheme="lin", scheme_params={}):
         interpolated values of U.
 
     """
+    if scheme_params is None:
+        scheme_params = {}
     if u_scheme == "lin":
         if len(U.shape) == 1:
             new_U = interp(t_array, old_t_array, U)
@@ -1728,7 +1750,7 @@ def interpolated_array(
     X_dot=None,
     scheme="hs_scipy",
     u_scheme="lin",
-    scheme_params={},
+    scheme_params=None,
 ):
     """
     Interpolates values of X and U using the appropiate form functions.
@@ -1782,8 +1804,8 @@ def interpolated_array(
             Using this method requires that F is not None
             "pinv_dyn": for every point in the interpolation, the pseudoinverse
             dynamics are calculated
-    scheme_params :dict, optional
-        Aditional parameters of the scheme. The default is {}.
+    scheme_params :dict or None, optional
+        Aditional parameters of the scheme. The default is None.
 
     Raises
     ------
@@ -1844,6 +1866,8 @@ def interpolated_array(
                 + "the order must be present as 'order' in the scheme_params"
                 + " dictionary"
             )
+    if scheme_params is None:
+        scheme_params = {}
 
     N, new_X, U, old_t_array = _prepare_interp(X, U, h, t_array)
     X_dot = _calculate_missing_arrays(
@@ -2083,7 +2107,9 @@ def hsj_dot_dot_interp(x, x_n, x_dot, x_dot_n, tau, h, scheme_params):
     return concatenate([q_interp, v_interp])
 
 
-def _newpoint_der(X, X_dot, h, t, scheme, order, scheme_params={}):
+def _newpoint_der(X, X_dot, h, t, scheme, order, scheme_params=None):
+    if scheme_params is None:
+        scheme_params = {}
     # Avoid out of interpolation error when t == t_final
     if abs(t - h * (X.shape[0] - 1)) < h * 1e-8:
         n = X.shape[0] - 2
@@ -2147,7 +2173,7 @@ def interpolated_array_derivative(
     X_dot=None,
     scheme="hs_scipy",
     order=1,
-    scheme_params={},
+    scheme_params=None,
 ):
     """
     Calculates the n-th order derivatives of an interpolation of X using
@@ -2192,8 +2218,8 @@ def interpolated_array_derivative(
     order : int, optional
         Derivation order. The default is 1. For HSJ and other prototype schemes,
         acceptable values may be 1 and 2.
-    scheme_params :dict, optional
-        Aditional parameters of the scheme. The default is {}.
+    scheme_params :dict or None, optional
+        Aditional parameters of the scheme. The default is None.
 
     Raises
     ------
@@ -2229,6 +2255,8 @@ def interpolated_array_derivative(
         raise ValueError(
             f"Unsupported scheme, supported schemes are{supported_schemes}"
         )
+    if scheme_params is None:
+        scheme_params = {}
 
     N, new_X, U, old_t_array = _prepare_interp(X, U, h, t_array)
 

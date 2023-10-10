@@ -230,7 +230,7 @@ def Sym2Fx(RHS, x_vars, u_vars, verbose=False):
 # --- Double Pendulum ---
 
 
-def doub_pend_F(x, u, params=[1, 1, 1, 1, 1]):
+def doub_pend_F(x, u, params=(1, 1, 1, 1, 1)):
     q_0, q_1, v_0, v_1 = unpack(x)
     u_0, u_1 = unpack(u)
     m_1, l_1, l_0, m_0, g, m_1, l_1, l_0, m_0, g = params

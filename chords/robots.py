@@ -20,13 +20,13 @@ from sympy.physics.mechanics import (
     RigidBody,
     angular_momentum,
 )
-from optibot.symbolic import (
+from .symbolic import (
     lagrange,
     diff_to_symb,
     SimpLagrangesMethod,
     ImplicitLagrangesMethod,
 )
-from optibot.numpy import unpack
+from .numpy import unpack
 from numpy import zeros, array
 
 
@@ -64,8 +64,10 @@ def dhlink_rot_mod_to_symbody(
     q,
     name="Body",
     g=9.8,
-    replacedict={},
+    replacedict=None,
 ):
+    if replacedict is None:
+        replacedict = {}
     search = make_search_func(dhlink, replacedict)
     theta = search("theta")
     alpha = search("alpha")
@@ -153,9 +155,9 @@ def robot_to_sympy(robot, replacedict_list, end_effector=None, simplif=True):
     return LM_small
 
 
-def Panda_Simp(
-    end_effector=None, simplif=True, replacedict_list=[{} for j in range(7)]
-):
+def Panda_Simp(end_effector=None, simplif=True, replacedict_list=None):
+    if replacedict_list is None:
+        replacedict_list = [{} for j in range(7)]
     from sympy import pi
 
     hpi = pi / 2

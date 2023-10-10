@@ -960,7 +960,7 @@ def interpolations_pseudospectral(
     u_interp="pol",
     x_interp="pol",
     g_func=lambda q, v, u, p: u,
-    params=[],
+    params=None,
     n_interp=5000,
 ):
     """
@@ -1011,7 +1011,7 @@ def interpolations_pseudospectral(
     g_func : Function of (q, v, u, params)
         A function of a dynamic sistem, so that
             q'' = g(q, q', u, params)
-    params : list
+    params : list or None, default None
         Physical problem parameters to be passed to F
     n_interp : int, default 5000
         number of interpolation points
@@ -1037,6 +1037,9 @@ def interpolations_pseudospectral(
     scheme_opts = ["LG", "LG_inv", "LGR", "LGR_inv", "LGL", "D2", "LG2", "LGLm", "JG"]
     if scheme not in scheme_opts:
         NameError(f"Invalid scheme.\n valid options are {scheme_opts}")
+
+    if params is None:
+        params = []
 
     N = len(qq)
     tau_arr = linspace(-1, 1, n_interp)
@@ -1120,7 +1123,7 @@ def dynamic_error_pseudospectral(
     u_interp="pol",
     x_interp="pol",
     g_func=lambda q, v, u, p: u,
-    params=[],
+    params=None,
     n_interp=5000,
 ):
     """
@@ -1175,7 +1178,7 @@ def dynamic_error_pseudospectral(
     g_func : Function of (q, v, u, params)
         A function of a dynamic sistem, so that
             q'' = g(q, q', u, params)
-    params : list
+    params : list or None, default None
         Physical problem parameters to be passed to F
     n_interp : int, default 5000
         number of interpolation points
@@ -1195,6 +1198,8 @@ def dynamic_error_pseudospectral(
         equispaced values of dynamic error q''(t) - G(q(t), q'(t), u(t)).
 
     """
+    if params is None:
+        params = []
     q_arr, q_arr_d, v_arr, v_arr_d, q_arr_d_d, u_arr = interpolations_pseudospectral(
         qq,
         vv,

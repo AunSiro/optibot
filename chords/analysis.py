@@ -52,7 +52,7 @@ def dynamic_error(
     X_dot=None,
     scheme="hs_scipy",
     u_scheme="lin",
-    scheme_params={},
+    scheme_params=None,
     n_interp=2000,
     order=2,
     mode="q",
@@ -113,8 +113,8 @@ def dynamic_error(
             "parab_j": parabolic interpolation, with the intermediate point
             at 2h/5, for work with HSJ. Requires central points array
             as scheme params[0]
-    scheme_params :dict, optional
-        Aditional parameters of the scheme. The default is {}.
+    scheme_params :dict or none, optional
+        Aditional parameters of the scheme. The default is None.
     n_interp : int, optional
         Number of interpolation points. The default is 2000.
     order : int, default 2
@@ -153,6 +153,8 @@ def dynamic_error(
             f"Scheme {scheme} incompatible with u_scheme{u_scheme}"
             + ", 'parab_j' must be used with 'hsj'."
         )
+    if scheme_params is None:
+        scheme_params = {}
     N = x_arr.shape[0] - 1
     dim = x_arr.shape[1] // order
     h = t_end / N
@@ -271,7 +273,7 @@ def dynamic_error_implicit(
     X_dot=None,
     scheme="hs_scipy",
     u_scheme="lin",
-    scheme_params={},
+    scheme_params=None,
     n_interp=2000,
     order=2,
     mode="q",
@@ -359,8 +361,8 @@ def dynamic_error_implicit(
             "parab_j": parabolic interpolation, with the intermediate point
             at 2h/5, for work with HSJ. Requires central points array
             as scheme params[0]
-    scheme_params :dict, optional
-        Aditional parameters of the scheme. The default is {}.
+    scheme_params :dict or None, optional
+        Aditional parameters of the scheme. The default is None.
     n_interp : int, optional
         Number of interpolation points. The default is 2000.
     order : int, default 2
@@ -398,6 +400,8 @@ def dynamic_error_implicit(
             f"Scheme {scheme} incompatible with u_scheme{u_scheme}"
             + ", 'parab_j' must be used with 'hsj'."
         )
+    if scheme_params is None:
+        scheme_params = {}
 
     N = x_arr.shape[0] - 1
     dim = x_arr.shape[1] // order
@@ -498,7 +502,7 @@ def F_point(
     x_dot_arr=None,
     scheme="hs_scipy",
     u_scheme="lin",
-    scheme_params={},
+    scheme_params=None,
 ):
     """
     Calculate the value of F(X_q(t), u(t), params), interpolating X_q(t) and u(t)
@@ -552,8 +556,8 @@ def F_point(
             "parab_j": parabolic interpolation, with the intermediate point
             at 2h/5, for work with HSJ. Requires central points array
             as scheme params[0]
-    scheme_params :dict, optional
-        Aditional parameters of the scheme. The default is {}.
+    scheme_params :dict or None, optional
+        Aditional parameters of the scheme. The default is None.
 
     Returns
     -------
@@ -577,6 +581,8 @@ def F_point(
             f"Scheme {scheme} incompatible with u_scheme{u_scheme}"
             + ", 'parab_j' must be used with 'hsj'."
         )
+    if scheme_params is None:
+        scheme_params = {}
     N = x_arr.shape[0] - 1
     dim = x_arr.shape[1] // 2
     h = (t_arr[-1] - t_arr[0]) / N
