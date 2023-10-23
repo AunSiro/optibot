@@ -118,9 +118,9 @@ def coll_points(N, scheme, precission=20):
 
 
 @lru_cache(maxsize=2000)
-def base_points(N, scheme, precission=20):
+def node_points(N, scheme, precission=20):
     """
-    Generates a list of len N with values of tau for lagrange base points
+    Generates a list of len N with values of tau for lagrange node points
 
     Parameters
     ----------
@@ -142,8 +142,8 @@ def base_points(N, scheme, precission=20):
 
     Returns
     -------
-    base_points : list
-        list of base points
+    node_points : list
+        list of node points
     """
     if scheme == "LG":
         return [-1.0] + LG(N - 1, precission)
@@ -214,7 +214,7 @@ def lagrangePolynomial(xs, ys):
         DESCRIPTION.
 
     """
-    # based on https://en.wikipedia.org/wiki/Lagrange_polynomial#Example_1
+    # noded on https://en.wikipedia.org/wiki/Lagrange_polynomial#Example_1
     total = 0
 
     # use tuple, needs to be hashable to cache
@@ -260,12 +260,12 @@ def _v_sum(t_arr, i):
 def v_coef(N, i, scheme, precission=20):
     """
     Generates the coefficient V for barycentric coordinates for
-    Polynomials constructed over base points.
+    Polynomials constructed over node points.
 
     Parameters
     ----------
     N : int
-        Number of base points
+        Number of node points
     i : int
         index of current point
     scheme : str
@@ -288,7 +288,7 @@ def v_coef(N, i, scheme, precission=20):
         coefficient V.
 
     """
-    taus = base_points(N, scheme, precission)
+    taus = node_points(N, scheme, precission)
     return _v_sum(taus, i)
 
 
@@ -301,7 +301,7 @@ def v_coef_coll(N, i, scheme, precission=20):
     Parameters
     ----------
     N : int
-        Number of base points
+        Number of node points
     i : int
         index of current point
     scheme : str
@@ -337,7 +337,7 @@ def matrix_D_bary(N, scheme, precission=20):
     Parameters
     ----------
     N : int
-        Number of base points
+        Number of node points
     scheme : str
         Scheme name. Supported values are:
             'LG'
@@ -358,7 +358,7 @@ def matrix_D_bary(N, scheme, precission=20):
         coefficient V.
 
     """
-    taus = base_points(N, scheme, precission)
+    taus = node_points(N, scheme, precission)
     M = zeros(N)
     v_arr = [v_coef(N, ii, scheme, precission) for ii in range(N)]
     for i in range(N):
@@ -446,7 +446,7 @@ def bary_poly_2d(t_arr, y_arr):
 def unit_Lag_pol(N, scheme, n, kind="q", precission=20):
     assert kind in ["q", "u"]
     if kind == "q":
-        x = base_points(N, scheme, precission)
+        x = node_points(N, scheme, precission)
     else:
         x = coll_points(N, scheme, precission)
 
@@ -493,7 +493,7 @@ def vector_interpolator(
         vec[n] = 1
     else:
         if kind == "q":
-            node_points_to = base_points(N_to, scheme_to, precission)
+            node_points_to = node_points(N_to, scheme_to, precission)
         else:
             node_points_to = coll_points(N_to, scheme_to, precission)
         point_to = node_points_to[n]
@@ -529,7 +529,7 @@ def get_bary_extreme_f(scheme, N, mode="u", point="start"):
         Number of points that construct the polynomial
     mode : {'u', 'x'}
         u polynomials are constructed on collocation points, while x polynomials
-        are constructed on base points
+        are constructed on node points
     point : {'start', 'end'}
         which point is to be calculated
 
@@ -587,7 +587,7 @@ def get_bary_extreme_f(scheme, N, mode="u", point="start"):
 # @lru_cache(maxsize=2000)
 # def LG_end_p_fun(N, precission=20):
 #     coefs = symbols(f"c_0:{N}")
-#     taus = base_points(N, "LG", precission)
+#     taus = node_points(N, "LG", precission)
 #     x = symbols("x")
 #     pol_lag = lagrangePolynomial(taus, coefs)
 #     res = pol_lag.subs(x, 1)
@@ -597,7 +597,7 @@ def get_bary_extreme_f(scheme, N, mode="u", point="start"):
 @lru_cache(maxsize=2000)
 def LG_diff_end_p_fun(N, precission=20):
     coefs = symbols(f"c_0:{N}")
-    taus = base_points(N, "LG", precission)
+    taus = node_points(N, "LG", precission)
     x = symbols("x")
     pol_lag = lagrangePolynomial(taus, coefs)
     res = pol_lag.diff(x).subs(x, 1)
@@ -607,7 +607,7 @@ def LG_diff_end_p_fun(N, precission=20):
 # @lru_cache(maxsize=2000)
 # def LG_inv_start_p_fun(N, precission=20):
 #     coefs = symbols(f"c_0:{N}")
-#     taus = base_points(N, "LG_inv", precission)
+#     taus = node_points(N, "LG_inv", precission)
 #     x = symbols("x")
 #     pol_lag = lagrangePolynomial(taus, coefs)
 #     res = pol_lag.subs(x, 0)
@@ -617,7 +617,7 @@ def LG_diff_end_p_fun(N, precission=20):
 @lru_cache(maxsize=2000)
 def LG_inv_diff_start_p_fun(N, precission=20):
     coefs = symbols(f"c_0:{N}")
-    taus = base_points(N, "LG_inv", precission)
+    taus = node_points(N, "LG_inv", precission)
     x = symbols("x")
     pol_lag = lagrangePolynomial(taus, coefs)
     res = pol_lag.diff(x).subs(x, 0)
@@ -652,7 +652,7 @@ def LG_diff_end_p_fun_cas(N, precission=20):
     from .casadi import sympy2casadi
 
     coefs = symbols(f"c_0:{N}")
-    taus = base_points(N, "LG", precission)
+    taus = node_points(N, "LG", precission)
     pol_lag = lagrangePolynomial(taus, coefs)
     x = symbols("x")
     res = pol_lag.diff(x).subs(x, 1)
@@ -677,7 +677,7 @@ def LG_inv_diff_start_p_fun_cas(N, precission=20):
     from .casadi import sympy2casadi
 
     coefs = symbols(f"c_0:{N}")
-    taus = base_points(N, "LG_inv", precission)
+    taus = node_points(N, "LG_inv", precission)
     pol_lag = lagrangePolynomial(taus, coefs)
     x = symbols("x")
     res = pol_lag.diff(x).subs(x, 0)
@@ -761,7 +761,7 @@ def get_pol_x(scheme, qq, vv, t0, t1):
     """
     qq = array(qq)
     N = qq.shape[0]
-    tau_x = array(base_points(N, scheme), dtype="float")
+    tau_x = array(node_points(N, scheme), dtype="float")
     qq_d = 2 / (t1 - t0) * matrix_D_bary(N, scheme) @ qq
     vv_d = 2 / (t1 - t0) * matrix_D_bary(N, scheme) @ vv
     qq_d_d = 2 / (t1 - t0) * matrix_D_bary(N, scheme) @ qq_d
@@ -776,10 +776,10 @@ def get_pol_x(scheme, qq, vv, t0, t1):
 
 def extend_x_arrays(qq, vv, scheme):
     """
-    In the case that the scheme doesn't consider either extreme point as a base point,
+    In the case that the scheme doesn't consider either extreme point as a node point,
     the value of q and v at said point is calculated and added to the arrays.
     A modified tau list compatible is also calculated.
-    If both extremes are base points for the given scheme, unmodified arrays
+    If both extremes are node points for the given scheme, unmodified arrays
     of q and v are returned along with the usual tau list.
 
     Parameters
@@ -813,7 +813,7 @@ def extend_x_arrays(qq, vv, scheme):
     """
     N = len(qq)
     if scheme == "LG":
-        tau_x = base_points(N, scheme) + [1]
+        tau_x = node_points(N, scheme) + [1]
         endp_f = get_bary_extreme_f("LG", N, mode="x", point="end")
         qq_1 = array(endp_f(qq), dtype="float")
         vv_1 = array(endp_f(vv), dtype="float")
@@ -832,7 +832,7 @@ def extend_x_arrays(qq, vv, scheme):
             dtype="float64",
         )
     elif scheme == "LG_inv":
-        tau_x = [-1] + base_points(N, scheme)
+        tau_x = [-1] + node_points(N, scheme)
         startp_f = get_bary_extreme_f("LG_inv", N, mode="x", point="start")
         qq_1 = array(startp_f(qq), dtype="float")
         vv_1 = array(startp_f(vv), dtype="float")
@@ -851,7 +851,7 @@ def extend_x_arrays(qq, vv, scheme):
             dtype="float64",
         )
     else:
-        tau_x = base_points(N, scheme)
+        tau_x = node_points(N, scheme)
         new_qq = qq
         new_vv = vv
     return tau_x, new_qq, new_vv
@@ -891,7 +891,7 @@ def extend_u_array(uu, scheme, N):
         Values known of u(t)
 
     """
-    tau_u = base_points(N, scheme)
+    tau_u = node_points(N, scheme)
     n_col = uu.shape[0]
     uu_0 = get_bary_extreme_f(scheme, n_col, mode="u", point="start")(uu)
     uu_e = get_bary_extreme_f(scheme, n_col, mode="u", point="end")(uu)
@@ -1069,7 +1069,7 @@ def interpolations_pseudospectral(
         )
 
     if x_interp == "pol":
-        tau_x = base_points(N, scheme)
+        tau_x = node_points(N, scheme)
         pol_q, pol_v, pol_q_d, pol_v_d, pol_q_d_d = get_pol_x(scheme, qq, vv, t0, t1)
         q_arr = pol_q(tau_arr)
         v_arr = pol_v(tau_arr)

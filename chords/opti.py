@@ -34,7 +34,7 @@ The class will inherit:
 from .symbolic import find_arguments
 from .casadi import sympy2casadi, rhs_to_casadi_function
 from .pseudospectral import (
-    base_points,
+    node_points,
     coll_points,
     matrix_D_bary,
     LG_end_p_fun_cas,
@@ -67,6 +67,8 @@ _implemented_equispaced_schemes = [
 _implemented_pseudospectral_schemes = [
     "LG",
     "LGL",
+    "LGR",
+    "LGR_inv",
     "D2",
     "LG2",
     "LGLm",
@@ -504,7 +506,7 @@ class _Pseudospectral:
             )
 
         u_opti = opti.variable(col_points, self.n_u)
-        tau_arr = array(base_points(N, scheme, precission), dtype=float)
+        tau_arr = array(node_points(N, scheme, precission), dtype=float)
         col_arr = array(coll_points(col_points, scheme, precission), dtype=float)
         t_arr = ((t_end - t_start) * tau_arr + (t_start + t_end)) / 2
         t_col_arr = ((t_end - t_start) * col_arr + (t_start + t_end)) / 2
@@ -812,7 +814,7 @@ class _Pseudospectral_multi:
             )
 
         u_opti = opti.variable(col_points, self.n_u)
-        tau_arr = array(base_points(N, scheme, precission), dtype=float)
+        tau_arr = array(node_points(N, scheme, precission), dtype=float)
         col_arr = array(coll_points(col_points, scheme, precission), dtype=float)
         t_arr = ((t_end - t_start) * tau_arr + (t_start + t_end)) / 2
         t_col_arr = ((t_end - t_start) * col_arr + (t_start + t_end)) / 2
@@ -1627,7 +1629,7 @@ class _Custom:
                     )
 
                 u_opti = opti.variable(col_points, self.n_u)
-                tau_arr = array(base_points(N, scheme, precission), dtype=float)
+                tau_arr = array(node_points(N, scheme, precission), dtype=float)
                 col_arr = array(
                     coll_points(col_points, scheme, precission), dtype=float
                 )
