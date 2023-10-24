@@ -102,7 +102,7 @@ def coll_points(N, scheme, precission=20):
     elif scheme == "LGR":
         return LGR(N, precission)
     elif scheme == "LGR_inv":
-        return [-ii for ii in LGR(N, precission)[::-1]]
+        return ([-ii for ii in LGR(N, precission)[::-1]], precission)
     elif scheme in ["LGL", "D2"]:
         return LGL(N, precission)
     elif scheme == "LGLm":

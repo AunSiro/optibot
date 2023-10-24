@@ -9,6 +9,10 @@ the workflow and to streamline the utilization of Chords and plotting the result
 """
 import matplotlib.pyplot as plt
 import numpy as np
+from sympy import legendre_poly
+from functools import lru_cache
+from math import ceil, factorial
+from .pseudospectral import LG, bary_poly
 
 # Uniform output style functions
 
@@ -168,3 +172,49 @@ def plot_by_segments(
     plt.xlabel("Time(s)")
     plt.ylabel(ylabel)
     plt.tight_layout(pad=0.0)
+
+
+# --------------------------- Gauss Integration -------------------------------
+
+
+@lru_cache(maxsize=2000)
+def LG_weight(N, i, precission=20):
+    Pn = legendre_poly(N, polys=True)
+    Pn_d = Pn.diff()
+    xi = LG(N, precission)
+    wi = 2 / ((1 - xi**2) * (Pn_d.eval(xi) ** 2))
+    return wi
+
+
+def gauss_integral(f, N, t0, t1):
+    scale = t1 - t0
+    points = (np.array(LG(N)) + 1) / 2
+    points = t0 + scale * points
+    weights = [LG_weight(N, ii) for ii in range(N)]
+    _a = [weights[ii] * f(points[ii]) for ii in range(N)]
+    return scale * np.sum(_a) / 2
+
+
+def poly_integral(f, n_pol, t0, t1, y0=0):
+    scale = t1 - t0
+
+    points = (np.array(LG(n_pol)) + 1) / 2
+    points = t0 + scale * points
+    points = list(points)
+
+    N_gauss = ceil((n_pol + 1) / 2)
+    y = [gauss_integral(f, N_gauss, t0, ii) for ii in points]
+    points = [
+        t0,
+    ] + points
+    y = [
+        y0,
+    ] + y
+    return bary_poly(points, y)
+
+
+def gauss_rep_integral(f, t1, n_pol, n_integ=1):
+    n_pol_cauchy = n_pol + n_integ - 1
+    n_gauss = ceil((n_pol_cauchy + 1) / 2)
+    cauchy_f = lambda t: (t1 - t) ** (n_integ - 1) * f(t)
+    return 1 / factorial(n_integ - 1) * gauss_integral(cauchy_f, n_gauss, 0, t1)
