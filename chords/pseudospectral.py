@@ -19,6 +19,17 @@ from .piecewise import interp_2d
 
 # --- Generating Collocation Points ---
 
+_implemented_schemes = [
+    "LG",
+    "LGL",
+    "LGR",
+    "LGR_inv",
+    "JG",
+    # "JGR", #These schemes are not compatible with Top Down structure
+    # "JGR_inv",
+    # "JGL"
+]
+
 
 @lru_cache(maxsize=2000)
 def LG(N, precission=20):
@@ -59,10 +70,39 @@ def LG2(N, precission=20):
 
 
 @lru_cache(maxsize=2000)
-def JG(N, precission=20):
+def JG(N, order=2, precission=20):
     return [
-        ii.evalf(n=precission) for ii in jacobi_poly(N, 1, 0, polys=True).real_roots()
+        ii.evalf(n=precission)
+        for ii in jacobi_poly(N, order - 1, 0, polys=True).real_roots()
     ]
+
+
+@lru_cache(maxsize=2000)
+def JGR(N, order=2, precission=20):
+    return [-1.0] + [
+        ii.evalf(n=precission)
+        for ii in jacobi_poly(N - 1, order - 1, 1, polys=True).real_roots()
+    ]
+
+
+@lru_cache(maxsize=2000)
+def JGR_inv(N, order=2, precission=20):
+    return [
+        ii.evalf(n=precission)
+        for ii in jacobi_poly(N - 1, order, 0, polys=True).real_roots()
+    ] + [1.0]
+
+
+@lru_cache(maxsize=2000)
+def JGL(N, order=2, precission=20):
+    return (
+        [-1.0]
+        + [
+            ii.evalf(n=precission)
+            for ii in jacobi_poly(N - 2, order, 1, polys=True).real_roots()
+        ]
+        + [1.0]
+    )
 
 
 @lru_cache(maxsize=2000)
@@ -102,7 +142,7 @@ def coll_points(N, scheme, precission=20):
     elif scheme == "LGR":
         return LGR(N, precission)
     elif scheme == "LGR_inv":
-        return ([-ii for ii in LGR(N, precission)[::-1]], precission)
+        return [-ii for ii in LGR(N, precission)[::-1]]
     elif scheme in ["LGL", "D2"]:
         return LGL(N, precission)
     elif scheme == "LGLm":
@@ -111,9 +151,15 @@ def coll_points(N, scheme, precission=20):
         return LG(N, precission)
     elif scheme == "JG":
         return JG(N, precission)
+    # elif scheme == "JGR": #These schemes are not compatible with Top Down structure
+    #     return JGR(N, precission)
+    # elif scheme == "JGR_inv":
+    #     return JGR_inv(N, precission)
+    # elif scheme == "JGL":
+    #     return JGL(N, precission)
     else:
         raise ValueError(
-            f"Unsupported scheme {scheme}, valid schemes are: LG, LGR, LGR_inv, LGL, LGLm, LG2, D2"
+            f"Unsupported scheme {scheme}, valid schemes are:{_implemented_schemes}"
         )
 
 
@@ -444,6 +490,31 @@ def bary_poly_2d(t_arr, y_arr):
 
 @lru_cache(maxsize=2000)
 def unit_Lag_pol(N, scheme, n, kind="q", precission=20):
+    """
+    Generate a barycentric numeric Lagrange polynomial over N node points.
+    L_n(x_i) = 0 for i != n
+    L_n(x_n) = 1
+
+    Parameters
+    ----------
+    N : Int
+        Number of node points.
+    scheme : str
+        Name of pseudospectral scheme.
+    n : int
+        number for which L(x_n) = 1.
+    kind : str: "q" or "u", optional
+        Whether the node points are the collocation points ("u") or the node
+        points of the given scheme ("q"). The default is "q".
+    precission : int, optional
+        Precission in colloction point calculation. The default is 20.
+
+    Returns
+    -------
+    Function
+        Barycentric Lagrange Polynomial L_n(x).
+
+    """
     assert kind in ["q", "u"]
     if kind == "q":
         x = node_points(N, scheme, precission)

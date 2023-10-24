@@ -213,8 +213,8 @@ def poly_integral(f, n_pol, t0, t1, y0=0):
     return bary_poly(points, y)
 
 
-def gauss_rep_integral(f, t1, n_pol, n_integ=1):
+def gauss_rep_integral(f, t0, t1, n_pol, n_integ=1):
     n_pol_cauchy = n_pol + n_integ - 1
     n_gauss = ceil((n_pol_cauchy + 1) / 2)
     cauchy_f = lambda t: (t1 - t) ** (n_integ - 1) * f(t)
-    return 1 / factorial(n_integ - 1) * gauss_integral(cauchy_f, n_gauss, 0, t1)
+    return 1 / factorial(n_integ - 1) * gauss_integral(cauchy_f, n_gauss, t0, t1)
