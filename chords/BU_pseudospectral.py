@@ -189,7 +189,7 @@ def tau_to_t_points(points, t0, tf):
     elif type(points) == tuple:
         new_points = tuple(new_points)
     elif type(points) == float:
-        new_points = new_points[0]
+        new_points = float(new_points)
     return new_points
 
 
@@ -328,7 +328,7 @@ def _Lag_integ(
     tf = constr_points[t_constr_index]
     lag_pol = BU_unit_Lag_pol(N_coll, scheme, n_lag_pol, scheme_order, precission)
     integration_order = scheme_order - deriv_order
-    integral = gauss_rep_integral(lag_pol, 0, tf, N_coll - 1, integration_order)
+    integral = gauss_rep_integral(lag_pol, -1, tf, N_coll - 1, integration_order)
     return integral
 
 
@@ -346,7 +346,7 @@ def Integration_Matrix(N_coll, scheme, deriv_order, h, scheme_order=2, precissio
     P = deriv_order
     matrix = zeros([n_t, M + N])
     for t_index in range(n_t):
-        t = constr_points[t_index]
+        t = tau_to_t_points(constr_points[t_index], 0, h)
         for ii in range(M - P):
             matrix[t_index, P + ii] = t**ii / factorial(ii)
         for ii in range(N):
