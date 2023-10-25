@@ -149,8 +149,8 @@ def expand_F(F, mode="numpy", order=2):
     try:
         old_f_name = str(F.__name__)
     except:
-        old_f_name = "Function"
-        
+        old_f_name = "Unnamed Function"
+
     if mode == "numpy":
 
         def new_F(x, u, params):
@@ -269,7 +269,7 @@ def expand_G(G, mode="numpy", order=2):
     try:
         old_f_name = str(G.__name__)
     except:
-        old_f_name = "Function"
+        old_f_name = "Unnamed Function"
 
     def F(x, u, params):
         dim = x.shape[-1] // order
@@ -326,8 +326,8 @@ def reduce_F(F, mode="numpy", order=2):
     try:
         old_f_name = str(F.__name__)
     except:
-        old_f_name = "Function"
-        
+        old_f_name = "Unnamed Function"
+
     if mode == "numpy":
 
         def G(*args):

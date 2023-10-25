@@ -181,7 +181,7 @@ def plot_by_segments(
 def LG_weight(N, i, precission=20):
     Pn = legendre_poly(N, polys=True)
     Pn_d = Pn.diff()
-    xi = LG(N, precission)
+    xi = LG(N, precission)[i]
     wi = 2 / ((1 - xi**2) * (Pn_d.eval(xi) ** 2))
     return wi
 
