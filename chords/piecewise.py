@@ -139,8 +139,18 @@ def expand_F(F, mode="numpy", order=2):
             x' = F(x, u, params)
 
     """
-    old_docstring = str(F.__doc__)
-    old_f_name = str(F.__name__)
+    try:
+        old_docstring = str(F.__doc__)
+    except:
+        old_docstring = """function of (x, u, params)
+        A function of a dynamic sistem, so that
+            v' = F(x, u, params),
+            q' = v"""
+    try:
+        old_f_name = str(F.__name__)
+    except:
+        old_f_name = "Function"
+        
     if mode == "numpy":
 
         def new_F(x, u, params):
@@ -248,8 +258,18 @@ def expand_G(G, mode="numpy", order=2):
             x' = F(x, u, params)
 
     """
-    old_docstring = str(G.__doc__)
-    old_f_name = str(G.__name__)
+    try:
+        old_docstring = str(G.__doc__)
+    except:
+        old_docstring = """function of (q, v, u, params)
+        G : function of (q, v, u, params)
+        A function of a dynamic sistem, so that
+            v' = G(q, v, u, params),
+            q' = v"""
+    try:
+        old_f_name = str(G.__name__)
+    except:
+        old_f_name = "Function"
 
     def F(x, u, params):
         dim = x.shape[-1] // order
@@ -297,11 +317,17 @@ def reduce_F(F, mode="numpy", order=2):
         (or the equivalent for a higher order equation)
 
     """
-    old_docstring = str(F.__doc__)
+    try:
+        old_docstring = str(F.__doc__)
+    except:
+        old_docstring = """function of (x, u, params)
+        A function of a dynamic sistem, so that
+            x' = F(x, u, params)"""
     try:
         old_f_name = str(F.__name__)
     except:
-        old_f_name = "unknown_name"
+        old_f_name = "Function"
+        
     if mode == "numpy":
 
         def G(*args):
