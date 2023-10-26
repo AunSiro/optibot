@@ -111,7 +111,7 @@ def JG2(N, precission=20):
 
 
 @lru_cache(maxsize=2000)
-def coll_points(N, scheme, precission=20):
+def coll_points(N, scheme, precission=20, order=2):
     """
     Generates a list of len N with values of tau for collocation points
 
@@ -149,14 +149,14 @@ def coll_points(N, scheme, precission=20):
         return LGLm(N, precission)
     elif scheme == "LG2":
         return LG(N, precission)
-    elif scheme == "JG":
-        return JG(N, precission)
-    # elif scheme == "JGR": #These schemes are not compatible with Top Down structure
-    #     return JGR(N, precission)
-    # elif scheme == "JGR_inv":
-    #     return JGR_inv(N, precission)
-    # elif scheme == "JGL":
-    #     return JGL(N, precission)
+    elif scheme in ["JG", "JG2"]:
+        return JG(N, order, precission)
+    elif scheme == "JGR":
+        return JGR(N, order, precission)
+    elif scheme == "JGR_inv":
+        return JGR_inv(N, order, precission)
+    elif scheme == "JGL":
+        return JGL(N, order, precission)
     else:
         raise ValueError(
             f"Unsupported scheme {scheme}, valid schemes are:{_implemented_schemes}"
@@ -303,7 +303,7 @@ def _v_sum(t_arr, i):
 
 
 @lru_cache(maxsize=None)
-def v_coef(N, i, scheme, precission=20):
+def v_coef(N, i, scheme, precission=20, order=2):
     """
     Generates the coefficient V for barycentric coordinates for
     Polynomials constructed over node points.
@@ -334,12 +334,18 @@ def v_coef(N, i, scheme, precission=20):
         coefficient V.
 
     """
+    if order < 2:
+        raise ValueError(
+            "You are trying to calculate a barycentric polynomial"
+            + " over node points for a differential order larger than 2"
+            + ", but node points are only defined or order up to 2."
+        )
     taus = node_points(N, scheme, precission)
     return _v_sum(taus, i)
 
 
 @lru_cache(maxsize=None)
-def v_coef_coll(N, i, scheme, precission=20):
+def v_coef_coll(N, i, scheme, precission=20, order=2):
     """
     Generates the coefficient V for barycentric coordinates for
     Polynomials constructed over collocation points.
@@ -370,7 +376,7 @@ def v_coef_coll(N, i, scheme, precission=20):
         coefficient V.
 
     """
-    taus = coll_points(N, scheme, precission)
+    taus = coll_points(N, scheme, precission, order)
     return _v_sum(taus, i)
 
 
@@ -578,7 +584,7 @@ def vector_interpolator(
 # --- Extreme points of LG scheme ---
 
 
-def get_bary_extreme_f(scheme, N, mode="u", point="start"):
+def get_bary_extreme_f(scheme, N, mode="u", point="start", order=2):
     """
     Create a function that calculates the value of a polynomial at
     an extreme point when given the value at construction points.
@@ -596,6 +602,9 @@ def get_bary_extreme_f(scheme, N, mode="u", point="start"):
             'LG2'
             'D2'
             'JG'
+            'JGR'
+            'JGR_inv'
+            'JGL'
     N : int
         Number of points that construct the polynomial
     mode : {'u', 'x'}
@@ -603,6 +612,8 @@ def get_bary_extreme_f(scheme, N, mode="u", point="start"):
         are constructed on node points
     point : {'start', 'end'}
         which point is to be calculated
+    order :
+        for Jacobi points, differential order of the scheme
 
     Returns
     -------
@@ -614,7 +625,7 @@ def get_bary_extreme_f(scheme, N, mode="u", point="start"):
 
     if point == "start":
         if mode == "u":
-            if scheme in ["LGL", "D2", "LGR"]:
+            if scheme in ["LGL", "D2", "LGR", "JGR", "JGL"]:
                 return lambda coefs: coefs[0]
         elif mode == "x":
             if scheme in ["LGL", "D2", "LGR", "LGR_inv", "LG", "LG2", "LGLm", "JG"]:
@@ -623,7 +634,7 @@ def get_bary_extreme_f(scheme, N, mode="u", point="start"):
             raise ValueError(f"Invalid mode {mode}, accepted are u and x")
     elif point == "end":
         if mode == "u":
-            if scheme in ["LGL", "D2", "LGR_inv"]:
+            if scheme in ["LGL", "D2", "LGR_inv", "JGR_inv", "JGL"]:
                 return lambda coefs: coefs[-1]
         elif mode == "x":
             if scheme in ["LGL", "D2", "LGR", "LGR_inv", "LG_inv", "LG2", "LGLm", "JG"]:
@@ -636,8 +647,9 @@ def get_bary_extreme_f(scheme, N, mode="u", point="start"):
     p = 1 if point == "end" else -1
     v_gen = v_coef_coll if mode == "u" else v_coef
 
-    v_arr = [v_gen(N, ii, scheme) for ii in range(N)]
-    t_arr = coll_points(N, scheme)
+    v_arr = [v_gen(N, ii, scheme, order) for ii in range(N)]
+    t_arr = coll_points(N, scheme, order)
+    # Barycentric Formula: Sup: Superior, Inf:Inferior
     sup = []
     for i in range(N):
         sup.append(float(v_arr[i] / (p - t_arr[i])))
