@@ -198,12 +198,12 @@ def gauss_integral(f, N, t0, t1):
 def poly_integral(f, n_pol, t0, t1, y0=0):
     scale = t1 - t0
 
-    points = (np.array(LG(n_pol)) + 1) / 2
+    points = (np.array(LG(n_pol + 1)) + 1) / 2
     points = t0 + scale * points
     points = list(points)
 
     N_gauss = ceil((n_pol + 1) / 2)
-    y = [gauss_integral(f, N_gauss, t0, ii) for ii in points]
+    y = [y0 + gauss_integral(f, N_gauss, t0, ii) for ii in points]
     points = [
         t0,
     ] + points

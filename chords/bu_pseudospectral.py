@@ -339,7 +339,7 @@ def Integration_Matrix(N_coll, scheme, deriv_order, h, scheme_order=2, precissio
     ), "derivation order must be smaller than differential order of the problem"
     assert deriv_order >= 0
     assert scheme_order >= 1
-    constr_points = BU_construction_points(N_coll, scheme)
+    constr_points = BU_construction_points(N_coll, scheme, scheme_order, precission)
     n_t = len(constr_points)
     M = scheme_order
     N = N_coll
