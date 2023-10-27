@@ -10,10 +10,22 @@ collocations schemes. In order to keep the best accuracy in interpolations,
 barycentric formulas are constructed.
 """
 
-from .pseudospectral import LG, LGL, LGR, JG, JGR, JGR_inv, JGL, bary_poly, bary_poly_2d
+from .pseudospectral import (
+    LG,
+    LGL,
+    LGR,
+    JG,
+    JGR,
+    JGR_inv,
+    JGL,
+    bary_poly,
+    bary_poly_2d,
+    extend_u_array,
+)
 from .util import gauss_rep_integral, poly_integral, poly_integral_2d
+from .piecewise import interp_2d, is2d
 from functools import lru_cache
-from numpy import zeros, array, concatenate
+from numpy import zeros, array, concatenate, interp, gradient, zeros_like, linspace
 from sympy import jacobi_poly
 from math import factorial
 
@@ -98,6 +110,8 @@ def BU_construction_points(N, scheme, order=2, precission=20):
             'JGR'
             'JGR_inv'
             'JGL'
+    order: int
+        differential order of the problem for jacobi points, default 2
     precission: int, default 20
         number of decimal places of precission
 
@@ -402,9 +416,6 @@ def Polynomial_interpolations_BU(xx_dot, x_0, uu, scheme, scheme_order, t0, tf, 
     q_and_ders = []
     for _ii in range(scheme_order):
         q_and_ders.append(x_0[n_q * _ii : n_q * (_ii + 1)])
-    # q_and_ders = array(q_and_ders, dtype = float)
-
-    # polynomial_data = concatenate((q_and_ders, highest_der_col), axis= 0)
 
     coll_points = tau_to_t_points(BU_coll_points(n_col, scheme, scheme_order), t0, tf)
 
@@ -425,16 +436,142 @@ def Polynomial_interpolations_BU(xx_dot, x_0, uu, scheme, scheme_order, t0, tf, 
 
 
 def interpolations_BU_pseudospectral(
+    xx,
     xx_dot,
-    x_0,
     uu,
     scheme,
+    scheme_order,
     t0,
     tf,
     u_interp="pol",
     x_interp="pol",
-    g_func=lambda q, v, u, p: u,
-    params=None,
     n_interp=5000,
 ):
-    pass
+    """
+    Generates arrays of equispaced points with values of interpolations.
+
+    'x_interp' and 'u_interp' define the way in which we interpolate the values
+    of q, v and u between the given points.
+
+    Parameters
+    ----------
+    xx : Numpy Array
+        Values known of x(t)
+    xx_dot : Numpy Array
+        Values known of x_dot(t)
+    uu : Numpy Array
+        Values known of u(t)
+    scheme : str
+        Pseudospectral scheme used in the optimization.
+        Acceptable values are:
+            'LG'
+            'LGR'
+            'LGR_inv'
+            'LGL'
+            'JG'
+            'JGR'
+            'JGR_inv'
+            'JGL'
+    scheme_order : int
+        differential order of the problem
+    t0 : float
+        starting time of interval of analysis
+    t1 : float
+        ending time of interval of analysis
+    u_interp :  string, optional
+        Model of the interpolation that must be used. The default is "pol".
+        Acceptable values are:
+            "pol": corresponding polynomial interpolation
+            "lin": lineal interpolation
+            "smooth": 3d order spline interpolation
+    x_interp : string, optional
+        Model of the interpolation that must be used. The default is "pol".
+        Acceptable values are:
+            "pol": corresponding polynomial interpolation
+            "lin": lineal interpolation
+            "Hermite": Hermite's 3d order spline interpolation
+    n_interp : int, default 5000
+        number of interpolation points
+
+    Raises
+    ------
+    NameError
+        When an unsupported value for scheme, x_interp or u_interp is used.
+
+    Returns
+    -------
+    x_arr, x_dot_arr, u_arr : Numpy array
+        equispaced values of interpolations.
+    """
+    if scheme[:3] == "BU_":
+        scheme = scheme[3:]
+    if is2d(xx):
+        x_0 = xx[0, :]
+    else:
+        x_0 = xx[0]
+    n_q = len(x_0) // scheme_order
+    highest_der = xx_dot[:, -n_q:]
+    coll_index = get_coll_indices(scheme)
+    highest_der_col = highest_der[coll_index, :]
+    n_col = highest_der_col.shape[0]
+
+    if x_interp == "Hermite":
+        from scipy.interpolate import CubicHermiteSpline as hermite
+
+    if scheme not in _implemented_schemes:
+        NameError(f"Invalid scheme.\n valid options are {_implemented_schemes}")
+
+    t_arr = linspace(t0, tf, n_interp)
+    t_x = tau_to_t_points(
+        array([-1.0] + BU_construction_points(n_col, scheme, scheme_order)), t0, tf
+    )
+
+    if "pol" in [x_interp, u_interp]:
+        u_pol, q_and_der_polys = Polynomial_interpolations_BU(
+            xx_dot, x_0, uu, scheme, scheme_order, t0, tf, n_col
+        )
+        if u_interp == "pol":
+            u_arr = u_pol(t_arr)
+        if x_interp == "pol":
+            q_and_der_arrs = []
+            for ii in range(scheme_order + 1):
+                q_and_der_arrs.append(q_and_der_polys[ii](t_arr))
+            q_and_der_arrs = concatenate(tuple(q_and_der_arrs), axis=1)
+            x_arr = q_and_der_arrs[:, :-n_q]
+            x_dot_arr = q_and_der_arrs[:, n_q:]
+
+    if u_interp == "lin":
+        tau_u, uu = extend_u_array(uu, scheme, n_col, scheme_order)
+        t_u = tau_to_t_points(tau_u, t0, tf)
+
+        if len(uu.shape) == 1:
+            u_arr = interp(t_arr, t_u, uu)
+        elif len(uu.shape) == 2:
+            u_arr = interp_2d(t_arr, t_u, uu)
+        else:
+            raise ValueError(
+                f"U has {len(uu.shape)} dimensions, values accepted are 1 and 2"
+            )
+    elif u_interp == "smooth":
+        tau_u, uu = extend_u_array(uu, scheme, n_col, scheme_order)
+        t_u = tau_to_t_points(tau_u, t0, tf)
+        uu_dot = gradient(uu, t_u)
+        u_arr = hermite(t_u, uu, uu_dot)(t_arr)
+    else:
+        raise NameError(
+            'Invalid interpolation method for u.\n valid options are "pol", "lin", "smooth"'
+        )
+
+    if x_interp == "lin":
+        x_arr = interp_2d(t_arr, t_x, xx)
+        x_dot_arr = interp_2d(t_arr, t_x, xx_dot)
+
+    elif x_interp == "Hermite":
+        herm = hermite(t_x, xx, xx_dot)
+        x_arr = herm(t_arr)
+        x_dot_arr = herm.derivative()(t_arr)
+    else:
+        raise NameError(
+            'Invalid interpolation method for x.\n valid options are "pol", "lin", "Hermite"'
+        )
+    return x_arr, x_dot_arr, u_arr

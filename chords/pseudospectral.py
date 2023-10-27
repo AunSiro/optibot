@@ -940,7 +940,7 @@ def extend_x_arrays(qq, vv, scheme):
     return tau_x, new_qq, new_vv
 
 
-def extend_u_array(uu, scheme, N):
+def extend_u_array(uu, scheme, N, order=2):
     """
     In the case that the scheme doesn't consider either extreme point as a
     collocation point, the value of u at said points is extrapolated by
@@ -974,28 +974,21 @@ def extend_u_array(uu, scheme, N):
         Values known of u(t)
 
     """
-    tau_u = node_points(N, scheme)
+    tau_u = coll_points(N, scheme, order)
     n_col = uu.shape[0]
-    uu_0 = get_bary_extreme_f(scheme, n_col, mode="u", point="start")(uu)
-    uu_e = get_bary_extreme_f(scheme, n_col, mode="u", point="end")(uu)
-    if scheme == "LG2":
+    uu_0 = get_bary_extreme_f(scheme, n_col, mode="u", point="start", order=order)(uu)
+    uu_e = get_bary_extreme_f(scheme, n_col, mode="u", point="end", order=order)(uu)
+    if scheme in ["LG2", "LG", "JG", "LG_inv", "LGLm"]:
+        tau_u = [-1.0] + tau_u + [1.0]
         new_uu = array([uu_0] + list(uu) + [uu_e], dtype="float64")
-    elif scheme == "LG":
-        tau_u = tau_u + [1]
-        new_uu = array([uu_0] + list(uu) + [uu_e], dtype="float64")
-    elif scheme == "LG_inv":
-        tau_u = [-1] + tau_u
-        new_uu = array([uu_0] + list(uu) + [uu_e], dtype="float64")
-    elif scheme == "LGLm":
-        new_uu = array([uu_0] + list(uu) + [uu_e], dtype="float64")
-    elif scheme == "LGR":
+    elif scheme in ["LGR", "JGR"]:
+        tau_u = tau_u + [1.0]
         new_uu = array(list(uu) + [uu_e], dtype="float64")
-    elif scheme == "LGR_inv":
+    elif scheme in ["LGR_inv", "JGR_inv"]:
+        tau_u = [-1.0] + tau_u
         new_uu = array([uu_0] + list(uu), dtype="float64")
-    elif scheme in ["LGL", "D2"]:
+    elif scheme in ["LGL", "D2", "JGL"]:
         new_uu = uu
-    elif scheme == "JG":
-        new_uu = array([uu_0] + list(uu) + [uu_e], dtype="float64")
     else:
         raise ValueError("Unrecognized scheme")
     return tau_u, new_uu
@@ -1107,12 +1100,7 @@ def interpolations_pseudospectral(
     Returns
     -------
     q_arr, q_arr_d, v_arr, v_arr_d, q_arr_d_d, u_arr : Numpy array, shape = (n_interp, N)
-        equispaced values of dynamic error q'(t) - v(t).
-    err_v : Numpy array, shape = (n_interp, N)
-        equispaced values of dynamic error v'(t) - G(q(t), v(t), u(t)).
-    err_2 : Numpy array, shape = (n_interp, N)
-        equispaced values of dynamic error q''(t) - G(q(t), q'(t), u(t)).
-
+        equispaced values of interpolations.
     """
     from scipy.interpolate import CubicHermiteSpline as hermite
     from numpy import interp, gradient, zeros_like
