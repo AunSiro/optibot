@@ -47,6 +47,7 @@ from .bu_pseudospectral import (
     BU_construction_points,
     Integration_Matrix,
     tau_to_t_points,
+    get_coll_indices,
 )
 
 import casadi as cas
@@ -933,17 +934,7 @@ class _BU_Pseudospectral:
         lam_opti = self.opti_arrs["lam"]
         params = self.params
 
-        if scheme in ["LG", "JG"]:
-            coll_index = slice(1, -1)
-        elif scheme in ["LGR", "JGR"]:
-            coll_index = slice(None, -1)
-        elif scheme in ["LGR_inv", "JG_inv"]:
-            coll_index = slice(1, None)
-        elif scheme in ["LGL", "JGL"]:
-            coll_index = slice(None, None)
-        else:
-            raise NotImplementedError(f"Scheme {scheme} not implemented yet")
-
+        coll_index = get_coll_indices(scheme)
         q_and_ders_0 = []
         for ii in q_and_ders_names[:-1]:
             q_and_ders_0.append(self.opti_points[ii + "_s"])

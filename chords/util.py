@@ -13,6 +13,7 @@ from sympy import legendre_poly
 from functools import lru_cache
 from math import ceil, factorial
 from .pseudospectral import LG, bary_poly
+from .numpy import combinefunctions
 
 # Uniform output style functions
 
@@ -195,6 +196,13 @@ def gauss_integral(f, N, t0, t1):
     return scale * np.sum(_a) / 2
 
 
+def gauss_rep_integral(f, t0, t1, n_pol, n_integ=1):
+    n_pol_cauchy = n_pol + n_integ - 1
+    n_gauss = ceil((n_pol_cauchy + 1) / 2)
+    cauchy_f = lambda t: (t1 - t) ** (n_integ - 1) * f(t)
+    return 1 / factorial(n_integ - 1) * gauss_integral(cauchy_f, n_gauss, t0, t1)
+
+
 def poly_integral(f, n_pol, t0, t1, y0=0):
     scale = t1 - t0
 
@@ -213,8 +221,29 @@ def poly_integral(f, n_pol, t0, t1, y0=0):
     return bary_poly(points, y)
 
 
-def gauss_rep_integral(f, t0, t1, n_pol, n_integ=1):
-    n_pol_cauchy = n_pol + n_integ - 1
-    n_gauss = ceil((n_pol_cauchy + 1) / 2)
-    cauchy_f = lambda t: (t1 - t) ** (n_integ - 1) * f(t)
-    return 1 / factorial(n_integ - 1) * gauss_integral(cauchy_f, n_gauss, t0, t1)
+def poly_integral_2d(f, n_pol, t0, t1, y0=0):
+    y_example = f(t0)
+    if len(y_example.shape) >= 2:
+        raise NotImplementedError(
+            f"The output of f has shape {y_example.shape} but implemented "
+            + "methods only allow for shape [n,]"
+        )
+    if len(y_example) == 1:
+        return poly_integral(f, n_pol, t0, t1, y0)
+    dim = y_example.shape[0]
+
+    y0 = np.array(y0)
+    if y0.shape != y_example.shape:
+        if y0.shape == () or len(y0) == 1:
+            y0 = y0 * np.ones(dim)
+        else:
+            raise ValueError(
+                f"y0 has unexpected shape {y0.shape}, expected was {y_example.shape}"
+            )
+
+    pols = []
+    for ii in range(dim):
+        _part_pol = lambda t: f(t)[ii]
+        pols.append(poly_integral(_part_pol, n_pol, t0, t1, y0[ii]))
+
+    return combinefunctions(*pols)

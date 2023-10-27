@@ -10,10 +10,10 @@ collocations schemes. In order to keep the best accuracy in interpolations,
 barycentric formulas are constructed.
 """
 
-from .pseudospectral import LG, LGL, LGR, JG, JGR, JGR_inv, JGL, bary_poly
-from .util import gauss_rep_integral
+from .pseudospectral import LG, LGL, LGR, JG, JGR, JGR_inv, JGL, bary_poly, bary_poly_2d
+from .util import gauss_rep_integral, poly_integral, poly_integral_2d
 from functools import lru_cache
-from numpy import zeros, array
+from numpy import zeros, array, concatenate
 from sympy import jacobi_poly
 from math import factorial
 
@@ -126,6 +126,40 @@ def BU_construction_points(N, scheme, order=2, precission=20):
         raise ValueError(
             f"Unsupported scheme {scheme}, valid schemes are: {_implemented_schemes}"
         )
+
+
+def get_coll_indices(scheme):
+    """
+    returns a slice that can be used to separate collocation points from
+    an array that includes first and last point
+
+    Parameters
+    ----------
+    scheme : str
+        the scheme used.
+
+    Raises
+    ------
+    NotImplementedError
+        When the scheme is not recognized.
+
+    Returns
+    -------
+    coll_index : slice
+        slice to be used as index in the array to extract the collocation points.
+
+    """
+    if scheme in ["LG", "JG"]:
+        coll_index = slice(1, -1)
+    elif scheme in ["LGR", "JGR"]:
+        coll_index = slice(None, -1)
+    elif scheme in ["LGR_inv", "JG_inv"]:
+        coll_index = slice(1, None)
+    elif scheme in ["LGL", "JGL"]:
+        coll_index = slice(None, None)
+    else:
+        raise NotImplementedError(f"Scheme {scheme} not implemented yet")
+    return coll_index
 
 
 @lru_cache(maxsize=2000)
@@ -324,7 +358,7 @@ def _Lag_integ(
         result of the numerical integration.
 
     """
-    constr_points = BU_construction_points(N_coll, scheme)
+    constr_points = BU_construction_points(N_coll, scheme, scheme_order, precission)
     tf = constr_points[t_constr_index]
     lag_pol = BU_unit_Lag_pol(N_coll, scheme, n_lag_pol, scheme_order, precission)
     integration_order = scheme_order - deriv_order
@@ -354,3 +388,53 @@ def Integration_Matrix(N_coll, scheme, deriv_order, h, scheme_order=2, precissio
                 N_coll, ii, scheme, P, t_index, scheme_order, precission
             )
     return matrix
+
+
+def Polynomial_interpolations_BU(xx_dot, x_0, uu, scheme, scheme_order, t0, tf, N_coll):
+    if scheme[:3] == "BU_":
+        scheme = scheme[3:]
+    n_q = len(x_0) // scheme_order
+    highest_der = xx_dot[:, -n_q:]
+    coll_index = get_coll_indices(scheme)
+    highest_der_col = highest_der[coll_index, :]
+    n_col = highest_der_col.shape[0]
+
+    q_and_ders = []
+    for _ii in range(scheme_order):
+        q_and_ders.append(x_0[n_q * _ii : n_q * (_ii + 1)])
+    # q_and_ders = array(q_and_ders, dtype = float)
+
+    # polynomial_data = concatenate((q_and_ders, highest_der_col), axis= 0)
+
+    coll_points = tau_to_t_points(BU_coll_points(n_col, scheme, scheme_order), t0, tf)
+
+    u_poly = bary_poly_2d(coll_points, uu)
+    highest_der_poly = bary_poly_2d(coll_points, highest_der_col)
+
+    q_and_der_polys = [
+        highest_der_poly,
+    ]
+    for ii in range(scheme_order):
+        _prev_poly = q_and_der_polys[-1]
+        _new_poly = poly_integral_2d(
+            _prev_poly, n_col - 1 + ii, t0, tf, q_and_ders[scheme_order - ii - 1]
+        )
+        q_and_der_polys.append(_new_poly)
+
+    return u_poly, q_and_der_polys[::-1]
+
+
+def interpolations_BU_pseudospectral(
+    xx_dot,
+    x_0,
+    uu,
+    scheme,
+    t0,
+    tf,
+    u_interp="pol",
+    x_interp="pol",
+    g_func=lambda q, v, u, p: u,
+    params=None,
+    n_interp=5000,
+):
+    pass
