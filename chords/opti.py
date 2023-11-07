@@ -46,6 +46,7 @@ from .bu_pseudospectral import (
     BU_coll_points,
     BU_construction_points,
     Integration_Matrix,
+    Extreme_Matrix,
     tau_to_t_points,
     get_coll_indices,
 )
@@ -923,13 +924,9 @@ class _BU_Pseudospectral:
         h = self.t_end - self.t_start
 
         dynam_f_x = self.dyn_f_restr
-        # dynam_g_q = self.dyn_g_restr
         x_opti = self.opti_arrs["x"]
         x_dot_opti = self.opti_arrs["x_d"]
         highest_q_d_opti = self.opti_arrs[q_and_ders_names[-1]]
-        # q_opti = self.opti_arrs["q"]
-        # v_opti = self.opti_arrs["v"]
-        # a_opti = self.opti_arrs["a"]
         u_opti = self.opti_arrs["u"]
         lam_opti = self.opti_arrs["lam"]
         params = self.params
@@ -940,6 +937,23 @@ class _BU_Pseudospectral:
             q_and_ders_0.append(self.opti_points[ii + "_s"])
         highest_q_d_opti_coll = highest_q_d_opti[coll_index, :]
         polynomial_data = cas.vertcat(*q_and_ders_0, highest_q_d_opti_coll)
+
+        # ----- Extremes of highest derivative Constraints -----
+
+        if scheme in ["LG", "LGR_inv", "JG", "JGR_inv"]:
+            start_mat = Extreme_Matrix(
+                n_coll, scheme, "start", scheme_order=order, precission=self.precission
+            )
+            self.opti.subject_to(
+                highest_q_d_opti[0, :] == start_mat @ highest_q_d_opti_coll
+            )
+        if scheme in ["LG", "LGR", "JG", "JGR"]:
+            end_mat = Extreme_Matrix(
+                n_coll, scheme, "end", scheme_order=order, precission=self.precission
+            )
+            self.opti.subject_to(
+                highest_q_d_opti[-1, :] == end_mat @ highest_q_d_opti_coll
+            )
 
         # ----- Scheme Constraints ----
 

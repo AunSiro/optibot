@@ -404,6 +404,22 @@ def Integration_Matrix(N_coll, scheme, deriv_order, h, scheme_order=2, precissio
     return matrix
 
 
+@lru_cache(maxsize=2000)
+def Extreme_Matrix(N_coll, scheme, point, scheme_order=2, precission=20):
+    matrix = zeros([1, N_coll])
+    for ii in range(N_coll):
+        pol = BU_unit_Lag_pol(
+            N_coll, scheme, ii, order=scheme_order, precission=precission
+        )
+        if point == "start":
+            matrix[0, ii] = pol(-1)
+        elif point == "end":
+            matrix[0, ii] = pol(1)
+        else:
+            raise ValueError(f"point must be 'start' or 'end', not {point}")
+    return matrix
+
+
 def Polynomial_interpolations_BU(xx_dot, x_0, uu, scheme, scheme_order, t0, tf, N_coll):
     if scheme[:3] == "BU_":
         scheme = scheme[3:]
