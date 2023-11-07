@@ -968,8 +968,8 @@ def extend_u_array(uu, scheme, N, order=2):
 
     Returns
     -------
-    tau_x : list
-        Tau values coherent with the new q and v arrays
+    tau_u : list
+        Tau values coherent with the new u arrays
     new_uu : Numpy Array
         Values known of u(t)
 
