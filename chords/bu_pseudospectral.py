@@ -167,7 +167,7 @@ def get_coll_indices(scheme):
         coll_index = slice(1, -1)
     elif scheme in ["LGR", "JGR"]:
         coll_index = slice(None, -1)
-    elif scheme in ["LGR_inv", "JG_inv"]:
+    elif scheme in ["LGR_inv", "JGR_inv"]:
         coll_index = slice(1, None)
     elif scheme in ["LGL", "JGL"]:
         coll_index = slice(None, None)
