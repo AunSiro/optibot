@@ -12,7 +12,8 @@ formulas are constructed.
 
 from sympy import legendre_poly, jacobi_poly, symbols, expand, zeros, lambdify
 from functools import lru_cache
-from numpy import array, piecewise, linspace, expand_dims, squeeze
+from numpy import array, piecewise, linspace, expand_dims, squeeze, zeros_like
+from numba import njit
 from .numpy import combinefunctions
 from .piecewise import interp_2d
 
@@ -334,7 +335,7 @@ def v_coef(N, i, scheme, precission=20, order=2):
         coefficient V.
 
     """
-    if order < 2:
+    if order > 2:
         raise ValueError(
             "You are trying to calculate a barycentric polynomial"
             + " over node points for a differential order larger than 2"
@@ -406,12 +407,14 @@ def matrix_D_bary(N, scheme, precission=20):
 
     Returns
     -------
-    v_i : float
-        coefficient V.
+    M : NumPy Array
+        Derivation Matrix.
 
     """
+    from numpy import zeros
+
     taus = node_points(N, scheme, precission)
-    M = zeros(N)
+    M = zeros((N, N), dtype=float)
     v_arr = [v_coef(N, ii, scheme, precission) for ii in range(N)]
     for i in range(N):
         j_range = [j for j in range(N)]
@@ -421,6 +424,50 @@ def matrix_D_bary(N, scheme, precission=20):
     for j in range(N):
         M[j, j] = -sum(M[j, :])
     return M
+
+
+# def bary_poly(t_arr, y_arr):
+#     """
+#     Generates a numeric function of t that corresponds to the polynomial
+#     that passes through the points (t, y) using the barycentric formula
+
+#     Parameters
+#     ----------
+#     t_arr : iterable of floats
+#         values of t
+#     y_arr : iterable of floats
+#         values of y
+
+#     Returns
+#     -------
+#     polynomial : Function F(t)
+#         polynomial numerical function
+
+#     """
+#     t = symbols("t")
+#     n = len(t_arr)
+#     v_arr = [_v_sum(t_arr, ii) for ii in range(n)]
+#     sup = 0
+#     for i in range(n):
+#         sup += v_arr[i] * y_arr[i] / (t - t_arr[i])
+#     inf = 0
+#     for i in range(n):
+#         inf += v_arr[i] / (t - t_arr[i])
+#     poly_fun = lambdify(
+#         [
+#             t,
+#         ],
+#         sup / inf,
+#     )
+
+#     def new_poly(t):
+#         t = array(t, dtype="float64")
+#         cond_list = [t == t_i for t_i in t_arr]
+#         func_list = list(y_arr)
+#         func_list.append(poly_fun)
+#         return piecewise(t, cond_list, func_list)
+
+#     return new_poly
 
 
 def bary_poly(t_arr, y_arr):
@@ -441,28 +488,42 @@ def bary_poly(t_arr, y_arr):
         polynomial numerical function
 
     """
-    t = symbols("t")
+    # t = symbols("t")
+    t_arr = array(t_arr, dtype="float64")
+    y_arr = array(y_arr, dtype="float64")
     n = len(t_arr)
     v_arr = [_v_sum(t_arr, ii) for ii in range(n)]
-    sup = 0
-    for i in range(n):
-        sup += v_arr[i] * y_arr[i] / (t - t_arr[i])
-    inf = 0
-    for i in range(n):
-        inf += v_arr[i] / (t - t_arr[i])
-    poly_fun = lambdify(
-        [
-            t,
-        ],
-        sup / inf,
-    )
+    v_arr = array(v_arr, dtype="float64")
+    t_dict = {t_arr[ii]: y_arr[ii] for ii in range(n)}
+
+    @njit
+    def poly_fun(t=0.0):
+        sup = 0.0
+        for i in range(n):
+            # print(sup, v_arr[i] * y_arr[i] / (t - t_arr[i]))
+            sup += v_arr[i] * y_arr[i] / (t - t_arr[i])
+        inf = 0
+        for i in range(n):
+            inf += v_arr[i] / (t - t_arr[i])
+        return sup / inf
+
+    @lru_cache(maxsize=2000)
+    def poly_fun_con(t=0.0):
+        if t in t_dict:
+            result = t_dict[t]
+        else:
+            result = poly_fun(t)
+        return result
 
     def new_poly(t):
-        t = array(t, dtype="float64")
-        cond_list = [t == t_i for t_i in t_arr]
-        func_list = list(y_arr)
-        func_list.append(poly_fun)
-        return piecewise(t, cond_list, func_list)
+        t_arr = array(t, dtype="float64")
+        if t_arr.size > 1:
+            result = zeros_like(t_arr)
+            for ii, tt in enumerate(t_arr):
+                result[ii] = poly_fun_con(tt)
+        else:
+            result = poly_fun_con(float(t))
+        return result
 
     return new_poly
 

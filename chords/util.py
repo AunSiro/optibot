@@ -36,8 +36,22 @@ def sch_to_lab(sch):
         "hsn": "HS-3-Topputo",
         "hsn_parab": "HS-3",
         "trapz_n": "TZ-3",
+        "LG": "LG",
+        "LGL": "LGL",
+        "LGR": "LGR",
+        "LGR_inv": "LGR_inv",
+        "JG": "JG",
+        "JGR": "JGR",
+        "JGR_inv": "JGR_inv",
+        "JGL": "JGL",
     }
-    return label_dict[sch]
+    if sch[:3] == "BU_":
+        sch = sch[3:]
+        label = label_dict[sch]
+        label += " bottom-up"
+    else:
+        label = label_dict[sch]
+    return label
 
 
 def sch_to_long_label(sch):
@@ -55,6 +69,14 @@ def sch_to_long_label(sch):
         "3rd order Hermite Simpson",
         "3rd order Hermite Simpson (Topputo)",
         "3rd order Trapezoidal",
+        "LG",
+        "LGL",
+        "LGR",
+        "LGR_inv",
+        "JG",
+        "JGR",
+        "JGR_inv",
+        "JGL",
     ]
     schemes = [
         "hs_parab",
@@ -70,11 +92,26 @@ def sch_to_long_label(sch):
         "hsn_parab",
         "hsn",
         "trapz_n",
+        "LG",
+        "LGL",
+        "LGR",
+        "LGR_inv",
+        "JG",
+        "JGR",
+        "JGR_inv",
+        "JGL",
     ]
     lname_dict = {}
     for ii in range(len(titles)):
         lname_dict[schemes[ii]] = titles[ii]
-    return lname_dict[sch]
+
+    if sch[:3] == "BU_":
+        sch = sch[3:]
+        label = lname_dict[sch]
+        label += " bottom-up"
+    else:
+        label = lname_dict[sch]
+    return label
 
 
 def sch_to_color(sch):
@@ -91,9 +128,16 @@ def sch_to_color(sch):
         ]
     ):
         color_dict[sc_name] = f"C{ii}"
+
+    for ii, sc_name in enumerate(
+        ["LG", "LGL", "LGR", "LGR_inv", "JG", "JGR", "JGR_inv", "JGL"]
+    ):
+        color_dict[sc_name] = f"C{ii}"
+
     sch = sch.replace("_parab", "")
     sch = sch.replace("trapz_n", "trapz_mod")
     sch = sch.replace("hsn", "hs_mod")
+    sch = sch.replace("BU_", "")
     return color_dict[sch]
 
 
