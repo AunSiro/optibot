@@ -13,6 +13,7 @@ formulas are constructed.
 from sympy import legendre_poly, jacobi_poly, symbols, expand, zeros, lambdify
 from functools import lru_cache
 from numpy import array, piecewise, linspace, expand_dims, squeeze, zeros_like
+from numpy import sum as npsum
 from numba import njit
 from .numpy import combinefunctions
 from .piecewise import interp_2d
@@ -494,21 +495,24 @@ def bary_poly(t_arr, y_arr):
     n = len(t_arr)
     v_arr = [_v_sum(t_arr, ii) for ii in range(n)]
     v_arr = array(v_arr, dtype="float64")
+    v_y_arr = v_arr * y_arr
     t_dict = {t_arr[ii]: y_arr[ii] for ii in range(n)}
 
-    @njit
+    # @njit
     def poly_fun(t=0.0):
-        sup = 0.0
-        for i in range(n):
-            # print(sup, v_arr[i] * y_arr[i] / (t - t_arr[i]))
-            sup += v_arr[i] * y_arr[i] / (t - t_arr[i])
-        inf = 0
-        for i in range(n):
-            inf += v_arr[i] / (t - t_arr[i])
+        t_sub_arr = t - t_arr
+        # sup = 0.0
+        # for i in range(n):
+        #     sup += v_arr[i] * y_arr[i] / (t - t_arr[i])
+        sup = npsum(v_y_arr / t_sub_arr)
+        # inf = 0
+        # for i in range(n):
+        #     inf += v_arr[i] / (t - t_arr[i])
+        inf = npsum(v_arr / t_sub_arr)
         return sup / inf
 
     @lru_cache(maxsize=2000)
-    def poly_fun_con(t=0.0):
+    def poly_fun_con(t):
         if t in t_dict:
             result = t_dict[t]
         else:

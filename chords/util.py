@@ -222,21 +222,29 @@ def plot_by_segments(
 # --------------------------- Gauss Integration -------------------------------
 
 
+# @lru_cache(maxsize=2000)
+# def LG_weight(N, i, precission=20):
+#     Pn = legendre_poly(N, polys=True)
+#     Pn_d = Pn.diff()
+#     xi = LG(N, precission)[i]
+#     wi = 2 / ((1 - xi**2) * (Pn_d.eval(xi) ** 2))
+#     return wi
+
+
 @lru_cache(maxsize=2000)
-def LG_weight(N, i, precission=20):
-    Pn = legendre_poly(N, polys=True)
-    Pn_d = Pn.diff()
-    xi = LG(N, precission)[i]
-    wi = 2 / ((1 - xi**2) * (Pn_d.eval(xi) ** 2))
-    return wi
+def leggauss(N):
+    return np.polynomial.legendre.leggauss(N)
 
 
 def gauss_integral(f, N, t0, t1):
     scale = t1 - t0
-    points = (np.array(LG(N)) + 1) / 2
+    points, weights = leggauss(N)
+    # points = (np.array(LG(N)) + 1) / 2
+    points = (points + 1) / 2
     points = t0 + scale * points
-    weights = [LG_weight(N, ii) for ii in range(N)]
-    _a = [weights[ii] * f(points[ii]) for ii in range(N)]
+    # weights = [LG_weight(N, ii) for ii in range(N)]
+    f_vals = [f(points[ii]) for ii in range(N)]
+    _a = weights * f_vals
     return scale * np.sum(_a) / 2
 
 
@@ -250,7 +258,7 @@ def gauss_rep_integral(f, t0, t1, n_pol, n_integ=1):
 def poly_integral(f, n_pol, t0, t1, y0=0):
     scale = t1 - t0
 
-    points = (np.array(LG(n_pol + 1)) + 1) / 2
+    points = (np.array(leggauss(n_pol + 1)[0]) + 1) / 2
     points = t0 + scale * points
     points = list(points)
 

@@ -26,10 +26,20 @@ from .pseudospectral import (
 from .util import gauss_rep_integral, poly_integral_2d
 from .piecewise import interp_2d, is2d, get_x_divisions
 from functools import lru_cache
-from numpy import zeros, array, concatenate, interp, gradient, linspace
+from numpy import (
+    zeros,
+    array,
+    concatenate,
+    interp,
+    gradient,
+    linspace,
+    eye,
+    arange,
+    expand_dims,
+)
 
 # from sympy import jacobi_poly
-from math import factorial
+from scipy.special import factorial
 from copy import copy
 
 
@@ -384,26 +394,53 @@ def _Lag_integ(
 
 
 @lru_cache(maxsize=2000)
+def Lag_pol_2d(N, scheme, order=2):
+    tau_arr = array(BU_coll_points(N, scheme, order), dtype=float)
+    return bary_poly_2d(tau_arr, eye(N))
+
+
+@lru_cache(maxsize=2000)
+def Lag_integ_2d(N, scheme, integ_order, order=2):
+    if integ_order == 0:
+        return Lag_pol_2d(N, scheme, order)
+    deriv_poly = Lag_integ_2d(N, scheme, integ_order - 1, order)
+    poly_deg = N - 2 + integ_order
+    new_poly = poly_integral_2d(deriv_poly, poly_deg, -1, 1)
+    return new_poly
+
+
+@lru_cache(maxsize=2000)
 def Integration_Matrix(N_coll, scheme, deriv_order, h, scheme_order=2, precission=20):
     assert (
         deriv_order < scheme_order
     ), "derivation order must be smaller than differential order of the problem"
     assert deriv_order >= 0
     assert scheme_order >= 1
-    constr_points = BU_construction_points(N_coll, scheme, scheme_order, precission)
+    constr_points = array(
+        BU_construction_points(N_coll, scheme, scheme_order, precission), dtype=float
+    )
     n_t = len(constr_points)
     M = scheme_order
     N = N_coll
     P = deriv_order
     matrix = zeros([n_t, M + N])
-    for t_index in range(n_t):
-        t = tau_to_t_points(constr_points[t_index], 0, h)
-        for ii in range(M - P):
-            matrix[t_index, P + ii] = t**ii / factorial(ii)
-        for ii in range(N):
-            matrix[t_index, M + ii] = (h / 2) ** (M - P) * _Lag_integ(
-                N_coll, ii, scheme, P, t_index, scheme_order, precission
-            )
+    # for t_index in range(n_t):
+    #     t = tau_to_t_points(constr_points[t_index], 0, h)
+    #     for ii in range(M - P):
+    #         matrix[t_index, P + ii] = t**ii / factorial(ii)
+    #     for ii in range(N):
+    #         matrix[t_index, M + ii] = (h / 2) ** (M - P) * _Lag_integ(
+    #             N_coll, ii, scheme, P, t_index, scheme_order, precission
+    #         )
+    matrix[:, P] = 1.0
+    if M - P > 1:
+        constr_t = (1 + constr_points) * h / 2
+        ii_arr = expand_dims(arange(1, M - P), 0)
+        t_exp_mat = expand_dims(constr_t, 1) ** ii_arr / factorial(ii_arr)
+        matrix[:, P + 1 : M] = t_exp_mat
+    int_pol = Lag_integ_2d(N, scheme, M - P, M)
+    int_pol_mat = (h / 2) ** (M - P) * int_pol(constr_points)
+    matrix[:, M:] = int_pol_mat
     return matrix
 
 
