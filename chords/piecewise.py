@@ -234,7 +234,7 @@ def expand_F(F, mode="numpy", order=2):
 def expand_G(G, mode="numpy", order=2):
     """
     Expands a function G(q, q', u, params) that returns accelerations,
-    so that the new function return accelerations and velocities.
+    so that the new function F(x, u, params) return accelerations and velocities.
 
     Parameters
     ----------
