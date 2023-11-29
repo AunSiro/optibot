@@ -12,7 +12,7 @@ import numpy as np
 from sympy import legendre_poly
 from functools import lru_cache
 from math import ceil, factorial
-from .pseudospectral import LG, bary_poly
+from .pseudospectral import LG, bary_poly, coll_points, bary_poly_2d
 from .numpy import combinefunctions
 
 # Uniform output style functions
@@ -223,7 +223,7 @@ def plot_by_segments(
 
 
 # @lru_cache(maxsize=2000)
-# def LG_weight(N, i, precission=20):
+# def LG_weight(N, i, precission=16):
 #     Pn = legendre_poly(N, polys=True)
 #     Pn_d = Pn.diff()
 #     xi = LG(N, precission)[i]
@@ -248,11 +248,24 @@ def gauss_integral(f, N, t0, t1):
     return scale * np.sum(_a) / 2
 
 
-def gauss_rep_integral(f, t0, t1, n_pol, n_integ=1):
+def gauss_integral_2d(f, N, t0, t1):
+    scale = t1 - t0
+    points, weights = leggauss(N)
+    # points = (np.array(LG(N)) + 1) / 2
+    points = (points + 1.0) / 2.0
+    points = t0 + scale * points
+    # weights = [LG_weight(N, ii) for ii in range(N)]
+    f_vals = f(points)
+    _a = np.expand_dims(weights, 1) * f_vals
+    return scale * np.sum(_a, axis=0) / 2.0
+
+
+def gauss_rep_integral(f, t0, t1, n_pol, n_integ=1, f2d=False):
     n_pol_cauchy = n_pol + n_integ - 1
     n_gauss = ceil((n_pol_cauchy + 1) / 2)
     cauchy_f = lambda t: (t1 - t) ** (n_integ - 1) * f(t)
-    return 1 / factorial(n_integ - 1) * gauss_integral(cauchy_f, n_gauss, t0, t1)
+    integ_f = gauss_integral_2d if f2d else gauss_integral
+    return 1 / factorial(n_integ - 1) * integ_f(cauchy_f, n_gauss, t0, t1)
 
 
 def poly_integral(f, n_pol, t0, t1, y0=0):
@@ -278,7 +291,7 @@ def poly_integral_2d(f, n_pol, t0, t1, y0=0):
     if len(y_example.shape) >= 2:
         raise NotImplementedError(
             f"The output of f has shape {y_example.shape} but implemented "
-            + "methods only allow for shape [n,]"
+            + "methods only allow for shape (n,)"
         )
     if len(y_example) == 1:
         return poly_integral(f, n_pol, t0, t1, y0)
@@ -292,10 +305,66 @@ def poly_integral_2d(f, n_pol, t0, t1, y0=0):
             raise ValueError(
                 f"y0 has unexpected shape {y0.shape}, expected was {y_example.shape}"
             )
+    scale = t1 - t0
+    nq = y_example.shape[0]
 
-    pols = []
-    for ii in range(dim):
-        _part_pol = lambda t: f(t)[ii]
-        pols.append(poly_integral(_part_pol, n_pol, t0, t1, y0[ii]))
+    points = (np.array(leggauss(n_pol + 1)[0], dtype="float64") + 1) / 2
+    points = t0 + scale * points
 
-    return combinefunctions(*pols)
+    mat = np.zeros([n_pol + 2, nq], dtype="float64")
+
+    N_gauss = ceil((n_pol + 1) / 2)
+
+    for ii in range(n_pol + 1):
+        mat[ii + 1, :] = gauss_integral_2d(f, N_gauss, t0, points[ii])
+    mat = np.expand_dims(y0, 0) + mat
+    points = np.concatenate((np.expand_dims(t0, 0), points))
+
+    return bary_poly_2d(points, mat)
+
+
+@lru_cache(maxsize=2000)
+def Lag_pol_2d(N, scheme, order=2):
+    tau_arr = np.array(coll_points(N, scheme, order=order), dtype="float64")
+    return bary_poly_2d(tau_arr, np.eye(N))
+
+
+@lru_cache(maxsize=2000)
+def Lag_integ_2d(N, scheme, integ_order, order=2):
+    if integ_order == 0:
+        return Lag_pol_2d(N, scheme, order)
+    deriv_poly = Lag_integ_2d(N, scheme, integ_order - 1, order)
+    poly_deg = N - 2 + integ_order
+    new_poly = poly_integral_2d(deriv_poly, poly_deg, -1, 1)
+    return new_poly
+
+
+@lru_cache(maxsize=2000)
+def get_weights(N, scheme, order=2):
+    """
+    Generate weights for quadrature integration. If an closed formula
+    is known, it will be used. If not, weights will be calculated
+    by gauss integration of barycentric lagrange polynomials.
+
+    Parameters
+    ----------
+    N : int
+        number of points.
+    scheme : str
+        scheme used.
+    order : int, optional
+        if the scheme requires a differential order, like jacobi-gauss.
+        The default is 2.
+
+    Returns
+    -------
+    numpy array
+        weights.
+
+    """
+    if scheme == "LG":
+        return leggauss(N)[1]
+    pol = Lag_pol_2d(N, scheme, order=2)
+    N_gauss = ceil((N + 1) / 2)
+
+    return gauss_integral_2d(pol, N_gauss, -1.0, 1.0)

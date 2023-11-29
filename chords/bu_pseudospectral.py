@@ -23,7 +23,7 @@ from .pseudospectral import (
     extend_u_array,
     find_der_polyline,
 )
-from .util import gauss_rep_integral, poly_integral_2d
+from .util import gauss_rep_integral, poly_integral_2d, Lag_integ_2d
 from .piecewise import interp_2d, is2d, get_x_divisions
 from functools import lru_cache
 from numpy import (
@@ -47,7 +47,7 @@ _implemented_schemes = ["LG", "LGL", "LGR", "LGR_inv", "JG", "JGR", "JGR_inv", "
 
 
 @lru_cache(maxsize=2000)
-def BU_coll_points(N, scheme, order=2, precission=20):
+def BU_coll_points(N, scheme, order=2, precission=16):
     """
     Generates a list of len N with values of tau for collocation points
 
@@ -99,7 +99,7 @@ def BU_coll_points(N, scheme, order=2, precission=20):
 
 
 @lru_cache(maxsize=2000)
-def BU_construction_points(N, scheme, order=2, precission=20):
+def BU_construction_points(N, scheme, order=2, precission=16):
     """
     Generates a list of with values of tau for construction points for schemes
     with N collocation points. Construction points are the collocation points,
@@ -190,7 +190,7 @@ def get_coll_indices(scheme):
 
 
 @lru_cache(maxsize=2000)
-def BU_unit_Lag_pol(N, scheme, n, order=2, precission=20):
+def BU_unit_Lag_pol(N, scheme, n, order=2, precission=16):
     """
     Generate a barycentric numeric Lagrange polynomial over N node points.
     L_n(x_i) = 0 for i != n
@@ -301,7 +301,7 @@ def tau_to_t_function(f, t0, tf):
 
 
 @lru_cache(maxsize=2000)
-def BU_unit_Lag_pol_t(N, scheme, n, t0, tf, order=2, precission=20):
+def BU_unit_Lag_pol_t(N, scheme, n, t0, tf, order=2, precission=16):
     """
     Generate a barycentric numeric Lagrange polynomial over N node points.
     This will create a function for use with t in [t0, tf].
@@ -341,7 +341,7 @@ def _Lag_integ(
     deriv_order,
     t_constr_index,
     scheme_order=2,
-    precission=20,
+    precission=16,
 ):
     """
     Calculate a definite integral of a Lagrange polynomial to use in the
@@ -394,30 +394,15 @@ def _Lag_integ(
 
 
 @lru_cache(maxsize=2000)
-def Lag_pol_2d(N, scheme, order=2):
-    tau_arr = array(BU_coll_points(N, scheme, order), dtype=float)
-    return bary_poly_2d(tau_arr, eye(N))
-
-
-@lru_cache(maxsize=2000)
-def Lag_integ_2d(N, scheme, integ_order, order=2):
-    if integ_order == 0:
-        return Lag_pol_2d(N, scheme, order)
-    deriv_poly = Lag_integ_2d(N, scheme, integ_order - 1, order)
-    poly_deg = N - 2 + integ_order
-    new_poly = poly_integral_2d(deriv_poly, poly_deg, -1, 1)
-    return new_poly
-
-
-@lru_cache(maxsize=2000)
-def Integration_Matrix(N_coll, scheme, deriv_order, h, scheme_order=2, precission=20):
+def Integration_Matrix(N_coll, scheme, deriv_order, h, scheme_order=2, precission=16):
     assert (
         deriv_order < scheme_order
     ), "derivation order must be smaller than differential order of the problem"
     assert deriv_order >= 0
     assert scheme_order >= 1
     constr_points = array(
-        BU_construction_points(N_coll, scheme, scheme_order, precission), dtype=float
+        BU_construction_points(N_coll, scheme, scheme_order, precission),
+        dtype="float64",
     )
     n_t = len(constr_points)
     M = scheme_order
@@ -445,7 +430,7 @@ def Integration_Matrix(N_coll, scheme, deriv_order, h, scheme_order=2, precissio
 
 
 @lru_cache(maxsize=2000)
-def Extreme_Matrix(N_coll, scheme, point, scheme_order=2, precission=20):
+def Extreme_Matrix(N_coll, scheme, point, scheme_order=2, precission=16):
     matrix = zeros([1, N_coll])
     for ii in range(N_coll):
         pol = BU_unit_Lag_pol(
@@ -678,7 +663,7 @@ def _matrix_D_bary(t_arr):
 
     """
     N = len(t_arr)
-    M = zeros((N, N), dtype=float)
+    M = zeros((N, N), dtype="float64")
     v_arr = [_v_sum(t_arr, ii) for ii in range(N)]
     for i in range(N):
         j_range = [j for j in range(N)]
@@ -802,7 +787,7 @@ def interpolations_deriv_BU_pseudospectral(
         elif deriv_order == 1:
             x_deriv_arr = find_der_polyline(t_arr, t_x, xx)
         else:
-            x_deriv_arr = zeros((len(t_arr), len(x_0)), dtype=float)
+            x_deriv_arr = zeros((len(t_arr), len(x_0)), dtype="float64")
 
     elif x_interp == "Hermite":
         herm = hermite(t_x, xx, xx_dot)

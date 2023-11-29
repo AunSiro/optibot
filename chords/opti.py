@@ -41,6 +41,7 @@ from .pseudospectral import (
     LG_inv_diff_start_p_fun_cas,
     get_bary_extreme_f,
     vector_interpolator,
+    get_coll_indices_from_nodes,
 )
 from .bu_pseudospectral import (
     BU_coll_points,
@@ -50,6 +51,7 @@ from .bu_pseudospectral import (
     tau_to_t_points,
     get_coll_indices,
 )
+from .util import get_weights
 
 import casadi as cas
 from numpy import array, linspace, expand_dims, ones, ndarray, alltrue
@@ -298,9 +300,33 @@ def _get_cost_obj_trap_int_cas(scheme, N, order=2, mode="u", squared=True):
     u_sym = cas.SX.sym("u", N_arr)
     u_sympy = symbols(f"c0:{N_arr}")
     fun = _get_cost_obj_trap_int(scheme, N, order, squared=squared)
-    print(N, N_arr, len(u_sympy), mode)
     sympy_expr = fun(u_sympy)
     cas_expr = sympy2casadi(sympy_expr, u_sympy, cas.vertsplit(u_sym))
+    cas_f = cas.Function(
+        "cost_func",
+        [
+            u_sym,
+        ],
+        [
+            cas_expr,
+        ],
+    )
+    return cas_f
+
+
+@lru_cache(maxsize=None)
+def _get_cost_obj_quad_int_cas(scheme, N, order=2, squared=False):
+    """For a given pseudospectral scheme and number of collocation points,
+    returns a casadi function of values in said points that calculates a
+    quadrature integration of the values or squares over a [-1, 1] tau domain.
+    """
+    if scheme[:3] == "BU_":
+        scheme = scheme[3:]
+
+    u_sym = cas.SX.sym("u", N)
+    exp = 2 if squared else 1
+    weights = get_weights(N, scheme, order)
+    cas_expr = cas.sum1(weights * u_sym**exp)
     cas_f = cas.Function(
         "cost_func",
         [
@@ -485,7 +511,7 @@ class _Pseudospectral:
     def opti_setup(
         self,
         col_points,
-        precission=20,
+        precission=16,
     ):
         """
         Creates and links the different opti variables to be used in the problem.
@@ -518,6 +544,8 @@ class _Pseudospectral:
         t_start = self.t_start
         t_end = self.t_end
         self.col_points = col_points
+        coll_index = get_coll_indices_from_nodes(scheme)
+        self.coll_index = coll_index
 
         opti = cas.Opti()
         if self.verbose:
@@ -556,7 +584,7 @@ class _Pseudospectral:
         N = opt_dict[scheme][0]
         self.N = N
 
-        D_mat = array(matrix_D_bary(N, scheme, precission), dtype=float)
+        D_mat = array(matrix_D_bary(N, scheme, precission), dtype="float64")
         self.D_mat = D_mat
 
         try:
@@ -584,8 +612,8 @@ class _Pseudospectral:
 
         u_opti = opti.variable(col_points, self.n_u)
         u_like_x_opti = u_opti
-        tau_arr = array(node_points(N, scheme, precission), dtype=float)
-        col_arr = array(coll_points(col_points, scheme, precission), dtype=float)
+        tau_arr = array(node_points(N, scheme, precission), dtype="float64")
+        col_arr = array(coll_points(col_points, scheme, precission), dtype="float64")
         t_arr = ((t_end - t_start) * tau_arr + (t_start + t_end)) / 2
         t_col_arr = ((t_end - t_start) * col_arr + (t_start + t_end)) / 2
         lam_opti = opti.variable(col_points, self.n_lambdas)
@@ -664,6 +692,10 @@ class _Pseudospectral:
             if scheme != "LG":
                 u_like_x_opti = cas.vertcat(u_like_x_opti, self.opti_points["u_e"])
         self.opti_arrs["u_like_x"] = u_like_x_opti
+        for _name in ["x", "x_d", "q", "v", "a"]:
+            _arr = self.opti_arrs[_name]
+            self.opti_arrs[_name] = _arr
+            self.opti_arrs[_name + "_like_u"] = _arr[coll_index, :]
 
     def u_sq_cost(self):
         """
@@ -692,13 +724,52 @@ class _Pseudospectral:
 
         dt = self.t_end - self.t_start
 
-        f_u_cost = _get_cost_obj_trap_int_cas(self.scheme, self.col_points)
+        f_u_cost = _get_cost_obj_quad_int_cas(
+            self.scheme, self.col_points, squared=True
+        )
         cost = dt * cas.sum2(f_u_cost(U))
 
         self.cost = cost
         self.opti.minimize(cost)
 
     def quad_cost(self, arr, squared=False):
+        """
+        Calculates a quadrature integration of an array and sets it
+        as the optimization cost to minimize
+
+        Requires the functions dynamic_setup() and opti_setup(), in that order,
+        to have been run prior.
+
+        Raises
+        ------
+        RuntimeError
+            If opti_setup() or dynamic_setup() have not ben run previously
+
+        Returns
+        -------
+        None.
+
+        """
+
+        dt = self.t_end - self.t_start
+        N_col = self.col_points
+        N_arr = arr.shape[0]
+
+        if N_arr != N_col:
+            raise ValueError(
+                "Unrecognized shape of arr, not equal to number"
+                + " of collocation points"
+            )
+
+        f_u_cost = _get_cost_obj_quad_int_cas(
+            self.scheme, self.col_points, self.order, squared
+        )
+        cost = dt * cas.sum2(f_u_cost(arr))
+
+        self.cost = cost
+        self.opti.minimize(cost)
+
+    def trapz_cost(self, arr, squared=False):
         """
         Calculates a trapezoidal integration of an array and sets it
         as the optimization cost to minimize
@@ -765,6 +836,7 @@ class _Pseudospectral:
             raise RuntimeError(
                 "opti must be set up before applying constraints, use opti_setup()"
             )
+
         dynam_f_x = self.dyn_f_restr
         dynam_g_q = self.dyn_g_restr
         x_opti = self.opti_arrs["x"]
@@ -886,7 +958,7 @@ class _BU_Pseudospectral:
     def opti_setup(
         self,
         n_coll,
-        precission=20,
+        precission=16,
     ):
         """
         Creates and links the different opti variables to be used in the problem.
@@ -930,6 +1002,8 @@ class _BU_Pseudospectral:
         t_end = self.t_end
         self.n_coll = n_coll
         self.precission = precission
+        coll_index = get_coll_indices(scheme)
+        self.coll_index = coll_index
 
         opti = cas.Opti()
         if self.verbose:
@@ -960,14 +1034,16 @@ class _BU_Pseudospectral:
         self.q_and_ders_names = q_and_ders_names[: order + 1]
         lam_opti = opti.variable(n_coll, self.n_lambdas)
 
-        tau_arr = array([-1.0] + construction_points_tau, dtype=float)
-        col_tau_arr = array(collocation_points_tau, dtype=float)
+        tau_arr = array([-1.0] + construction_points_tau, dtype="float64")
+        col_tau_arr = array(collocation_points_tau, dtype="float64")
         t_arr = tau_to_t_points(tau_arr, t_start, t_end)
         col_t_arr = tau_to_t_points(col_tau_arr, t_start, t_end)
 
         self.opti_arrs = {
             "x": x_opti,
+            "x_like_u": x_opti[coll_index, :],
             "x_d": x_dot_opti,
+            "x_d_like_u": x_dot_opti[coll_index, :],
             "u": u_opti,
             "t": t_arr,
             "t_col": col_t_arr,
@@ -1005,6 +1081,7 @@ class _BU_Pseudospectral:
             _name = q_and_ders_names[_ii]
             _arr = q_and_ders[_ii]
             self.opti_arrs[_name] = _arr
+            self.opti_arrs[_name + "_like_u"] = _arr[coll_index, :]
             self.opti_points[_name + "_s"] = _arr[0, :]
             self.opti_points[_name + "_e"] = _arr[-1, :]
 
@@ -1035,13 +1112,50 @@ class _BU_Pseudospectral:
 
         dt = self.t_end - self.t_start
 
-        f_u_cost = _get_cost_obj_trap_int_cas(self.scheme, self.n_coll, self.order)
+        f_u_cost = _get_cost_obj_quad_int_cas(self.scheme, self.n_coll, squared=True)
         cost = dt * cas.sum2(f_u_cost(U))
 
         self.cost = cost
         self.opti.minimize(cost)
 
     def quad_cost(self, arr, squared=False):
+        """
+        Calculates a quadrature integration of an array and sets it
+        as the optimization cost to minimize
+
+        Requires the functions dynamic_setup() and opti_setup(), in that order,
+        to have been run prior.
+
+        Raises
+        ------
+        RuntimeError
+            If opti_setup() or dynamic_setup() have not ben run previously
+
+        Returns
+        -------
+        None.
+
+        """
+
+        dt = self.t_end - self.t_start
+        N_col = self.n_coll
+        N_arr = arr.shape[0]
+
+        if N_arr != N_col:
+            raise ValueError(
+                "Unrecognized shape of arr, not equal to number"
+                + " of collocation points"
+            )
+
+        f_u_cost = _get_cost_obj_quad_int_cas(
+            self.scheme, self.n_coll, self.order, squared
+        )
+        cost = dt * cas.sum2(f_u_cost(arr))
+
+        self.cost = cost
+        self.opti.minimize(cost)
+
+    def trapz_cost(self, arr, squared=False):
         """
         Calculates a trapezoidal integration of an array and sets it
         as the optimization cost to minimize
@@ -1061,8 +1175,20 @@ class _BU_Pseudospectral:
         """
 
         dt = self.t_end - self.t_start
+        N = self.n_arr
+        N_col = self.n_coll
+        N_arr = arr.shape[0]
 
-        mode = "complete"
+        if N_arr == N_col:
+            mode = "u"
+        elif N_arr == N:
+            mode = "x"
+        else:
+            raise ValueError(
+                "Unrecognized shape of arr, not equal to number"
+                + " of node nor collocation points"
+            )
+
         f_u_cost = _get_cost_obj_trap_int_cas(
             self.scheme, self.n_coll, self.order, mode, squared
         )
@@ -1110,7 +1236,7 @@ class _BU_Pseudospectral:
         lam_opti = self.opti_arrs["lam"]
         params = self.params
 
-        coll_index = get_coll_indices(scheme)
+        coll_index = self.coll_index
         q_and_ders_0 = []
         for ii in q_and_ders_names[:-1]:
             q_and_ders_0.append(self.opti_points[ii + "_s"])
@@ -1167,7 +1293,7 @@ class _BU_Pseudospectral:
 #         self,
 #         col_points,
 #         segment_num,
-#         precission=20,
+#         precission=16,
 #     ):
 #         """
 #         Creates and links the different opti variables to be used in the problem.
@@ -1258,8 +1384,8 @@ class _BU_Pseudospectral:
 #             )
 
 #         u_opti = opti.variable(col_points, self.n_u)
-#         tau_arr = array(node_points(N, scheme, precission), dtype=float)
-#         col_arr = array(coll_points(col_points, scheme, precission), dtype=float)
+#         tau_arr = array(node_points(N, scheme, precission), dtype="float64")
+#         col_arr = array(coll_points(col_points, scheme, precission), dtype="float64")
 #         t_arr = ((t_end - t_start) * tau_arr + (t_start + t_end)) / 2
 #         t_col_arr = ((t_end - t_start) * col_arr + (t_start + t_end)) / 2
 #         lam_opti = opti.variable(col_points, self.n_lambdas)
@@ -1529,6 +1655,8 @@ class _Equispaced:
         self.opti_arrs = {
             "x": x_opti,
             "x_d": x_dot_opti,
+            "x_like_u": x_opti,
+            "x_d_like_u": x_dot_opti,
             # "q": q_opti,
             # "v": v_opti,
             # "a": a_opti,
@@ -1555,6 +1683,7 @@ class _Equispaced:
             _name = q_and_ders_names[_ii]
             _arr = q_and_ders[_ii]
             self.opti_arrs[_name] = _arr
+            self.opti_arrs[_name + "_like_u"] = _arr
             self.opti_points[_name + "_s"] = _arr[0, :]
             self.opti_points[_name + "_e"] = _arr[-1, :]
 
@@ -1917,7 +2046,7 @@ class _Custom:
         self.n_a = n_a
 
         # t_knot_arr checks
-        t_knots_arr = array(t_knots_arr, dtype=float)
+        t_knots_arr = array(t_knots_arr, dtype="float64")
         assert len(t_knots_arr.shape) == 1
         n_segments = t_knots_arr.shape[0] + 1
         self.n_segments = n_segments
@@ -2084,7 +2213,7 @@ class _Custom:
                 }
                 N = opt_dict[local_scheme][0]
                 D_mat = sympy2casadi(
-                    matrix_D_bary(N, local_scheme, precission=20), [], []
+                    matrix_D_bary(N, local_scheme, precission=16), [], []
                 )
 
                 try:
@@ -2111,9 +2240,9 @@ class _Custom:
                     )
 
                 u_opti = opti.variable(col_points, self.n_u)
-                tau_arr = array(node_points(N, scheme, precission), dtype=float)
+                tau_arr = array(node_points(N, scheme, precission), dtype="float64")
                 col_arr = array(
-                    coll_points(col_points, scheme, precission), dtype=float
+                    coll_points(col_points, scheme, precission), dtype="float64"
                 )
                 t_arr = ((t_end - t_start) * tau_arr + (t_start + t_end)) / 2
                 t_col_arr = ((t_end - t_start) * col_arr + (t_start + t_end)) / 2
@@ -2657,8 +2786,8 @@ class _Lin_init:
         else:
             N = self.N  # Number of Node Points
         T = self.t_end - self.t_start
-        q_s = array(q_s, dtype=float)
-        q_e = array(q_e, dtype=float)
+        q_s = array(q_s, dtype="float64")
+        q_e = array(q_e, dtype="float64")
         s_arr = linspace(0, 1, N)
         q_guess = expand_dims(q_s, 0) + expand_dims(s_arr, 1) * expand_dims(
             (q_e - q_s), 0

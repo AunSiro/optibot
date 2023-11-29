@@ -19,6 +19,11 @@ from .piecewise import (
     get_x_divisions,
     expand_F,
 )
+from .opti import (
+    _implemented_bottom_up_pseudospectral_schemes,
+    _implemented_equispaced_schemes,
+    _implemented_pseudospectral_schemes,
+)
 from scipy.optimize import root, minimize
 from scipy.integrate import quad
 from functools import lru_cache
@@ -36,6 +41,7 @@ from numpy import (
     max,
     sqrt,
     trapz,
+    mean,
 )
 from numpy.linalg import inv, solve
 from scipy.interpolate import CubicHermiteSpline as hermite
@@ -261,6 +267,119 @@ def generate_G(M, F_impl, order=2):
         return res[:dim]
 
     return G
+
+
+def interpolation(
+    res,
+    scheme,
+    params,
+    scheme_order=2,
+    x_interp=None,
+    u_interp=None,
+    n_interp=1000,
+    **kwargs,
+):
+
+    if scheme in _implemented_equispaced_schemes:
+        mode = "equi"
+    elif scheme in _implemented_pseudospectral_schemes:
+        mode = "pseudo"
+    elif scheme in _implemented_bottom_up_pseudospectral_schemes:
+        mode = "bu_ps"
+    else:
+        _v = (
+            _implemented_equispaced_schemes
+            + _implemented_pseudospectral_schemes
+            + _implemented_bottom_up_pseudospectral_schemes
+        )
+        raise NotImplementedError(
+            f"scheme {scheme} not implemented. Valid methods are {_v}."
+        )
+
+    xx = res["x"]
+    xx_d = res["x_d"]
+    qq = res["q"]
+    vv = res["v"]
+    uu = res["u"]
+    tt = res["t"]
+    t0 = tt[0]
+    if mode == "equi":
+        tf = tt[-1]
+        t_arr = linspace(t0, tf, n_interp)
+        h = (tf - t0) / (tt.shape[0] - 1)
+        if u_interp is None:
+            if "parab" in scheme:
+                if "j" in scheme:
+                    u_interp = "parab_j"
+                else:
+                    u_interp = "parab"
+            else:
+                u_interp = "lin"
+
+        if "hs" in scheme:
+            scheme_params = {
+                "u_c": res["u_c"],
+                "x_dot_c": res["x_d_c"],
+                "x_c": res["x_c"],
+            }
+        else:
+            scheme_params = {}
+
+        new_X, new_U = interpolated_array(
+            X=xx,
+            U=uu,
+            h=h,
+            t_array=t_arr,
+            params=params,
+            F=None,
+            X_dot=xx_d,
+            scheme=scheme,
+            u_scheme=u_interp,
+            scheme_params=scheme_params,
+        )
+    elif mode == "pseudo":
+        ttau = res["tau"]
+        tf = mean(2 * (tt[1:] - t0) / (1 + ttau[1:]))
+        if scheme == "LG_inv":
+            tf = tt[-1]
+            t0 = mean(2 * (tt[:-1] - tf) / (ttau[:-1] - 1))
+        t_arr = linspace(t0, tf, n_interp)
+        (
+            q_arr,
+            q_arr_d,
+            v_arr,
+            v_arr_d,
+            q_arr_d_d,
+            u_arr,
+        ) = interpolations_pseudospectral(
+            qq,
+            vv,
+            uu,
+            scheme,
+            t0,
+            t1,
+            u_interp="pol",
+            x_interp="pol",
+            g_func=lambda q, v, u, p: u,
+            params=None,
+            n_interp=5000,
+        )
+
+    elif mode == "bu_ps":
+        tf = tt[-1]
+        t_arr = linspace(t0, tf, n_interp)
+        x_arr, x_dot_arr, u_arr = interpolations_BU_pseudospectral(
+            xx,
+            xx_dot,
+            uu,
+            scheme,
+            scheme_order,
+            t0,
+            tf,
+            u_interp="pol",
+            x_interp="pol",
+            n_interp=5000,
+        )
 
 
 def dynamic_error_implicit(

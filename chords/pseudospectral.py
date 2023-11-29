@@ -12,7 +12,7 @@ formulas are constructed.
 
 from sympy import legendre_poly, jacobi_poly, symbols, expand, zeros, lambdify
 from functools import lru_cache
-from numpy import array, piecewise, linspace, expand_dims, squeeze, zeros_like
+from numpy import array, piecewise, linspace, expand_dims, squeeze, zeros_like, eye
 from numpy import sum as npsum
 from numba import njit
 from .numpy import combinefunctions
@@ -34,18 +34,18 @@ _implemented_schemes = [
 
 
 @lru_cache(maxsize=2000)
-def LG(N, precission=20):
+def LG(N, precission=16):
     return [ii.evalf(n=precission) for ii in legendre_poly(N, polys=True).real_roots()]
 
 
 @lru_cache(maxsize=2000)
-def LGR(N, precission=20):
+def LGR(N, precission=16):
     pol = legendre_poly(N, polys=True) + legendre_poly(N - 1, polys=True)
     return [ii.evalf(n=precission) for ii in pol.real_roots()]
 
 
 @lru_cache(maxsize=2000)
-def LGL(N, precission=20):
+def LGL(N, precission=16):
     root_list = [
         ii.evalf(n=precission)
         for ii in legendre_poly(N - 1, polys=True).diff().real_roots()
@@ -62,17 +62,17 @@ def LGL(N, precission=20):
 
 
 @lru_cache(maxsize=2000)
-def LGLm(N, precission=20):
+def LGLm(N, precission=16):
     return LGL(N + 2, precission)[1:-1]
 
 
 @lru_cache(maxsize=2000)
-def LG2(N, precission=20):
+def LG2(N, precission=16):
     return [-1] + LG(N - 2, precission) + [1]
 
 
 @lru_cache(maxsize=2000)
-def JG(N, order=2, precission=20):
+def JG(N, order=2, precission=16):
     return [
         ii.evalf(n=precission)
         for ii in jacobi_poly(N, order - 1, 0, polys=True).real_roots()
@@ -80,7 +80,7 @@ def JG(N, order=2, precission=20):
 
 
 @lru_cache(maxsize=2000)
-def JGR(N, order=2, precission=20):
+def JGR(N, order=2, precission=16):
     return [-1.0] + [
         ii.evalf(n=precission)
         for ii in jacobi_poly(N - 1, order - 1, 1, polys=True).real_roots()
@@ -88,7 +88,7 @@ def JGR(N, order=2, precission=20):
 
 
 @lru_cache(maxsize=2000)
-def JGR_inv(N, order=2, precission=20):
+def JGR_inv(N, order=2, precission=16):
     return [
         ii.evalf(n=precission)
         for ii in jacobi_poly(N - 1, order, 0, polys=True).real_roots()
@@ -96,7 +96,7 @@ def JGR_inv(N, order=2, precission=20):
 
 
 @lru_cache(maxsize=2000)
-def JGL(N, order=2, precission=20):
+def JGL(N, order=2, precission=16):
     return (
         [-1.0]
         + [
@@ -108,12 +108,12 @@ def JGL(N, order=2, precission=20):
 
 
 @lru_cache(maxsize=2000)
-def JG2(N, precission=20):
+def JG2(N, precission=16):
     return [-1] + JG(N - 2, precission) + [1]
 
 
 @lru_cache(maxsize=2000)
-def coll_points(N, scheme, precission=20, order=2):
+def coll_points(N, scheme, precission=16, order=2):
     """
     Generates a list of len N with values of tau for collocation points
 
@@ -131,7 +131,7 @@ def coll_points(N, scheme, precission=20, order=2):
             'LG2'
             'D2'
             'JG'
-    precission: int, default 20
+    precission: int, default 16
         number of decimal places of precission
 
     Returns
@@ -166,7 +166,7 @@ def coll_points(N, scheme, precission=20, order=2):
 
 
 @lru_cache(maxsize=2000)
-def node_points(N, scheme, precission=20):
+def node_points(N, scheme, precission=16):
     """
     Generates a list of len N with values of tau for lagrange node points
 
@@ -185,7 +185,7 @@ def node_points(N, scheme, precission=20):
             'LG2'
             'D2'
             'JG'
-    precission: int, default 20
+    precission: int, default 16
         number of decimal places of precission
 
     Returns
@@ -213,6 +213,42 @@ def node_points(N, scheme, precission=20):
         raise ValueError(
             f"Unsupported scheme {scheme}, valid schemes are: LG, LG_inv LGR, LGR_inv, LGL, LGLm, LG2, D2"
         )
+
+
+def get_coll_indices_from_nodes(scheme):
+    """
+    returns a slice that can be used to separate collocation points from
+    an array that includes first and last point
+
+    Parameters
+    ----------
+    scheme : str
+        the scheme used.
+
+    Raises
+    ------
+    NotImplementedError
+        When the scheme is not recognized.
+
+    Returns
+    -------
+    coll_index : slice
+        slice to be used as index in the array to extract the collocation points.
+
+    """
+    if scheme in ["LG", "JG"]:
+        coll_index = slice(1, None)
+    elif scheme in ["LGR", "JGR", "LG_inv"]:
+        coll_index = slice(None, -1)
+    elif scheme in ["LGR_inv", "JGR_inv"]:
+        coll_index = slice(1, None)
+    elif scheme in ["LGL", "JGL", "D2"]:
+        coll_index = slice(None, None)
+    elif scheme in ["LG2", "LGLm"]:
+        coll_index = slice(1, -1)
+    else:
+        raise NotImplementedError(f"Scheme {scheme} not implemented yet")
+    return coll_index
 
 
 # --- Symbolic Lagrange Polynomials ---
@@ -305,7 +341,7 @@ def _v_sum(t_arr, i):
 
 
 @lru_cache(maxsize=None)
-def v_coef(N, i, scheme, precission=20, order=2):
+def v_coef(N, i, scheme, precission=16, order=2):
     """
     Generates the coefficient V for barycentric coordinates for
     Polynomials constructed over node points.
@@ -327,7 +363,7 @@ def v_coef(N, i, scheme, precission=20, order=2):
             'LG2'
             'D2'
             'JG'
-    precission: int, default 20
+    precission: int, default 16
         number of decimal places of precission
 
     Returns
@@ -347,7 +383,7 @@ def v_coef(N, i, scheme, precission=20, order=2):
 
 
 @lru_cache(maxsize=None)
-def v_coef_coll(N, i, scheme, precission=20, order=2):
+def v_coef_coll(N, i, scheme, precission=16, order=2):
     """
     Generates the coefficient V for barycentric coordinates for
     Polynomials constructed over collocation points.
@@ -383,7 +419,7 @@ def v_coef_coll(N, i, scheme, precission=20, order=2):
 
 
 @lru_cache(maxsize=2000)
-def matrix_D_bary(N, scheme, precission=20):
+def matrix_D_bary(N, scheme, precission=16):
     """
     Generates the Derivation Matrix for the given scheme from
     barycentric coordinates
@@ -415,7 +451,7 @@ def matrix_D_bary(N, scheme, precission=20):
     from numpy import zeros
 
     taus = node_points(N, scheme, precission)
-    M = zeros((N, N), dtype=float)
+    M = zeros((N, N), dtype="float64")
     v_arr = [v_coef(N, ii, scheme, precission) for ii in range(N)]
     for i in range(N):
         j_range = [j for j in range(N)]
@@ -560,7 +596,7 @@ def bary_poly_2d(t_arr, y_arr):
 
 
 @lru_cache(maxsize=2000)
-def unit_Lag_pol(N, scheme, n, kind="q", precission=20):
+def unit_Lag_pol(N, scheme, n, kind="q", precission=16):
     """
     Generate a barycentric numeric Lagrange polynomial over N node points.
     L_n(x_i) = 0 for i != n
@@ -599,7 +635,7 @@ def unit_Lag_pol(N, scheme, n, kind="q", precission=20):
 
 @lru_cache(maxsize=2000)
 def vector_interpolator(
-    N_from, N_to, scheme_from, scheme_to, n, kind="q", precission=20
+    N_from, N_to, scheme_from, scheme_to, n, kind="q", precission=16
 ):
     """
     Generates a vector that multiplied by the q coordinates gives the value
@@ -711,9 +747,10 @@ def get_bary_extreme_f(scheme, N, mode="u", point="start", order=2):
 
     p = 1 if point == "end" else -1
     v_gen = v_coef_coll if mode == "u" else v_coef
+    precission = 16
 
-    v_arr = [v_gen(N, ii, scheme, order) for ii in range(N)]
-    t_arr = coll_points(N, scheme, order)
+    v_arr = [v_gen(N, ii, scheme, precission, order) for ii in range(N)]
+    t_arr = coll_points(N, scheme, precission, order)
     # Barycentric Formula: Sup: Superior, Inf:Inferior
     sup = []
     for i in range(N):
@@ -733,7 +770,7 @@ def get_bary_extreme_f(scheme, N, mode="u", point="start", order=2):
 
 
 # @lru_cache(maxsize=2000)
-# def LG_end_p_fun(N, precission=20):
+# def LG_end_p_fun(N, precission=16):
 #     coefs = symbols(f"c_0:{N}")
 #     taus = node_points(N, "LG", precission)
 #     x = symbols("x")
@@ -743,7 +780,7 @@ def get_bary_extreme_f(scheme, N, mode="u", point="start", order=2):
 
 
 @lru_cache(maxsize=2000)
-def LG_diff_end_p_fun(N, precission=20):
+def LG_diff_end_p_fun(N, precission=16):
     coefs = symbols(f"c_0:{N}")
     taus = node_points(N, "LG", precission)
     x = symbols("x")
@@ -753,7 +790,7 @@ def LG_diff_end_p_fun(N, precission=20):
 
 
 # @lru_cache(maxsize=2000)
-# def LG_inv_start_p_fun(N, precission=20):
+# def LG_inv_start_p_fun(N, precission=16):
 #     coefs = symbols(f"c_0:{N}")
 #     taus = node_points(N, "LG_inv", precission)
 #     x = symbols("x")
@@ -763,7 +800,7 @@ def LG_diff_end_p_fun(N, precission=20):
 
 
 @lru_cache(maxsize=2000)
-def LG_inv_diff_start_p_fun(N, precission=20):
+def LG_inv_diff_start_p_fun(N, precission=16):
     coefs = symbols(f"c_0:{N}")
     taus = node_points(N, "LG_inv", precission)
     x = symbols("x")
@@ -773,7 +810,7 @@ def LG_inv_diff_start_p_fun(N, precission=20):
 
 
 @lru_cache(maxsize=2000)
-def LG_end_p_fun_cas(N, precission=20):
+def LG_end_p_fun_cas(N, precission=16):
     from casadi import SX, vertsplit, Function
     from .casadi import sympy2casadi
 
@@ -795,7 +832,7 @@ def LG_end_p_fun_cas(N, precission=20):
 
 
 @lru_cache(maxsize=2000)
-def LG_diff_end_p_fun_cas(N, precission=20):
+def LG_diff_end_p_fun_cas(N, precission=16):
     from casadi import SX, vertsplit, Function
     from .casadi import sympy2casadi
 
@@ -810,7 +847,7 @@ def LG_diff_end_p_fun_cas(N, precission=20):
 
 
 @lru_cache(maxsize=2000)
-def LG_inv_start_p_fun_cas(N, precission=20):
+def LG_inv_start_p_fun_cas(N, precission=16):
     _f = LG_end_p_fun_cas(N, precission)
 
     def cas_f(x_cas):
@@ -820,7 +857,7 @@ def LG_inv_start_p_fun_cas(N, precission=20):
 
 
 @lru_cache(maxsize=2000)
-def LG_inv_diff_start_p_fun_cas(N, precission=20):
+def LG_inv_diff_start_p_fun_cas(N, precission=16):
     from casadi import SX, vertsplit, Function
     from .casadi import sympy2casadi
 

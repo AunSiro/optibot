@@ -659,8 +659,8 @@ def coherent_dimensions(func):
             params = kwargs["params"]
         else:
             params = add_params[0]
-        x_0 = array(x_0, dtype=float)
-        u = array(u, dtype=float)
+        x_0 = array(x_0, dtype="float64")
+        u = array(u, dtype="float64")
 
         # If u was a number, it will produce errors later
         # while trying to iterate over it. We have to to convert it
