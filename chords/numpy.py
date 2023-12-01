@@ -11,6 +11,11 @@ convert to numpy arrays.
 import numpy as np
 from numpy import sin, cos, expand_dims
 from warnings import warn
+from functools import wraps
+from copy import copy
+import inspect
+import os
+import pickle
 
 
 def get_str(x):
@@ -225,6 +230,80 @@ def Sym2Fx(RHS, x_vars, u_vars, verbose=False):
 
     New_F.__doc__ = f"Function created from sympy expression through Sym2Fx. \n{msg}"
     return New_F
+
+
+# --- Assistance functions ---
+
+
+def get_default_args(func):
+    signature = inspect.signature(func)
+    sigdict = {k: v.default for k, v in signature.parameters.items()}
+    for jj in sigdict.keys():
+        if sigdict[jj] is inspect.Parameter.empty:
+            sigdict[jj] = None
+    return sigdict
+
+
+def is_callable_with(f, *args, **kwargs):
+    try:
+        inspect.signature(f).bind(*args, **kwargs)
+        return True
+    except TypeError:
+        return False
+
+
+def store_results(func):
+    """
+    Checks if it has been run previously and recovers the result from a saved
+    file if so. Otherwise, performs the calculations and then saves the
+    results in a file.
+
+    Parameters
+    ----------
+    func : Function
+    -------
+    Function
+
+    """
+
+    @wraps(func)
+    def wrapper_decorator(*args, **kwargs):
+        # check if arguments given are compatible with signature
+        inspect.signature(func).bind(*args, **kwargs)
+
+        def_args = get_default_args(func)
+        given_args = copy(def_args)
+        argnames = list(inspect.signature(func).parameters.keys())
+        for jj in range(len(args)):
+            given_args[argnames[jj]] = args[jj]
+        for kk in kwargs:
+            given_args[kk] = kwargs[kk]
+
+        given_tup = tuple(given_args[jj] for jj in argnames)
+
+        if not os.path.exists("func_results"):
+            os.makedirs("func_results")
+
+        fun_name = func.__name__
+        fname = f"{fun_name}_results.pkl"
+        fpath = os.path.join("func_results", fname)
+
+        if os.path.exists(fpath):
+            with open(fpath, "rb") as f:
+                saved_results = pickle.load(f)
+            assert type(saved_results) == dict
+            if given_tup in saved_results.keys():
+                return saved_results[given_tup]
+        else:
+            saved_results = {}
+        result = func(*args, **kwargs)
+        saved_results[given_tup] = result
+        with open(fpath, "wb") as f:
+            pickle.dump(saved_results, f)
+
+        return result
+
+    return wrapper_decorator
 
 
 # --- Double Pendulum ---

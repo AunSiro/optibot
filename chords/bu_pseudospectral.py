@@ -25,6 +25,7 @@ from .pseudospectral import (
 )
 from .util import gauss_rep_integral, poly_integral_2d, Lag_integ_2d
 from .piecewise import interp_2d, is2d, get_x_divisions
+from .numpy import store_results
 from functools import lru_cache
 from numpy import (
     zeros,
@@ -334,6 +335,7 @@ def BU_unit_Lag_pol_t(N, scheme, n, t0, tf, order=2, precission=16):
 
 
 @lru_cache(maxsize=2000)
+@store_results
 def _Lag_integ(
     N_coll,
     n_lag_pol,
@@ -394,6 +396,7 @@ def _Lag_integ(
 
 
 @lru_cache(maxsize=2000)
+@store_results
 def Integration_Matrix(N_coll, scheme, deriv_order, h, scheme_order=2, precission=16):
     assert (
         deriv_order < scheme_order
@@ -430,6 +433,7 @@ def Integration_Matrix(N_coll, scheme, deriv_order, h, scheme_order=2, precissio
 
 
 @lru_cache(maxsize=2000)
+@store_results
 def Extreme_Matrix(N_coll, scheme, point, scheme_order=2, precission=16):
     matrix = zeros([1, N_coll])
     for ii in range(N_coll):

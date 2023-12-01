@@ -411,7 +411,10 @@ class _Opti_Problem:
         try:
             q_opti = self.opti_arrs["q"]
             v_opti = self.opti_arrs["v"]
-            a_opti = self.opti_arrs["a"]
+            if self.order > 1:
+                a_opti = self.opti_arrs["a"]
+            else:
+                a_opti = None
         except AttributeError:
             raise RuntimeError(
                 "opti problem must be setup, use opti_setup() and apply_scheme()"
@@ -2783,8 +2786,12 @@ class _Lin_init:
             N = self.N + 1  # Number of segments
         elif self.scheme_mode == "bottom-up pseudospectral":
             N = self.n_arr  # Number of points in X
-        else:
+        elif self.scheme_mode == "pseudospectral":
             N = self.N  # Number of Node Points
+        else:
+            raise NotImplementedError(
+                f"Linear init not implemented for scheme mode {self.scheme_mode}"
+            )
         T = self.t_end - self.t_start
         q_s = array(q_s, dtype="float64")
         q_e = array(q_e, dtype="float64")
