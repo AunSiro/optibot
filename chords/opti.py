@@ -515,6 +515,9 @@ class _Pseudospectral:
         self,
         col_points,
         precission=16,
+        tol=1e-16,
+        p_opts=None,
+        s_opts=None,
     ):
         """
         Creates and links the different opti variables to be used in the problem.
@@ -551,11 +554,19 @@ class _Pseudospectral:
         self.coll_index = coll_index
 
         opti = cas.Opti()
-        if self.verbose:
-            opts = {}
-        else:
-            opts = {"ipopt.print_level": 0, "print_time": 0}
-        opti.solver("ipopt", opts)
+        if p_opts is None:
+            if self.verbose:
+                p_opts = {
+                    "expand": True,
+                }
+            else:
+                p_opts = {"expand": True, "ipopt.print_level": 0, "print_time": 0}
+        if s_opts is None:
+            s_opts = {
+                "max_iter": 10000,
+                "tol": tol,
+            }  # investigate how to make it work adding 'linear_solver' : "MA27"}
+        opti.solver("ipopt", p_opts, s_opts)
         self.opti = opti
 
         opt_dict = {
@@ -962,6 +973,9 @@ class _BU_Pseudospectral:
         self,
         n_coll,
         precission=16,
+        tol=1e-16,
+        p_opts=None,
+        s_opts=None,
     ):
         """
         Creates and links the different opti variables to be used in the problem.
@@ -1009,11 +1023,19 @@ class _BU_Pseudospectral:
         self.coll_index = coll_index
 
         opti = cas.Opti()
-        if self.verbose:
-            opts = {}
-        else:
-            opts = {"ipopt.print_level": 0, "print_time": 0}
-        opti.solver("ipopt", opts)
+        if p_opts is None:
+            if self.verbose:
+                p_opts = {
+                    "expand": True,
+                }
+            else:
+                p_opts = {"expand": True, "ipopt.print_level": 0, "print_time": 0}
+        if s_opts is None:
+            s_opts = {
+                "max_iter": 10000,
+                "tol": tol,
+            }  # investigate how to make it work adding 'linear_solver' : "MA27"}
+        opti.solver("ipopt", p_opts, s_opts)
         self.opti = opti
 
         construction_points_tau = BU_construction_points(
@@ -1333,11 +1355,19 @@ class _BU_Pseudospectral:
 #         self.col_points = col_points
 
 #         opti = cas.Opti()
-#         if self.verbose:
-#             opts = {}
-#         else:
-#             opts = {"ipopt.print_level": 0, "print_time": 0}
-#         opti.solver("ipopt", opts)
+#         if p_opts is None:
+#     if self.verbose:
+#         p_opts = {
+#             "expand": True,
+#         }
+#     else:
+#         p_opts = {"expand": True, "ipopt.print_level": 0, "print_time": 0}
+# if s_opts is None:
+#     s_opts = {
+#         "max_iter": 10000,
+#         "tol": tol,
+#     }  # investigate how to make it work adding 'linear_solver' : "MA27"}
+# opti.solver("ipopt", p_opts, s_opts)
 #         self.opti = opti
 
 #         opt_dict = {
@@ -1587,7 +1617,7 @@ class _BU_Pseudospectral:
 
 
 class _Equispaced:
-    def opti_setup(self, segment_number, tol=1e-26):
+    def opti_setup(self, segment_number, tol=1e-16, p_opts=None, s_opts=None):
         """
         Creates and links the different opti variables to be used in the problem.
         Requires the function dynamic_setup() to have been run prior.
@@ -1617,16 +1647,18 @@ class _Equispaced:
         t_start = self.t_start
         t_end = self.t_end
         opti = cas.Opti()
-        if self.verbose:
-            p_opts = {
-                "expand": True,
-            }
-        else:
-            p_opts = {"expand": True, "ipopt.print_level": 0, "print_time": 0}
-        s_opts = {
-            "max_iter": 10000,
-            "tol": tol,
-        }  # investigate how to make it work adding 'linear_solver' : "MA27"}
+        if p_opts is None:
+            if self.verbose:
+                p_opts = {
+                    "expand": True,
+                }
+            else:
+                p_opts = {"expand": True, "ipopt.print_level": 0, "print_time": 0}
+        if s_opts is None:
+            s_opts = {
+                "max_iter": 10000,
+                "tol": tol,
+            }  # investigate how to make it work adding 'linear_solver' : "MA27"}
         opti.solver("ipopt", p_opts, s_opts)
         self.opti = opti
 
@@ -2089,6 +2121,8 @@ class _Custom:
         n_v=None,
         n_a=None,
         point_structure_v=None,
+        p_opts=None,
+        s_opts=None,
     ):
         """
          Creates and links the different opti variables to be used in the problem.
@@ -2175,11 +2209,19 @@ class _Custom:
         self.local_scheme = local_scheme
 
         opti = cas.Opti()
-        if self.verbose:
-            opts = {}
-        else:
-            opts = {"ipopt.print_level": 0, "print_time": 0}
-        opti.solver("ipopt", opts)
+        if p_opts is None:
+            if self.verbose:
+                p_opts = {
+                    "expand": True,
+                }
+            else:
+                p_opts = {"expand": True, "ipopt.print_level": 0, "print_time": 0}
+        if s_opts is None:
+            s_opts = {
+                "max_iter": 10000,
+                "tol": tol,
+            }  # investigate how to make it work adding 'linear_solver' : "MA27"}
+        opti.solver("ipopt", p_opts, s_opts)
         self.opti = opti
         x_opti = []
         u_opti = []
@@ -2803,7 +2845,7 @@ class _Lin_init:
         self.opti.set_initial(q_opti, q_guess)
         if self.scheme not in ["LG2", "D2", "LGLm", "JG"]:
             self.opti.set_initial(v_opti, q_dot_guess)
-            if self.scheme_mode == "equispaced":
+            if self.order > 1 and self.scheme_mode == "equispaced":
                 self.opti.set_initial(a_opti, 0)
                 if "hs" in self.scheme:
                     self.opti.set_initial(

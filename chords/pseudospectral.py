@@ -15,7 +15,7 @@ from functools import lru_cache
 from numpy import array, piecewise, linspace, expand_dims, squeeze, zeros_like, eye
 from numpy import sum as npsum
 from numba import njit
-from .numpy import combinefunctions
+from .numpy import combinefunctions, store_results
 from .piecewise import interp_2d
 
 
@@ -34,17 +34,20 @@ _implemented_schemes = [
 
 
 @lru_cache(maxsize=2000)
+@store_results
 def LG(N, precission=16):
     return [ii.evalf(n=precission) for ii in legendre_poly(N, polys=True).real_roots()]
 
 
 @lru_cache(maxsize=2000)
+@store_results
 def LGR(N, precission=16):
     pol = legendre_poly(N, polys=True) + legendre_poly(N - 1, polys=True)
     return [ii.evalf(n=precission) for ii in pol.real_roots()]
 
 
 @lru_cache(maxsize=2000)
+@store_results
 def LGL(N, precission=16):
     root_list = [
         ii.evalf(n=precission)
@@ -62,16 +65,19 @@ def LGL(N, precission=16):
 
 
 @lru_cache(maxsize=2000)
+@store_results
 def LGLm(N, precission=16):
     return LGL(N + 2, precission)[1:-1]
 
 
 @lru_cache(maxsize=2000)
+@store_results
 def LG2(N, precission=16):
     return [-1] + LG(N - 2, precission) + [1]
 
 
 @lru_cache(maxsize=2000)
+@store_results
 def JG(N, order=2, precission=16):
     return [
         ii.evalf(n=precission)
@@ -80,6 +86,7 @@ def JG(N, order=2, precission=16):
 
 
 @lru_cache(maxsize=2000)
+@store_results
 def JGR(N, order=2, precission=16):
     return [-1.0] + [
         ii.evalf(n=precission)
@@ -88,6 +95,7 @@ def JGR(N, order=2, precission=16):
 
 
 @lru_cache(maxsize=2000)
+@store_results
 def JGR_inv(N, order=2, precission=16):
     return [
         ii.evalf(n=precission)
@@ -96,6 +104,7 @@ def JGR_inv(N, order=2, precission=16):
 
 
 @lru_cache(maxsize=2000)
+@store_results
 def JGL(N, order=2, precission=16):
     return (
         [-1.0]
@@ -108,6 +117,7 @@ def JGL(N, order=2, precission=16):
 
 
 @lru_cache(maxsize=2000)
+@store_results
 def JG2(N, precission=16):
     return [-1] + JG(N - 2, precission) + [1]
 
@@ -341,6 +351,7 @@ def _v_sum(t_arr, i):
 
 
 @lru_cache(maxsize=None)
+@store_results
 def v_coef(N, i, scheme, precission=16, order=2):
     """
     Generates the coefficient V for barycentric coordinates for
@@ -383,6 +394,7 @@ def v_coef(N, i, scheme, precission=16, order=2):
 
 
 @lru_cache(maxsize=None)
+@store_results
 def v_coef_coll(N, i, scheme, precission=16, order=2):
     """
     Generates the coefficient V for barycentric coordinates for
@@ -419,6 +431,7 @@ def v_coef_coll(N, i, scheme, precission=16, order=2):
 
 
 @lru_cache(maxsize=2000)
+@store_results
 def matrix_D_bary(N, scheme, precission=16):
     """
     Generates the Derivation Matrix for the given scheme from
@@ -596,6 +609,7 @@ def bary_poly_2d(t_arr, y_arr):
 
 
 @lru_cache(maxsize=2000)
+@store_results
 def unit_Lag_pol(N, scheme, n, kind="q", precission=16):
     """
     Generate a barycentric numeric Lagrange polynomial over N node points.
@@ -634,6 +648,7 @@ def unit_Lag_pol(N, scheme, n, kind="q", precission=16):
 
 
 @lru_cache(maxsize=2000)
+@store_results
 def vector_interpolator(
     N_from, N_to, scheme_from, scheme_to, n, kind="q", precission=16
 ):
@@ -780,6 +795,7 @@ def get_bary_extreme_f(scheme, N, mode="u", point="start", order=2):
 
 
 @lru_cache(maxsize=2000)
+@store_results
 def LG_diff_end_p_fun(N, precission=16):
     coefs = symbols(f"c_0:{N}")
     taus = node_points(N, "LG", precission)
@@ -800,6 +816,7 @@ def LG_diff_end_p_fun(N, precission=16):
 
 
 @lru_cache(maxsize=2000)
+@store_results
 def LG_inv_diff_start_p_fun(N, precission=16):
     coefs = symbols(f"c_0:{N}")
     taus = node_points(N, "LG_inv", precission)
@@ -810,6 +827,7 @@ def LG_inv_diff_start_p_fun(N, precission=16):
 
 
 @lru_cache(maxsize=2000)
+@store_results
 def LG_end_p_fun_cas(N, precission=16):
     from casadi import SX, vertsplit, Function
     from .casadi import sympy2casadi
@@ -832,6 +850,7 @@ def LG_end_p_fun_cas(N, precission=16):
 
 
 @lru_cache(maxsize=2000)
+@store_results
 def LG_diff_end_p_fun_cas(N, precission=16):
     from casadi import SX, vertsplit, Function
     from .casadi import sympy2casadi
@@ -847,6 +866,7 @@ def LG_diff_end_p_fun_cas(N, precission=16):
 
 
 @lru_cache(maxsize=2000)
+@store_results
 def LG_inv_start_p_fun_cas(N, precission=16):
     _f = LG_end_p_fun_cas(N, precission)
 
@@ -857,6 +877,7 @@ def LG_inv_start_p_fun_cas(N, precission=16):
 
 
 @lru_cache(maxsize=2000)
+@store_results
 def LG_inv_diff_start_p_fun_cas(N, precission=16):
     from casadi import SX, vertsplit, Function
     from .casadi import sympy2casadi

@@ -13,7 +13,7 @@ from sympy import legendre_poly
 from functools import lru_cache
 from math import ceil, factorial
 from .pseudospectral import LG, bary_poly, coll_points, bary_poly_2d
-from .numpy import combinefunctions
+from .numpy import combinefunctions, store_results
 
 # Uniform output style functions
 
@@ -232,6 +232,7 @@ def plot_by_segments(
 
 
 @lru_cache(maxsize=2000)
+@store_results
 def leggauss(N):
     return np.polynomial.legendre.leggauss(N)
 
@@ -340,6 +341,7 @@ def Lag_integ_2d(N, scheme, integ_order, order=2):
 
 
 @lru_cache(maxsize=2000)
+@store_results
 def get_weights(N, scheme, order=2):
     """
     Generate weights for quadrature integration. If an closed formula
