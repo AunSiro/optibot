@@ -397,6 +397,22 @@ def _Lag_integ(
 
 @lru_cache(maxsize=2000)
 @store_results
+def Integration_Polynomial_Matrix(
+    N_coll, deriv_order, scheme, scheme_order, precission=16
+):
+    M = scheme_order
+    N = N_coll
+    P = deriv_order
+    constr_points = array(
+        BU_construction_points(N, scheme, scheme_order, precission),
+        dtype="float64",
+    )
+    int_pol = Lag_integ_2d(N, scheme, M - P, M)
+    return int_pol(constr_points)
+
+
+@lru_cache(maxsize=2000)
+@store_results
 def Integration_Matrix(N_coll, scheme, deriv_order, h, scheme_order=2, precission=16):
     assert (
         deriv_order < scheme_order
@@ -426,8 +442,10 @@ def Integration_Matrix(N_coll, scheme, deriv_order, h, scheme_order=2, precissio
         ii_arr = expand_dims(arange(1, M - P), 0)
         t_exp_mat = expand_dims(constr_t, 1) ** ii_arr / factorial(ii_arr)
         matrix[:, P + 1 : M] = t_exp_mat
-    int_pol = Lag_integ_2d(N, scheme, M - P, M)
-    int_pol_mat = (h / 2) ** (M - P) * int_pol(constr_points)
+    _M = Integration_Polynomial_Matrix(
+        N_coll, deriv_order, scheme, scheme_order, precission
+    )
+    int_pol_mat = (h / 2) ** (M - P) * _M
     matrix[:, M:] = int_pol_mat
     return matrix
 

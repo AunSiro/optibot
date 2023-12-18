@@ -279,7 +279,6 @@ def interpolation(
     n_interp=1000,
     **kwargs,
 ):
-
     if scheme in _implemented_equispaced_schemes:
         mode = "equi"
     elif scheme in _implemented_pseudospectral_schemes:
