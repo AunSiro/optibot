@@ -40,9 +40,9 @@ from .pseudospectral import (
     LG_end_p_fun_cas,
     LG_inv_diff_start_p_fun_cas,
     get_bary_extreme_f,
-    vector_interpolator,
     get_coll_indices_from_nodes,
 )
+from .pseudospectral import _implemented_schemes as _implemented_pseudospectral_schemes
 from .bu_pseudospectral import (
     BU_coll_points,
     BU_construction_points,
@@ -50,6 +50,9 @@ from .bu_pseudospectral import (
     Extreme_Matrix,
     tau_to_t_points,
     get_coll_indices,
+)
+from .bu_pseudospectral import (
+    _implemented_schemes as _implemented_bottom_up_pseudospectral_schemes,
 )
 from .util import get_weights
 
@@ -74,36 +77,9 @@ _implemented_equispaced_schemes = [
     "hsn",
     "hsn_parab",
 ]
-_implemented_pseudospectral_schemes = [
-    "LG",
-    "LG_inv",
-    "LGL",
-    "LGR",
-    "LGR_inv",
-    "D2",
-    "LG2",
-    "LGLm",
-    "JG",
-    "CG",
-    "CG_inv",
-    "CGL",
-    "CGR",
-    "CGR_inv",
-]
 
 _implemented_bottom_up_pseudospectral_schemes = [
-    "BU_LG",
-    "BU_LGL",
-    "BU_LGR",
-    "BU_LGR_inv",
-    "BU_JG",
-    "BU_JGR",
-    "BU_JGR_inv",
-    "BU_JGL",
-    "BU_CG",
-    "BU_CGL",
-    "BU_CGR",
-    "BU_CGR_inv",
+    "BU_" + _sch for _sch in _implemented_bottom_up_pseudospectral_schemes
 ]
 
 
