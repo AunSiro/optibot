@@ -12,7 +12,18 @@ formulas are constructed.
 
 from sympy import legendre_poly, jacobi_poly, symbols, expand, zeros, lambdify
 from functools import lru_cache
-from numpy import array, piecewise, linspace, expand_dims, squeeze, zeros_like, eye
+from numpy import (
+    array,
+    piecewise,
+    linspace,
+    expand_dims,
+    squeeze,
+    zeros_like,
+    eye,
+    arange,
+    cos,
+    pi,
+)
 from numpy import sum as npsum
 from numba import njit
 from .numpy import combinefunctions, store_results
@@ -21,16 +32,22 @@ from .piecewise import interp_2d
 
 # --- Generating Collocation Points ---
 
-_implemented_schemes = [
-    "LG",
-    "LGL",
-    "LGR",
-    "LGR_inv",
-    "JG",
-    # "JGR", #These schemes are not compatible with Top Down structure
-    # "JGR_inv",
-    # "JGL"
-]
+_gauss_like_schemes = ["LG", "JG", "CG"]
+_gauss_inv_schemes = [_sch + "_inv" for _sch in _gauss_like_schemes]
+_gauss_2_schemes = [_sch + "2" for _sch in _gauss_like_schemes] + ["LGLm"]
+_radau_like_schemes = ["LGR", "JGR", "CGR"]
+_radau_inv_schemes = [_sch + "_inv" for _sch in _radau_like_schemes]
+_lobato_like_schemes = ["LGL", "JGL", "CGL"]
+_other_schemes = ["D2"]
+_implemented_schemes = (
+    _gauss_like_schemes
+    + _gauss_inv_schemes
+    + _gauss_2_schemes
+    + _radau_like_schemes
+    + _radau_inv_schemes
+    + _lobato_like_schemes
+    + _other_schemes
+)
 
 
 @lru_cache(maxsize=2000)
@@ -122,6 +139,21 @@ def JG2(N, precission=16):
     return [-1] + JG(N - 2, precission) + [1]
 
 
+def CG(N):
+    theta = pi * (2 * arange(N, dtype="float64") + 1) / N / 2
+    return list(cos(theta)[::-1])
+
+
+def CGL(N):
+    theta = pi * (arange(0, N, dtype="float64")) / (N - 1)
+    return list(cos(theta)[::-1])
+
+
+def CGR(N):
+    theta = pi * (2 * arange(N, dtype="float64")) / (2 * N - 1)
+    return list(-cos(theta))
+
+
 @lru_cache(maxsize=2000)
 def coll_points(N, scheme, precission=16, order=2):
     """
@@ -149,7 +181,7 @@ def coll_points(N, scheme, precission=16, order=2):
     coll_points : list
         list of collocation points
     """
-    if scheme == "LG":
+    if scheme in ["LG", "LG_inv", "LG2"]:
         return LG(N, precission)
     elif scheme == "LGR":
         return LGR(N, precission)
@@ -159,9 +191,7 @@ def coll_points(N, scheme, precission=16, order=2):
         return LGL(N, precission)
     elif scheme == "LGLm":
         return LGLm(N, precission)
-    elif scheme == "LG2":
-        return LG(N, precission)
-    elif scheme in ["JG", "JG2"]:
+    elif scheme in ["JG", "JG_inv", "JG2"]:
         return JG(N, order, precission)
     elif scheme == "JGR":
         return JGR(N, order, precission)
@@ -169,6 +199,14 @@ def coll_points(N, scheme, precission=16, order=2):
         return JGR_inv(N, order, precission)
     elif scheme == "JGL":
         return JGL(N, order, precission)
+    elif scheme in ["CG", "CG_inv", "CG2"]:
+        return CG(N)
+    elif scheme == "CGR":
+        return CGR(N)
+    elif scheme == "CGR_inv":
+        return [-ii for ii in CGR(N)[::-1]]
+    elif scheme == "CGL":
+        return CGL(N)
     else:
         raise ValueError(
             f"Unsupported scheme {scheme}, valid schemes are:{_implemented_schemes}"
@@ -203,25 +241,31 @@ def node_points(N, scheme, precission=16):
     node_points : list
         list of node points
     """
-    if scheme == "LG":
-        return [-1.0] + LG(N - 1, precission)
-    elif scheme == "LG_inv":
-        return LG(N - 1, precission) + [1.0]
-    elif scheme == "LGR":
-        return LGR(N - 1, precission) + [1.0]
-    elif scheme == "LGR_inv":
-        return [-1.0] + [-ii for ii in LGR(N - 1, precission)[::-1]]
-    elif scheme in ["LGL", "D2"]:
-        return LGL(N, precission)
-    elif scheme == "LGLm":
-        return LGL(N, precission)
-    elif scheme == "LG2":
-        return LG2(N, precission)
-    elif scheme == "JG":
-        return JG2(N, precission)
+
+    if scheme in (_gauss_like_schemes + _radau_inv_schemes):
+        coll_p = coll_points(N - 1, scheme, precission, order=2)
+        return [-1.0] + coll_p
+    elif scheme in (_gauss_inv_schemes + _radau_like_schemes):
+        coll_p = coll_points(N - 1, scheme, precission, order=2)
+        return coll_p + [1.0]
+    elif scheme in _lobato_like_schemes:
+        coll_p = coll_points(N, scheme, precission, order=2)
+        return coll_p
+    elif scheme in _gauss_2_schemes:
+        coll_p = coll_points(N - 2, scheme, precission, order=2)
+        return [-1.0] + coll_p + [1.0]
+    elif scheme in _other_schemes:
+        if scheme in [
+            "D2",
+        ]:
+            return LGL(N, precission)
+        else:
+            raise NotImplementedError(
+                f"scheme {scheme} in category 'others' is not yet implemented"
+            )
     else:
         raise ValueError(
-            f"Unsupported scheme {scheme}, valid schemes are: LG, LG_inv LGR, LGR_inv, LGL, LGLm, LG2, D2"
+            f"Unsupported scheme {scheme}, valid schemes are: {_implemented_schemes}"
         )
 
 
@@ -246,18 +290,27 @@ def get_coll_indices_from_nodes(scheme):
         slice to be used as index in the array to extract the collocation points.
 
     """
-    if scheme in ["LG", "JG"]:
+    if scheme in (_gauss_like_schemes + _radau_inv_schemes):
         coll_index = slice(1, None)
-    elif scheme in ["LGR", "JGR", "LG_inv"]:
+    elif scheme in (_gauss_inv_schemes + _radau_like_schemes):
         coll_index = slice(None, -1)
-    elif scheme in ["LGR_inv", "JGR_inv"]:
-        coll_index = slice(1, None)
-    elif scheme in ["LGL", "JGL", "D2"]:
+    elif scheme in _lobato_like_schemes:
         coll_index = slice(None, None)
-    elif scheme in ["LG2", "LGLm"]:
+    elif scheme in _gauss_2_schemes:
         coll_index = slice(1, -1)
+    elif scheme in _other_schemes:
+        if scheme in [
+            "D2",
+        ]:
+            coll_index = slice(None, None)
+        else:
+            raise NotImplementedError(
+                f"scheme {scheme} in category 'others' is not yet implemented"
+            )
     else:
-        raise NotImplementedError(f"Scheme {scheme} not implemented yet")
+        raise NotImplementedError(
+            f"Scheme {scheme} not implemented yet, valid schemes are: {_implemented_schemes}"
+        )
     return coll_index
 
 
@@ -374,6 +427,11 @@ def v_coef(N, i, scheme, precission=16, order=2):
             'LG2'
             'D2'
             'JG'
+            'CG'
+            'CG_inv'
+            'CGR'
+            'CGR_inv'
+            'CGL'
     precission: int, default 16
         number of decimal places of precission
 
@@ -417,6 +475,11 @@ def v_coef_coll(N, i, scheme, precission=16, order=2):
             'LG2'
             'D2'
             'JG'
+            'CG'
+            'CG_inv'
+            'CGR'
+            'CGR_inv'
+            'CGL'
     precission: int, default 20
         number of decimal places of precission
 
@@ -452,6 +515,11 @@ def matrix_D_bary(N, scheme, precission=16):
             'LG2'
             'D2'
             'JG'
+            'CG'
+            'CG_inv'
+            'CGR'
+            'CGR_inv'
+            'CGL'
     precission: int, default 20
         number of decimal places of precission
 
@@ -721,6 +789,11 @@ def get_bary_extreme_f(scheme, N, mode="u", point="start", order=2):
             'JGR'
             'JGR_inv'
             'JGL'
+            'CG'
+            'CG_inv'
+            'CGR'
+            'CGR_inv'
+            'CGL'
     N : int
         Number of points that construct the polynomial
     mode : {'u', 'x'}
@@ -741,19 +814,46 @@ def get_bary_extreme_f(scheme, N, mode="u", point="start", order=2):
 
     if point == "start":
         if mode == "u":
-            if scheme in ["LGL", "D2", "LGR", "JGR", "JGL"]:
+            if scheme in ["LGL", "D2", "LGR", "JGR", "JGL", "CGL", "CGR"]:
                 return lambda coefs: coefs[0]
         elif mode == "x":
-            if scheme in ["LGL", "D2", "LGR", "LGR_inv", "LG", "LG2", "LGLm", "JG"]:
+            if scheme in [
+                "LGL",
+                "D2",
+                "LGR",
+                "LGR_inv",
+                "LG",
+                "LG2",
+                "LGLm",
+                "JG",
+                "CG",
+                "CGR",
+                "CGR_inv",
+                "CGL",
+            ]:
                 return lambda coefs: coefs[0]
         else:
             raise ValueError(f"Invalid mode {mode}, accepted are u and x")
     elif point == "end":
         if mode == "u":
-            if scheme in ["LGL", "D2", "LGR_inv", "JGR_inv", "JGL"]:
+            if scheme in ["LGL", "D2", "LGR_inv", "JGR_inv", "JGL", "CGL", "CGR_inv"]:
                 return lambda coefs: coefs[-1]
         elif mode == "x":
-            if scheme in ["LGL", "D2", "LGR", "LGR_inv", "LG_inv", "LG2", "LGLm", "JG"]:
+            if scheme in [
+                "LGL",
+                "D2",
+                "LGR",
+                "LGR_inv",
+                "LG_inv",
+                "LG2",
+                "LGLm",
+                "JG",
+                "JG_inv",
+                "CG",
+                "CGR",
+                "CGR_inv",
+                "CGL",
+            ]:
                 return lambda coefs: coefs[-1]
         else:
             raise ValueError(f"Invalid mode {mode}, accepted are u and x")
@@ -942,6 +1042,11 @@ def get_pol_x(scheme, qq, vv, t0, t1):
             'LG2'
             'D2'
             'JG'
+            'CG'
+            'CG_inv'
+            'CGR'
+            'CGR_inv'
+            'CGL'
     qq : Numpy Array
         Values known of q(t)
     vv : Numpy Array
@@ -1006,6 +1111,11 @@ def extend_x_arrays(qq, vv, scheme):
             'LG2'
             'D2'
             'JG'
+            'CG'
+            'CG_inv'
+            'CGR'
+            'CGR_inv'
+            'CGL'
 
     Returns
     -------
@@ -1018,9 +1128,9 @@ def extend_x_arrays(qq, vv, scheme):
 
     """
     N = len(qq)
-    if scheme == "LG":
+    if scheme in ["LG", "CG"]:
         tau_x = node_points(N, scheme) + [1]
-        endp_f = get_bary_extreme_f("LG", N, mode="x", point="end")
+        endp_f = get_bary_extreme_f(scheme, N, mode="x", point="end")
         qq_1 = array(endp_f(qq), dtype="float")
         vv_1 = array(endp_f(vv), dtype="float")
         new_qq = array(
@@ -1037,9 +1147,9 @@ def extend_x_arrays(qq, vv, scheme):
             ],
             dtype="float64",
         )
-    elif scheme == "LG_inv":
+    elif scheme in ["LG_inv", "CG_inv"]:
         tau_x = [-1] + node_points(N, scheme)
-        startp_f = get_bary_extreme_f("LG_inv", N, mode="x", point="start")
+        startp_f = get_bary_extreme_f(scheme, N, mode="x", point="start")
         qq_1 = array(startp_f(qq), dtype="float")
         vv_1 = array(startp_f(vv), dtype="float")
         new_qq = array(
@@ -1088,6 +1198,11 @@ def extend_u_array(uu, scheme, N, order=2):
             'LG2'
             'D2'
             'JG'
+            'CG'
+            'CG_inv'
+            'CGR'
+            'CGR_inv'
+            'CGL'
 
     Returns
     -------
@@ -1101,16 +1216,16 @@ def extend_u_array(uu, scheme, N, order=2):
     n_col = uu.shape[0]
     uu_0 = get_bary_extreme_f(scheme, n_col, mode="u", point="start", order=order)(uu)
     uu_e = get_bary_extreme_f(scheme, n_col, mode="u", point="end", order=order)(uu)
-    if scheme in ["LG2", "LG", "JG", "LG_inv", "LGLm"]:
+    if scheme in ["LG2", "LG", "JG", "LG_inv", "LGLm", "CG", "CG_inv"]:
         tau_u = [-1.0] + tau_u + [1.0]
         new_uu = array([uu_0] + list(uu) + [uu_e], dtype="float64")
-    elif scheme in ["LGR", "JGR"]:
+    elif scheme in ["LGR", "JGR", "CGR"]:
         tau_u = tau_u + [1.0]
         new_uu = array(list(uu) + [uu_e], dtype="float64")
-    elif scheme in ["LGR_inv", "JGR_inv"]:
+    elif scheme in ["LGR_inv", "JGR_inv", "CGR_inv"]:
         tau_u = [-1.0] + tau_u
         new_uu = array([uu_0] + list(uu), dtype="float64")
-    elif scheme in ["LGL", "D2", "JGL"]:
+    elif scheme in ["LGL", "D2", "JGL", "CGL"]:
         new_uu = uu
     else:
         raise ValueError("Unrecognized scheme")
@@ -1191,6 +1306,11 @@ def interpolations_pseudospectral(
             'LG2'
             'D2'
             'JG'
+            'CG'
+            'CG_inv'
+            'CGR'
+            'CGR_inv'
+            'CGL'
     t0 : float
         starting time of interval of analysis
     t1 : float
@@ -1228,9 +1348,8 @@ def interpolations_pseudospectral(
     from scipy.interpolate import CubicHermiteSpline as hermite
     from numpy import interp, gradient, zeros_like
 
-    scheme_opts = ["LG", "LG_inv", "LGR", "LGR_inv", "LGL", "D2", "LG2", "LGLm", "JG"]
-    if scheme not in scheme_opts:
-        NameError(f"Invalid scheme.\n valid options are {scheme_opts}")
+    if scheme not in _implemented_schemes:
+        NameError(f"Invalid scheme.\n valid options are {_implemented_schemes}")
 
     if params is None:
         params = []
@@ -1353,6 +1472,11 @@ def dynamic_error_pseudospectral(
             'LG2'
             'D2'
             'JG'
+            'CG'
+            'CG_inv'
+            'CGR'
+            'CGR_inv'
+            'CGL'
     t0 : float
         starting time of interval of analysis
     t1 : float
