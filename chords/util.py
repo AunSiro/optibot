@@ -44,6 +44,11 @@ def sch_to_lab(sch):
         "JGR": "JGR",
         "JGR_inv": "JGR_inv",
         "JGL": "JGL",
+        "CG": "Cheb",
+        "CG_inv": "Cheb_inv",
+        "CGL": "Cheb-L",
+        "CGR": "Cheb-R",
+        "CGR_inv": "Cheb-R_inv",
     }
     if sch[:3] == "BU_":
         sch = sch[3:]
@@ -77,6 +82,11 @@ def sch_to_long_label(sch):
         "JGR",
         "JGR_inv",
         "JGL",
+        "Chebyshev",
+        "Chebyshev_inv",
+        "Chebyshev-Lobato",
+        "Chebyshev-Radau",
+        "Chebyshev-Radau_inv",
     ]
     schemes = [
         "hs_parab",
@@ -100,6 +110,11 @@ def sch_to_long_label(sch):
         "JGR",
         "JGR_inv",
         "JGL",
+        "CG",
+        "CG_inv",
+        "CGL",
+        "CGR",
+        "CGR_inv",
     ]
     lname_dict = {}
     for ii in range(len(titles)):
@@ -130,11 +145,22 @@ def sch_to_color(sch):
         color_dict[sc_name] = f"C{ii}"
 
     for ii, sc_name in enumerate(
-        ["LG", "LGL", "LGR", "LGR_inv", "JG", "JGR", "JGR_inv", "JGL"]
+        [
+            "LG",
+            "LGL",
+            "LGR",
+            "JG",
+            "JGR",
+            "JGL",
+            "CG",
+            "CGL",
+            "CGR",
+        ]
     ):
         color_dict[sc_name] = f"C{ii}"
 
     sch = sch.replace("_parab", "")
+    sch = sch.replace("_inv", "")
     sch = sch.replace("trapz_n", "trapz_mod")
     sch = sch.replace("hsn", "hs_mod")
     sch = sch.replace("BU_", "")

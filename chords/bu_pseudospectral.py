@@ -18,6 +18,9 @@ from .pseudospectral import (
     JGR,
     JGR_inv,
     JGL,
+    CG,
+    CGL,
+    CGR,
     bary_poly,
     bary_poly_2d,
     extend_u_array,
@@ -44,7 +47,18 @@ from scipy.special import factorial
 from copy import copy
 
 
-_implemented_schemes = ["LG", "LGL", "LGR", "LGR_inv", "JG", "JGR", "JGR_inv", "JGL"]
+_gauss_like_schemes = ["LG", "JG", "CG"]
+_radau_like_schemes = ["LGR", "JGR", "CGR"]
+_radau_inv_schemes = [_sch + "_inv" for _sch in _radau_like_schemes]
+_lobato_like_schemes = ["LGL", "JGL", "CGL"]
+_other_schemes = []
+_implemented_schemes = (
+    _gauss_like_schemes
+    + _radau_like_schemes
+    + _radau_inv_schemes
+    + _lobato_like_schemes
+    + _other_schemes
+)
 
 
 @lru_cache(maxsize=2000)
@@ -62,13 +76,15 @@ def BU_coll_points(N, scheme, order=2, precission=16):
             'LGR'
             'LGR_inv'
             'LGL'
-            'LGLm'
             'LG2'
-            'D2'
             'JG'
             'JGR'
             'JGR_inv'
             'JGL'
+            'CG'
+            'CGR'
+            'CGR_inv'
+            'CGL'
     precission: int, default 20
         number of decimal places of precission
 
@@ -83,7 +99,7 @@ def BU_coll_points(N, scheme, order=2, precission=16):
         return LGR(N, precission)
     elif scheme == "LGR_inv":
         return [-ii for ii in LGR(N, precission)[::-1]]
-    elif scheme in ["LGL", "D2"]:
+    elif scheme in ["LGL"]:
         return LGL(N, precission)
     elif scheme == "JG":
         return JG(N, order, precission)
@@ -93,6 +109,14 @@ def BU_coll_points(N, scheme, order=2, precission=16):
         return JGR_inv(N, order, precission)
     elif scheme == "JGL":
         return JGL(N, order, precission)
+    elif scheme == "CG":
+        return CG(N)
+    elif scheme == "CGR":
+        return CGR(N)
+    elif scheme == "CGR_inv":
+        return [-ii for ii in CGR(N)[::-1]]
+    elif scheme == "CGL":
+        return CGL(N)
     else:
         raise ValueError(
             f"Unsupported scheme {scheme}, valid schemes are: {_implemented_schemes}"
@@ -124,6 +148,10 @@ def BU_construction_points(N, scheme, order=2, precission=16):
             'JGR'
             'JGR_inv'
             'JGL'
+            'CG'
+            'CGR'
+            'CGR_inv'
+            'CGL'
     order: int
         differential order of the problem for jacobi points, default 2
     precission: int, default 20
@@ -134,22 +162,22 @@ def BU_construction_points(N, scheme, order=2, precission=16):
     constr_points : list
         list of construction points
     """
-    if scheme == "LG":
-        return LG(N, precission) + [1.0]
-    elif scheme == "LGR":
-        return LGR(N, precission)[1:] + [1.0]
-    elif scheme == "LGR_inv":
-        return [-ii for ii in LGR(N, precission)[::-1]]
-    elif scheme in ["LGL", "D2"]:
-        return LGL(N, precission)[1:]
-    elif scheme == "JG":
-        return JG(N, order, precission) + [1.0]
-    elif scheme == "JGR":
-        return JGR(N, order, precission)[1:] + [1.0]
-    elif scheme == "JGR_inv":
-        return JGR_inv(N, order, precission)
-    elif scheme == "JGL":
-        return JGL(N, order, precission)[1:]
+    coll_p = BU_coll_points(N, scheme, order, precission)
+    if scheme in _gauss_like_schemes:
+        return coll_p + [1.0]
+    elif scheme in _radau_like_schemes:
+        return coll_p[1:] + [1.0]
+    elif scheme in _radau_inv_schemes:
+        return coll_p
+    elif scheme in _lobato_like_schemes:
+        return coll_p[1:]
+    elif scheme in _other_schemes:
+        if scheme in []:
+            pass
+        else:
+            raise NotImplementedError(
+                f"scheme {scheme} in category 'others' is not yet implemented"
+            )
     else:
         raise ValueError(
             f"Unsupported scheme {scheme}, valid schemes are: {_implemented_schemes}"
@@ -177,14 +205,21 @@ def get_coll_indices(scheme):
         slice to be used as index in the array to extract the collocation points.
 
     """
-    if scheme in ["LG", "JG"]:
+    if scheme in _gauss_like_schemes:
         coll_index = slice(1, -1)
-    elif scheme in ["LGR", "JGR"]:
+    elif scheme in _radau_like_schemes:
         coll_index = slice(None, -1)
-    elif scheme in ["LGR_inv", "JGR_inv"]:
+    elif scheme in _radau_inv_schemes:
         coll_index = slice(1, None)
-    elif scheme in ["LGL", "JGL"]:
+    elif scheme in _lobato_like_schemes:
         coll_index = slice(None, None)
+    elif scheme in _other_schemes:
+        if scheme in []:
+            pass
+        else:
+            raise NotImplementedError(
+                f"scheme {scheme} in category 'others' is not yet implemented"
+            )
     else:
         raise NotImplementedError(f"Scheme {scheme} not implemented yet")
     return coll_index
@@ -369,6 +404,10 @@ def _Lag_integ(
             'JGR'
             'JGR_inv'
             'JGL'
+            'CG'
+            'CGR'
+            'CGR_inv'
+            'CGL'
     deriv_order : int
         derivation level for which the element in the matrix is being
         calculated. For example:
@@ -538,6 +577,10 @@ def interpolations_BU_pseudospectral(
             'JGR'
             'JGR_inv'
             'JGL'
+            'CG'
+            'CGR'
+            'CGR_inv'
+            'CGL'
     scheme_order : int
         differential order of the problem
     t0 : float
@@ -732,6 +775,10 @@ def interpolations_deriv_BU_pseudospectral(
             'JGR'
             'JGR_inv'
             'JGL'
+            'CG'
+            'CGR'
+            'CGR_inv'
+            'CGL'
     scheme_order : int
         differential order of the problem
     deriv_order : int
@@ -875,6 +922,10 @@ def dynamic_error_BU(
             'JGR'
             'JGR_inv'
             'JGL'
+            'CG'
+            'CGR'
+            'CGR_inv'
+            'CGL'
     t1 : float
         ending time of interval of analysis
     F : Function of (x, u, params)

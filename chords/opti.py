@@ -76,6 +76,7 @@ _implemented_equispaced_schemes = [
 ]
 _implemented_pseudospectral_schemes = [
     "LG",
+    "LG_inv",
     "LGL",
     "LGR",
     "LGR_inv",
@@ -83,6 +84,11 @@ _implemented_pseudospectral_schemes = [
     "LG2",
     "LGLm",
     "JG",
+    "CG",
+    "CG_inv",
+    "CGL",
+    "CGR",
+    "CGR_inv",
 ]
 
 _implemented_bottom_up_pseudospectral_schemes = [
@@ -94,6 +100,10 @@ _implemented_bottom_up_pseudospectral_schemes = [
     "BU_JGR",
     "BU_JGR_inv",
     "BU_JGL",
+    "BU_CG",
+    "BU_CGL",
+    "BU_CGR",
+    "BU_CGR_inv",
 ]
 
 
