@@ -50,14 +50,20 @@ from .bu_pseudospectral import (
     Extreme_Matrix,
     tau_to_t_points,
     get_coll_indices,
+    _gauss_like_schemes,
+    _radau_like_schemes,
+    _radau_inv_schemes,
+    _lobato_like_schemes,
 )
 from .bu_pseudospectral import (
     _implemented_schemes as _implemented_bottom_up_pseudospectral_schemes,
 )
+from .td_pseudospectral import TD_construction_points, matrix_D_nu, matrix_L
 from .util import get_weights
 
 import casadi as cas
 from numpy import array, linspace, expand_dims, ones, ndarray, alltrue
+from numpy.linalg import matrix_power
 from sympy import symbols
 from time import time
 from functools import lru_cache
@@ -76,6 +82,11 @@ _implemented_equispaced_schemes = [
     "hsj_parab_mod",
     "hsn",
     "hsn_parab",
+]
+
+
+_implemented_top_down_pseudospectral_schemes = [
+    "TD_" + _sch for _sch in _implemented_bottom_up_pseudospectral_schemes
 ]
 
 _implemented_bottom_up_pseudospectral_schemes = [
@@ -369,11 +380,15 @@ class _Opti_Problem:
         elif scheme in _implemented_bottom_up_pseudospectral_schemes:
             self.scheme_mode = "bottom-up pseudospectral"
             scheme = scheme[3:]
+        elif scheme in _implemented_top_down_pseudospectral_schemes:
+            self.scheme_mode = "top-down pseudospectral"
+            scheme = scheme[3:]
         else:
             _v = (
                 _implemented_equispaced_schemes
                 + _implemented_pseudospectral_schemes
                 + _implemented_bottom_up_pseudospectral_schemes
+                + _implemented_top_down_pseudospectral_schemes
             )
             raise NotImplementedError(
                 f"scheme {scheme} not implemented. Valid methods are {_v}."
@@ -1069,7 +1084,7 @@ class _BU_Pseudospectral:
             "x_d_s": x_dot_opti[0, :],
             "x_d_e": x_dot_opti[-1, :],
         }
-        if scheme in ["LGL", "D2", "LGR", "JGR", "JGL"]:
+        if scheme in _radau_like_schemes + _lobato_like_schemes:
             self.opti_points["u_s"] = u_opti[0, :]
         else:
             start_f = get_bary_extreme_f(
@@ -1078,7 +1093,7 @@ class _BU_Pseudospectral:
             self.opti_points["u_s"] = start_f(u_opti)
             u_like_x_opti = cas.vertcat(self.opti_points["u_s"], u_like_x_opti)
 
-        if scheme in ["LGL", "D2", "LGR_inv", "JGR_inv", "JGL"]:
+        if scheme in _radau_inv_schemes + _lobato_like_schemes:
             self.opti_points["u_e"] = u_opti[-1, :]
         else:
             end_f = get_bary_extreme_f(
@@ -1280,6 +1295,337 @@ class _BU_Pseudospectral:
                 n_coll, scheme, ii, h, scheme_order=order, precission=self.precission
             )
             self.opti.subject_to(q_and_der_matrix == I_mat @ polynomial_data)
+
+        # ----- Dynamics Constraints ----
+
+        indices = [ii for ii in range(n_arr)][coll_index]
+        for ii, jj in enumerate(indices):
+            # ii : collocation point counter
+            # jj : index in array of x
+            self.opti.subject_to(
+                dynam_f_x(
+                    x_opti[jj, :],
+                    x_dot_opti[jj, :],
+                    u_opti[ii, :],
+                    lam_opti[ii, :],
+                    params,
+                )
+                == 0
+            )
+
+
+class _TD_Pseudospectral:
+    def opti_setup(
+        self,
+        n_coll,
+        precission=16,
+        tol=1e-16,
+        p_opts=None,
+        s_opts=None,
+    ):
+        """
+        Creates and links the different opti variables to be used in the problem.
+        Requires the function dynamic_setup() to have been run prior.
+        Arrays will be accesible through self.opti_arrs dictionary.
+        Points will be accesible through self.opti_points dictionary.
+
+        Parameters
+        ----------
+        n_coll : int
+            Number of collocation points
+        precission : int, optional
+            Precission decimals in collocation point computation.
+            The default is 20.
+
+        Raises
+        ------
+        NotImplementedError
+            If the selected scheme is not yet available
+        RuntimeError
+            If mistakenly this function is run before dynamic_setup()
+
+        Returns
+        -------
+        None.
+
+        """
+
+        try:
+            order = self.order
+            n_q = self.n_q
+            n_u = self.n_u
+
+        except AttributeError:
+            raise RuntimeError(
+                "Dynamics must be computed before opti setup, use dynamic_setup()"
+            )
+
+        scheme = self.scheme
+        t_start = self.t_start
+        t_end = self.t_end
+        self.n_coll = n_coll
+        self.precission = precission
+        coll_index = get_coll_indices(scheme)
+        self.coll_index = coll_index
+
+        opti = cas.Opti()
+        if p_opts is None:
+            if self.verbose:
+                p_opts = {
+                    "expand": True,
+                }
+            else:
+                p_opts = {"expand": True, "ipopt.print_level": 0, "print_time": 0}
+        if s_opts is None:
+            s_opts = {
+                "max_iter": 10000,
+                "tol": tol,
+            }  # investigate how to make it work adding 'linear_solver' : "MA27"}
+        opti.solver("ipopt", p_opts, s_opts)
+        self.opti = opti
+
+        construction_points_tau = TD_construction_points(
+            n_coll, scheme, order, precission
+        )
+        collocation_points_tau = BU_coll_points(n_coll, scheme, order, precission)
+        n_arr = len(construction_points_tau)
+        self.n_arr = n_arr
+
+        x_opti = opti.variable(n_arr, order * n_q)
+        x_dot_opti = opti.variable(n_arr, order * n_q)
+        u_opti = opti.variable(n_coll, n_u)
+        u_like_x_opti = u_opti
+        q_constr_opti = opti.variable(n_coll + order, n_q)
+
+        q_and_ders = []
+        for _ii in range(order):
+            q_and_ders.append(x_opti[:, n_q * _ii : n_q * (_ii + 1)])
+        q_and_ders.append(x_dot_opti[:, -n_q:])
+
+        q_and_ders_names = get_q_and_ders_names(order)
+        self.q_and_ders_names = q_and_ders_names[: order + 1]
+        lam_opti = opti.variable(n_coll, self.n_lambdas)
+
+        tau_arr = array(construction_points_tau, dtype="float64")
+        col_tau_arr = array(collocation_points_tau, dtype="float64")
+        t_arr = tau_to_t_points(tau_arr, t_start, t_end)
+        col_t_arr = tau_to_t_points(col_tau_arr, t_start, t_end)
+
+        self.opti_arrs = {
+            "x": x_opti,
+            "x_like_u": x_opti[coll_index, :],
+            "x_d": x_dot_opti,
+            "x_d_like_u": x_dot_opti[coll_index, :],
+            "u": u_opti,
+            "t": t_arr,
+            "t_col": col_t_arr,
+            "tau": tau_arr,
+            "tau_col": col_tau_arr,
+            "lam": lam_opti,
+            "q_constr": q_constr_opti,
+        }
+
+        self.opti_points = {
+            "x_s": x_opti[0, :],
+            "x_e": x_opti[-1, :],
+            "x_d_s": x_dot_opti[0, :],
+            "x_d_e": x_dot_opti[-1, :],
+        }
+        if scheme in _radau_like_schemes + _lobato_like_schemes:
+            self.opti_points["u_s"] = u_opti[0, :]
+        else:
+            start_f = get_bary_extreme_f(
+                scheme, n_coll, mode="u", point="start", order=order
+            )
+            self.opti_points["u_s"] = start_f(u_opti)
+            u_like_x_opti = cas.vertcat(self.opti_points["u_s"], u_like_x_opti)
+
+        if scheme in _radau_inv_schemes + _lobato_like_schemes:
+            self.opti_points["u_e"] = u_opti[-1, :]
+        else:
+            end_f = get_bary_extreme_f(
+                scheme, n_coll, mode="u", point="end", order=order
+            )
+            self.opti_points["u_e"] = end_f(u_opti)
+            u_like_x_opti = cas.vertcat(u_like_x_opti, self.opti_points["u_e"])
+        self.opti_arrs["u_like_x"] = u_like_x_opti
+
+        for _ii in range(order + 1):
+            _name = q_and_ders_names[_ii]
+            _arr = q_and_ders[_ii]
+            self.opti_arrs[_name] = _arr
+            self.opti_arrs[_name + "_like_u"] = _arr[coll_index, :]
+            self.opti_points[_name + "_s"] = _arr[0, :]
+            self.opti_points[_name + "_e"] = _arr[-1, :]
+
+    def u_sq_cost(self):
+        """
+        Calculates a trapezoidal integration of u squared and sets it
+        as the optimization cost to minimize
+
+        Requires the functions dynamic_setup() and opti_setup(), in that order,
+        to have been run prior.
+
+        Raises
+        ------
+        RuntimeError
+            If opti_setup() or dynamic_setup() have not ben run previously
+
+        Returns
+        -------
+        None.
+
+        """
+        try:
+            U = self.opti_arrs["u"]
+        except AttributeError:
+            raise RuntimeError(
+                "opti must be set up before defining cost, use opti_setup()"
+            )
+
+        dt = self.t_end - self.t_start
+
+        f_u_cost = _get_cost_obj_quad_int_cas(self.scheme, self.n_coll, squared=True)
+        cost = dt * cas.sum2(f_u_cost(U))
+
+        self.cost = cost
+        self.opti.minimize(cost)
+
+    def quad_cost(self, arr, squared=False):
+        """
+        Calculates a quadrature integration of an array and sets it
+        as the optimization cost to minimize
+
+        Requires the functions dynamic_setup() and opti_setup(), in that order,
+        to have been run prior.
+
+        Raises
+        ------
+        RuntimeError
+            If opti_setup() or dynamic_setup() have not ben run previously
+
+        Returns
+        -------
+        None.
+
+        """
+
+        dt = self.t_end - self.t_start
+        N_col = self.n_coll
+        N_arr = arr.shape[0]
+
+        if N_arr != N_col:
+            raise ValueError(
+                "Unrecognized shape of arr, not equal to number"
+                + " of collocation points"
+            )
+
+        f_u_cost = _get_cost_obj_quad_int_cas(
+            self.scheme, self.n_coll, self.order, squared
+        )
+        cost = dt * cas.sum2(f_u_cost(arr))
+
+        self.cost = cost
+        self.opti.minimize(cost)
+
+    def trapz_cost(self, arr, squared=False):
+        """
+        Calculates a trapezoidal integration of an array and sets it
+        as the optimization cost to minimize
+
+        Requires the functions dynamic_setup() and opti_setup(), in that order,
+        to have been run prior.
+
+        Raises
+        ------
+        RuntimeError
+            If opti_setup() or dynamic_setup() have not ben run previously
+
+        Returns
+        -------
+        None.
+
+        """
+
+        dt = self.t_end - self.t_start
+        N = self.n_arr
+        N_col = self.n_coll
+        N_arr = arr.shape[0]
+
+        if N_arr == N_col:
+            mode = "u"
+        elif N_arr == N:
+            mode = "x"
+        else:
+            raise ValueError(
+                "Unrecognized shape of arr, not equal to number"
+                + " of node nor collocation points"
+            )
+
+        f_u_cost = _get_cost_obj_trap_int_cas(
+            self.scheme, self.n_coll, self.order, mode, squared
+        )
+        cost = dt * cas.sum2(f_u_cost(arr))
+
+        self.cost = cost
+        self.opti.minimize(cost)
+
+    def apply_scheme(self):
+        """
+        Applies the restrictions corresponding to the selected scheme to
+        the opti variables.
+
+        Requires the functions dynamic_setup() and opti_setup(), in that order,
+        to have been run prior.
+
+        Raises
+        ------
+        RuntimeError
+            If opti_setup() or dynamic_setup() have not ben run previously
+
+        Returns
+        -------
+        None.
+
+        """
+        scheme = self.scheme
+        try:
+            n_arr = self.n_arr
+            n_coll = self.n_coll
+        except AttributeError:
+            raise RuntimeError(
+                "opti must be set up before applying constraints, use opti_setup()"
+            )
+
+        order = self.order
+        q_and_ders_names = get_q_and_ders_names(order)
+        h = self.t_end - self.t_start
+
+        dynam_f_x = self.dyn_f_restr
+        x_opti = self.opti_arrs["x"]
+        x_dot_opti = self.opti_arrs["x_d"]
+        # highest_q_d_opti = self.opti_arrs[q_and_ders_names[-1]]
+        u_opti = self.opti_arrs["u"]
+        lam_opti = self.opti_arrs["lam"]
+        q_constr_opti = self.opti_arrs["q_constr"]
+        params = self.params
+
+        coll_index = self.coll_index
+        q_and_ders_0 = []
+        for ii in q_and_ders_names[:-1]:
+            q_and_ders_0.append(self.opti_points[ii + "_s"])
+        # highest_q_d_opti_coll = highest_q_d_opti[coll_index, :]
+        # polynomial_data = cas.vertcat(*q_and_ders_0, highest_q_d_opti_coll)
+
+        D_nu = matrix_D_nu(order + n_coll)
+        L = matrix_L(n_coll, scheme, order, self.precission)
+
+        # ----- Scheme Constraints ----
+
+        for ii in range(order + 1):
+            q_and_der_matrix = self.opti_arrs[q_and_ders_names[ii]]
+            deriv_matrix = 2 / h * L @ matrix_power(D_nu, ii)
+            self.opti.subject_to(q_and_der_matrix == deriv_matrix @ q_constr_opti)
 
         # ----- Dynamics Constraints ----
 
@@ -2812,7 +3158,10 @@ class _Lin_init:
         q_opti, v_opti, a_opti = self._ini_guess_start()
         if self.scheme_mode == "equispaced":
             N = self.N + 1  # Number of segments
-        elif self.scheme_mode == "bottom-up pseudospectral":
+        elif self.scheme_mode in [
+            "bottom-up pseudospectral",
+            "top-down pseudospectral",
+        ]:
             N = self.n_arr  # Number of points in X
         elif self.scheme_mode == "pseudospectral":
             N = self.N  # Number of Node Points
@@ -2938,7 +3287,7 @@ def Opti_Problem(
             "hsn" : Hermite-Simpson scheme adapted to order N
             "hsn_parab" : Hermite-Simpson scheme adapted to order N with parabolic U
 
-                Top-Down Pseudospectral Schemes:
+                Usual Pseudospectral Schemes:
             "LG" Legendre-Gauss Collocation
             "LG_inv" LG Colocation with enpoint instead of startpoint as node point
             "LGR" Legendre-Gauss-Radau Collocation
@@ -3017,11 +3366,14 @@ def Opti_Problem(
         inherit.append(_Pseudospectral)
     elif scheme in _implemented_bottom_up_pseudospectral_schemes:
         inherit.append(_BU_Pseudospectral)
+    elif scheme in _implemented_top_down_pseudospectral_schemes:
+        inherit.append(_TD_Pseudospectral)
     else:
         _v = (
             _implemented_equispaced_schemes
             + _implemented_pseudospectral_schemes
             + _implemented_bottom_up_pseudospectral_schemes
+            + _implemented_top_down_pseudospectral_schemes
         )
         raise NotImplementedError(
             f"scheme {scheme} not implemented. Valid methods are {_v}."

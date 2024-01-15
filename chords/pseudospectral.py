@@ -520,7 +520,7 @@ def matrix_D_bary(N, scheme, precission=16):
             'CGR'
             'CGR_inv'
             'CGL'
-    precission: int, default 20
+    precission: int, default 16
         number of decimal places of precission
 
     Returns
