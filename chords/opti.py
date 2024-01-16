@@ -424,8 +424,11 @@ class _Opti_Problem:
             )
         return q_opti, v_opti, a_opti
 
-    def _save_results(self):
+    def _save_results(self, results=None):
         """Saves results of optimization in dictionary 'results'"""
+        if results is None:
+            results = {}
+        self.results = results
         self.results["scheme_mode"] = self.scheme_mode
         self.results["n_q"] = self.n_q
         self.results["n_u"] = self.n_u
@@ -474,13 +477,13 @@ class _Opti_Problem:
         else:
             cost_out = sol.value(self.cost)
 
-        self.results = {
+        results = {
             "cpudt": cpudt,
             "iter_count": self.opti.stats()["iter_count"],
             "cost": cost_out,
             "opti_stats": self.opti.stats(),
         }
-        self._save_results()
+        self._save_results(results)
 
     def chrono_solve(self, solve_repetitions):
         """
@@ -520,13 +523,13 @@ class _Opti_Problem:
         else:
             cost_out = sol.value(self.cost)
 
-        self.results = {
+        results = {
             "cpudt": cpudt,
             "iter_count": self.opti.stats()["iter_count"],
             "cost": cost_out,
             "opti_stats": self.opti.stats(),
         }
-        self._save_results()
+        self._save_results(results)
 
 
 class _Pseudospectral:
