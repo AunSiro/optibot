@@ -93,6 +93,14 @@ _implemented_bottom_up_pseudospectral_schemes = [
     "BU_" + _sch for _sch in _implemented_bottom_up_pseudospectral_schemes
 ]
 
+_all_ps_schemes = (
+    _implemented_bottom_up_pseudospectral_schemes
+    + _implemented_top_down_pseudospectral_schemes
+    + _implemented_pseudospectral_schemes
+)
+
+_all_implemented_schemes = _all_ps_schemes + _implemented_equispaced_schemes
+
 
 def get_q_and_ders_names(order):
     q_and_ders_names = ["q", "v", "a", "jerk", "snap", "crackle", "pop"]
@@ -384,14 +392,8 @@ class _Opti_Problem:
             self.scheme_mode = "top-down pseudospectral"
             scheme = scheme[3:]
         else:
-            _v = (
-                _implemented_equispaced_schemes
-                + _implemented_pseudospectral_schemes
-                + _implemented_bottom_up_pseudospectral_schemes
-                + _implemented_top_down_pseudospectral_schemes
-            )
             raise NotImplementedError(
-                f"scheme {scheme} not implemented. Valid methods are {_v}."
+                f"scheme {scheme} not implemented. Valid methods are {_all_implemented_schemes}."
             )
         self.LM = LM
         self.params = params
@@ -424,6 +426,22 @@ class _Opti_Problem:
 
     def _save_results(self):
         """Saves results of optimization in dictionary 'results'"""
+        self.results["scheme_mode"] = self.scheme_mode
+        self.results["n_q"] = self.n_q
+        self.results["n_u"] = self.n_u
+        self.results["order"] = self.order
+        if self.scheme_mode == "equispaced":
+            self.results["N"] = self.N
+            self.results["scheme"] = self.scheme
+        else:
+            self.results["n_coll"] = self.n_coll
+            if self.scheme_mode == "bottom-up pseudospectral":
+                self.results["scheme"] = "BU_" + self.scheme
+            elif self.scheme_mode == "top-up pseudospectral":
+                self.results["scheme"] = "TD_" + self.scheme
+            else:
+                self.results["scheme"] = self.scheme
+
         for key in self.opti_arrs.keys():
             opti_arr = self.opti_arrs[key]
             self.results[key] = self.sol.value(opti_arr)
@@ -514,7 +532,7 @@ class _Opti_Problem:
 class _Pseudospectral:
     def opti_setup(
         self,
-        col_points,
+        n_coll,
         precission=16,
         tol=1e-16,
         p_opts=None,
@@ -528,7 +546,7 @@ class _Pseudospectral:
 
         Parameters
         ----------
-        col_points : int
+        n_coll : int
             Number of collocation points
         precission : int, optional
             Precission decimals in collocation point computation.
@@ -550,7 +568,7 @@ class _Pseudospectral:
         scheme = self.scheme
         t_start = self.t_start
         t_end = self.t_end
-        self.col_points = col_points
+        self.n_coll = n_coll
         coll_index = get_coll_indices_from_nodes(scheme)
         self.coll_index = coll_index
 
@@ -572,28 +590,28 @@ class _Pseudospectral:
 
         opt_dict = {
             "LGL": [
-                col_points,
+                n_coll,
             ],
             "D2": [
-                col_points,
+                n_coll,
             ],
             "LG2": [
-                col_points + 2,
+                n_coll + 2,
             ],
             "LGLm": [
-                col_points + 2,
+                n_coll + 2,
             ],
             "LG": [
-                col_points + 1,
+                n_coll + 1,
             ],
             "LGR": [
-                col_points + 1,
+                n_coll + 1,
             ],
             "LGR_inv": [
-                col_points + 1,
+                n_coll + 1,
             ],
             "JG": [
-                col_points + 2,
+                n_coll + 2,
             ],
         }
         N = opt_dict[scheme][0]
@@ -625,13 +643,13 @@ class _Pseudospectral:
                 "Dynamics must be computed before opti setup, use dynamic_setup()"
             )
 
-        u_opti = opti.variable(col_points, self.n_u)
+        u_opti = opti.variable(n_coll, self.n_u)
         u_like_x_opti = u_opti
         tau_arr = array(node_points(N, scheme, precission), dtype="float64")
-        col_arr = array(coll_points(col_points, scheme, precission), dtype="float64")
+        col_arr = array(coll_points(n_coll, scheme, precission), dtype="float64")
         t_arr = ((t_end - t_start) * tau_arr + (t_start + t_end)) / 2
         t_col_arr = ((t_end - t_start) * col_arr + (t_start + t_end)) / 2
-        lam_opti = opti.variable(col_points, self.n_lambdas)
+        lam_opti = opti.variable(n_coll, self.n_lambdas)
 
         self.opti_arrs = {
             "x": x_opti,
@@ -692,7 +710,7 @@ class _Pseudospectral:
             self.opti_points["u_s"] = u_opti[0, :]
         else:
             start_f = get_bary_extreme_f(
-                scheme, col_points, mode="u", point="start", order=self.order
+                scheme, n_coll, mode="u", point="start", order=self.order
             )
             self.opti_points["u_s"] = start_f(u_opti)
             u_like_x_opti = cas.vertcat(self.opti_points["u_s"], u_like_x_opti)
@@ -701,7 +719,7 @@ class _Pseudospectral:
             self.opti_points["u_e"] = u_opti[-1, :]
         else:
             end_f = get_bary_extreme_f(
-                scheme, col_points, mode="u", point="end", order=self.order
+                scheme, n_coll, mode="u", point="end", order=self.order
             )
             self.opti_points["u_e"] = end_f(u_opti)
             if scheme != "LG":
@@ -739,9 +757,7 @@ class _Pseudospectral:
 
         dt = self.t_end - self.t_start
 
-        f_u_cost = _get_cost_obj_quad_int_cas(
-            self.scheme, self.col_points, squared=True
-        )
+        f_u_cost = _get_cost_obj_quad_int_cas(self.scheme, self.n_coll, squared=True)
         cost = dt * cas.sum2(f_u_cost(U))
 
         self.cost = cost
@@ -767,7 +783,7 @@ class _Pseudospectral:
         """
 
         dt = self.t_end - self.t_start
-        N_col = self.col_points
+        N_col = self.n_coll
         N_arr = arr.shape[0]
 
         if N_arr != N_col:
@@ -777,7 +793,7 @@ class _Pseudospectral:
             )
 
         f_u_cost = _get_cost_obj_quad_int_cas(
-            self.scheme, self.col_points, self.order, squared
+            self.scheme, self.n_coll, self.order, squared
         )
         cost = dt * cas.sum2(f_u_cost(arr))
 
@@ -805,7 +821,7 @@ class _Pseudospectral:
 
         dt = self.t_end - self.t_start
         N = self.N
-        N_col = self.col_points
+        N_col = self.n_coll
         N_arr = arr.shape[0]
 
         if N_arr == N_col:
@@ -819,7 +835,7 @@ class _Pseudospectral:
             )
 
         f_u_cost = _get_cost_obj_trap_int_cas(
-            self.scheme, self.col_points, self.order, mode, squared
+            self.scheme, self.n_coll, self.order, mode, squared
         )
         cost = dt * cas.sum2(f_u_cost(arr))
 
@@ -1648,7 +1664,7 @@ class _TD_Pseudospectral:
 # class _Pseudospectral_multi:
 #     def opti_setup(
 #         self,
-#         col_points,
+#         n_coll,
 #         segment_num,
 #         precission=16,
 #     ):
@@ -1660,7 +1676,7 @@ class _TD_Pseudospectral:
 
 #         Parameters
 #         ----------
-#         col_points : int
+#         n_coll : int
 #             Number of collocation points in each segment
 #         segment_num : int
 #             Number of segments
@@ -1684,7 +1700,7 @@ class _TD_Pseudospectral:
 #         scheme = self.scheme
 #         t_start = self.t_start
 #         t_end = self.t_end
-#         self.col_points = col_points
+#         self.n_coll = n_coll
 
 #         opti = cas.Opti()
 #         if p_opts is None:
@@ -1704,16 +1720,16 @@ class _TD_Pseudospectral:
 
 #         opt_dict = {
 #             "LGL_m": [
-#                 col_points,
+#                 n_coll,
 #             ],
 #             "D2_m": [
-#                 col_points,
+#                 n_coll,
 #             ],
 #             "LG2_m": [
-#                 col_points + 2,
+#                 n_coll + 2,
 #             ],
 #             "LG_m": [
-#                 col_points + 1,
+#                 n_coll + 1,
 #             ],
 #         }
 #         N = opt_dict[scheme][0]
@@ -1748,12 +1764,12 @@ class _TD_Pseudospectral:
 #                 "Dynamics must be computed before opti setup, use dynamic_setup()"
 #             )
 
-#         u_opti = opti.variable(col_points, self.n_u)
+#         u_opti = opti.variable(n_coll, self.n_u)
 #         tau_arr = array(node_points(N, scheme, precission), dtype="float64")
-#         col_arr = array(coll_points(col_points, scheme, precission), dtype="float64")
+#         col_arr = array(coll_points(n_coll, scheme, precission), dtype="float64")
 #         t_arr = ((t_end - t_start) * tau_arr + (t_start + t_end)) / 2
 #         t_col_arr = ((t_end - t_start) * col_arr + (t_start + t_end)) / 2
-#         lam_opti = opti.variable(col_points, self.n_lambdas)
+#         lam_opti = opti.variable(n_coll, self.n_lambdas)
 
 #         self.opti_arrs = {
 #             "x": x_opti,
@@ -1837,7 +1853,7 @@ class _TD_Pseudospectral:
 
 #         dt = self.t_end - self.t_start
 
-#         f_u_cost = _get_cost_obj_trap_int_cas(self.scheme, self.col_points)
+#         f_u_cost = _get_cost_obj_trap_int_cas(self.scheme, self.n_coll)
 #         cost = dt * cas.sum2(f_u_cost(U))
 
 #         self.cost = cost
@@ -2561,31 +2577,31 @@ class _Custom:
             x_opti_line = []
             u_opti_line = []
             for coordinate in range(n_q):
-                col_points = point_structure_q[segment, coordinate]
+                n_coll = point_structure_q[segment, coordinate]
                 opt_dict = {
                     "LGL": [
-                        col_points,
+                        n_coll,
                     ],
                     "D2": [
-                        col_points,
+                        n_coll,
                     ],
                     "LG2": [
-                        col_points + 2,
+                        n_coll + 2,
                     ],
                     "LGLm": [
-                        col_points + 2,
+                        n_coll + 2,
                     ],
                     "LG": [
-                        col_points + 1,
+                        n_coll + 1,
                     ],
                     "LGR": [
-                        col_points + 1,
+                        n_coll + 1,
                     ],
                     "LGR_inv": [
-                        col_points + 1,
+                        n_coll + 1,
                     ],
                     "JG": [
-                        col_points + 2,
+                        n_coll + 2,
                     ],
                 }
                 N = opt_dict[local_scheme][0]
@@ -2616,14 +2632,14 @@ class _Custom:
                         "Dynamics must be computed before opti setup, use dynamic_setup()"
                     )
 
-                u_opti = opti.variable(col_points, self.n_u)
+                u_opti = opti.variable(n_coll, self.n_u)
                 tau_arr = array(node_points(N, scheme, precission), dtype="float64")
                 col_arr = array(
-                    coll_points(col_points, scheme, precission), dtype="float64"
+                    coll_points(n_coll, scheme, precission), dtype="float64"
                 )
                 t_arr = ((t_end - t_start) * tau_arr + (t_start + t_end)) / 2
                 t_col_arr = ((t_end - t_start) * col_arr + (t_start + t_end)) / 2
-                lam_opti = opti.variable(col_points, self.n_lambdas)
+                lam_opti = opti.variable(n_coll, self.n_lambdas)
 
         self.opti_arrs = {
             "x": x_opti,
@@ -3369,14 +3385,8 @@ def Opti_Problem(
     elif scheme in _implemented_top_down_pseudospectral_schemes:
         inherit.append(_TD_Pseudospectral)
     else:
-        _v = (
-            _implemented_equispaced_schemes
-            + _implemented_pseudospectral_schemes
-            + _implemented_bottom_up_pseudospectral_schemes
-            + _implemented_top_down_pseudospectral_schemes
-        )
         raise NotImplementedError(
-            f"scheme {scheme} not implemented. Valid methods are {_v}."
+            f"scheme {scheme} not implemented. Valid methods are {_all_implemented_schemes}."
         )
 
     # Depending on the inicialization type:
