@@ -9,10 +9,11 @@ the workflow and to streamline the utilization of Chords and plotting the result
 """
 import matplotlib.pyplot as plt
 import numpy as np
-from sympy import legendre_poly
+
+# from sympy import legendre_poly
 from functools import lru_cache
 from math import ceil, factorial
-from .pseudospectral import LG, bary_poly, coll_points, bary_poly_2d
+from .pseudospectral import bary_poly, coll_points, bary_poly_2d
 from .numpy import combinefunctions, store_results
 
 # Uniform output style functions
