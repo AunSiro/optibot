@@ -37,7 +37,7 @@ from numpy import (
     interp,
     gradient,
     linspace,
-    eye,
+    # eye,
     arange,
     expand_dims,
 )
@@ -506,17 +506,19 @@ def Extreme_Matrix(N_coll, scheme, point, scheme_order=2, precission=16):
     return matrix
 
 
-def Polynomial_interpolations_BU(xx_dot, x_0, uu, scheme, scheme_order, t0, tf, N_coll):
+def Polynomial_interpolations_BU(
+    xx_dot, x_0, uu, scheme, problem_order, t0, tf, N_coll, scheme_order=2
+):
     if scheme[:3] == "BU_":
         scheme = scheme[3:]
-    n_q = len(x_0) // scheme_order
+    n_q = len(x_0) // problem_order
     highest_der = xx_dot[:, -n_q:]
     coll_index = get_coll_indices(scheme)
     highest_der_col = highest_der[coll_index, :]
     n_col = highest_der_col.shape[0]
 
     q_and_ders = []
-    for _ii in range(scheme_order):
+    for _ii in range(problem_order):
         q_and_ders.append(x_0[n_q * _ii : n_q * (_ii + 1)])
 
     coll_points = tau_to_t_points(BU_coll_points(n_col, scheme, scheme_order), t0, tf)
@@ -526,10 +528,10 @@ def Polynomial_interpolations_BU(xx_dot, x_0, uu, scheme, scheme_order, t0, tf, 
     q_and_der_polys = [
         highest_der_poly,
     ]
-    for ii in range(scheme_order):
+    for ii in range(problem_order):
         _prev_poly = q_and_der_polys[-1]
         _new_poly = poly_integral_2d(
-            _prev_poly, n_col - 1 + ii, t0, tf, q_and_ders[scheme_order - ii - 1]
+            _prev_poly, n_col - 1 + ii, t0, tf, q_and_ders[problem_order - ii - 1]
         )
         q_and_der_polys.append(_new_poly)
 
@@ -545,9 +547,10 @@ def interpolations_BU_pseudospectral(
     xx_dot,
     uu,
     scheme,
-    scheme_order,
+    problem_order,
     t0,
     tf,
+    scheme_order=2,
     u_interp="pol",
     x_interp="pol",
     n_interp=5000,
@@ -581,7 +584,7 @@ def interpolations_BU_pseudospectral(
             'CGR'
             'CGR_inv'
             'CGL'
-    scheme_order : int
+    problem_order : int
         differential order of the problem
     t0 : float
         starting time of interval of analysis
@@ -618,7 +621,7 @@ def interpolations_BU_pseudospectral(
         x_0 = xx[0, :]
     else:
         x_0 = xx[0]
-    n_q = len(x_0) // scheme_order
+    n_q = len(x_0) // problem_order
     highest_der = xx_dot[:, -n_q:]
     coll_index = get_coll_indices(scheme)
     highest_der_col = highest_der[coll_index, :]
@@ -637,7 +640,7 @@ def interpolations_BU_pseudospectral(
 
     if "pol" in [x_interp, u_interp]:
         u_pol, q_and_der_polys = Polynomial_interpolations_BU(
-            xx_dot, x_0, uu, scheme, scheme_order, t0, tf, n_col
+            xx_dot, x_0, uu, scheme, problem_order, t0, tf, n_col
         )
 
     if u_interp == "pol":
@@ -666,7 +669,7 @@ def interpolations_BU_pseudospectral(
         )
     if x_interp == "pol":
         q_and_der_arrs = []
-        for ii in range(scheme_order + 1):
+        for ii in range(problem_order + 1):
             q_and_der_arrs.append(q_and_der_polys[ii](t_arr))
         q_and_der_arrs = concatenate(tuple(q_and_der_arrs), axis=1)
         x_arr = q_and_der_arrs[:, :-n_q]
@@ -744,10 +747,11 @@ def interpolations_deriv_BU_pseudospectral(
     xx,
     xx_dot,
     scheme,
-    scheme_order,
+    problem_order,
     deriv_order,
     t0,
     tf,
+    scheme_order=2,
     x_interp="pol",
     n_interp=5000,
 ):
@@ -818,7 +822,7 @@ def interpolations_deriv_BU_pseudospectral(
         x_0 = xx[0, :]
     else:
         x_0 = xx[0]
-    n_q = len(x_0) // scheme_order
+    n_q = len(x_0) // problem_order
     highest_der = xx_dot[:, -n_q:]
     coll_index = get_coll_indices(scheme)
     highest_der_col = highest_der[coll_index, :]
@@ -838,7 +842,7 @@ def interpolations_deriv_BU_pseudospectral(
     if x_interp == "pol":
         D = _matrix_D_bary(t_x)
         q_and_der_polys = Polynomial_interpolations_BU(
-            xx_dot, x_0, None, scheme, scheme_order, t0, tf, n_col
+            xx_dot, x_0, None, scheme, problem_order, t0, tf, n_col
         )
         for jj in range(deriv_order - 1):
             highest_der = D @ highest_der
@@ -846,7 +850,7 @@ def interpolations_deriv_BU_pseudospectral(
             q_and_der_polys.append(highest_der_poly)
 
         q_and_der_arrs = []
-        for ii in range(scheme_order):
+        for ii in range(problem_order):
             q_and_der_arrs.append(q_and_der_polys[ii + deriv_order](t_arr))
         x_deriv_arr = concatenate(tuple(q_and_der_arrs), axis=1)
 
@@ -879,11 +883,12 @@ def dynamic_error_BU(
     tf,
     F,
     t0=0,
+    problem_order=2,
     scheme_order=2,
     u_interp="pol",
     x_interp="pol",
     n_interp=2000,
-    scheme_params=None,
+    interp_order=None,
     mode="q",
 ):
     """
@@ -933,8 +938,10 @@ def dynamic_error_BU(
             x' = F(x, u, params)
     t0 : float, default = 0
         starting time of interval of analysis
-    scheme_order : int, default 2
+    problem_order : int, default 2
         differential order of the problem
+    scheme_order : int, default 2
+        differential order of the scheme if scheme is Jacobi Gauss
     u_interp :  string, optional
         Model of the interpolation that must be used. The default is "pol".
         Acceptable values are:
@@ -949,8 +956,9 @@ def dynamic_error_BU(
             "Hermite": Hermite's 3d order spline interpolation
     n_interp : int, default 2000
         number of interpolation points
-    scheme_params :dict or none, optional
-        Aditional parameters of the scheme. The default is None.
+    interp_order : int or None, default None
+        differential order of the problem interpolations.
+        If None, problem_order will be used
     mode : str, 'q' or 'x', default 'q'.
         if 'q': q and its derivatives will be used in G, such as:
             G(q(t), q'(t), u(t))
@@ -976,38 +984,39 @@ def dynamic_error_BU(
         x_0 = x_arr[0, :]
     else:
         x_0 = x_arr[0]
-    n_q = len(x_0) // scheme_order
+    n_q = len(x_0) // problem_order
 
-    if scheme_params is None:
-        scheme_params = {}
+    if interp_order is None:
+        interp_order = problem_order
     x_and_derivs = []
-    scheme_params["order"] = scheme_order
 
     x_interp_arr, x_dot_interp_arr, u_interp_arr = interpolations_BU_pseudospectral(
         x_arr,
         x_dot_arr,
         u_arr,
         scheme,
-        scheme_order,
+        interp_order,
         t0,
         tf,
+        scheme_order=scheme_order,
         u_interp=u_interp,
         x_interp=x_interp,
         n_interp=n_interp,
     )
 
-    x_and_derivs.append(get_x_divisions(x_interp_arr, scheme_order))
-    for jj in range(1, scheme_order + 1):
+    x_and_derivs.append(get_x_divisions(x_interp_arr, problem_order))
+    for jj in range(1, problem_order + 1):
         x_and_derivs.append(
             get_x_divisions(
                 interpolations_deriv_BU_pseudospectral(
                     x_arr,
                     x_dot_arr,
                     scheme,
-                    scheme_order,
+                    interp_order,
                     jj,
                     t0,
                     tf,
+                    scheme_order=scheme_order,
                     x_interp=x_interp,
                     n_interp=n_interp,
                 ),
@@ -1016,7 +1025,7 @@ def dynamic_error_BU(
         )
 
     q_and_d_interp = copy(x_interp_arr)
-    for jj in range(scheme_order):
+    for jj in range(problem_order):
         q_and_d_interp[:, n_q * jj : n_q * (jj + 1)] = x_and_derivs[jj][0]
 
     if mode == "q":
@@ -1034,9 +1043,9 @@ def dynamic_error_BU(
     x_and_derivs[0].append(f_interp)
 
     dyn_errs = []
-    for jj in range(scheme_order):
+    for jj in range(problem_order):
         dyn_errs_order = []
-        for ii in range(scheme_order - jj):
+        for ii in range(problem_order - jj):
             dyn_errs_order.append(
                 x_and_derivs[jj + 1][ii] - x_and_derivs[0][ii + jj + 1]
             )

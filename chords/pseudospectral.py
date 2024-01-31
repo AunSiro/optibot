@@ -433,7 +433,8 @@ def v_coef(N, i, scheme, precission=16, order=2):
             'CGR_inv'
             'CGL'
     precission: int, default 16
-        number of decimal places of precission
+        number of decimal places of precission in calculation
+        of collocation points
 
     Returns
     -------
@@ -448,7 +449,8 @@ def v_coef(N, i, scheme, precission=16, order=2):
             + ", but node points are only defined or order up to 2."
         )
     taus = node_points(N, scheme, precission)
-    return _v_sum(taus, i)
+    taus = list(2 * array(taus, dtype="float64"))
+    return N * _v_sum(taus, i)
 
 
 @lru_cache(maxsize=None)
@@ -480,8 +482,9 @@ def v_coef_coll(N, i, scheme, precission=16, order=2):
             'CGR'
             'CGR_inv'
             'CGL'
-    precission: int, default 20
-        number of decimal places of precission
+    precission: int, default 16
+        number of decimal places of precission in calculation
+        of collocation points
 
     Returns
     -------
@@ -490,7 +493,8 @@ def v_coef_coll(N, i, scheme, precission=16, order=2):
 
     """
     taus = coll_points(N, scheme, precission, order)
-    return _v_sum(taus, i)
+    taus = list(2 * array(taus, dtype="float64"))
+    return N * _v_sum(taus, i)
 
 
 @lru_cache(maxsize=2000)
@@ -521,7 +525,8 @@ def matrix_D_bary(N, scheme, precission=16):
             'CGR_inv'
             'CGL'
     precission: int, default 16
-        number of decimal places of precission
+        number of decimal places of precission in calculation
+        of collocation points
 
     Returns
     -------
