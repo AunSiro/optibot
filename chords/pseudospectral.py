@@ -23,8 +23,11 @@ from numpy import (
     arange,
     cos,
     pi,
+    prod,
 )
 from numpy import sum as npsum
+from numpy import max as npmax
+from numpy import min as npmin
 from numba import njit
 from .numpy import combinefunctions, store_results
 from .piecewise import interp_2d
@@ -395,12 +398,16 @@ def _v_sum(t_arr, i):
 
     """
     n = len(t_arr)
+    t_arr = array(t_arr, dtype="float64")
+    h = round(npmax(t_arr) - npmin(t_arr))
+    t_arr *= 4 / h
     prod_coef = [ii for ii in range(n)]
     prod_coef.pop(i)
-    v_i = 1.0
-    for jj in prod_coef:
-        v_i *= t_arr[i] - t_arr[jj]
-    return 1.0 / v_i
+    indices = array(prod_coef, dtype="int")
+    subst = t_arr[i] - t_arr
+    v_i = prod(subst[indices])
+
+    return n / v_i
 
 
 @lru_cache(maxsize=None)
@@ -449,8 +456,7 @@ def v_coef(N, i, scheme, precission=16, order=2):
             + ", but node points are only defined or order up to 2."
         )
     taus = node_points(N, scheme, precission)
-    taus = list(2 * array(taus, dtype="float64"))
-    return N * _v_sum(taus, i)
+    return _v_sum(taus, i)
 
 
 @lru_cache(maxsize=None)
@@ -493,8 +499,7 @@ def v_coef_coll(N, i, scheme, precission=16, order=2):
 
     """
     taus = coll_points(N, scheme, precission, order)
-    taus = list(2 * array(taus, dtype="float64"))
-    return N * _v_sum(taus, i)
+    return _v_sum(taus, i)
 
 
 @lru_cache(maxsize=2000)
