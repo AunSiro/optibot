@@ -24,10 +24,12 @@ from numpy import (
     cos,
     pi,
     prod,
+    float64,
 )
 from numpy import sum as npsum
 from numpy import max as npmax
 from numpy import min as npmin
+from numpy import round as npround
 from numba import njit
 from .numpy import combinefunctions, store_results
 from .piecewise import interp_2d
@@ -224,7 +226,7 @@ def node_points(N, scheme, precission=16):
     Parameters
     ----------
     N : int
-        Number of collocation points.
+        Number of node points.
     scheme : str
         Scheme name. Supported values are:
             'LG'
@@ -399,7 +401,7 @@ def _v_sum(t_arr, i):
     """
     n = len(t_arr)
     t_arr = array(t_arr, dtype="float64")
-    h = round(npmax(t_arr) - npmin(t_arr))
+    h = npround(npmax(t_arr) - npmin(t_arr))
     t_arr *= 4 / h
     prod_coef = [ii for ii in range(n)]
     prod_coef.pop(i)
@@ -824,66 +826,42 @@ def get_bary_extreme_f(scheme, N, mode="u", point="start", order=2):
 
     if point == "start":
         if mode == "u":
-            if scheme in ["LGL", "D2", "LGR", "JGR", "JGL", "CGL", "CGR"]:
+            if scheme in _lobato_like_schemes + _radau_like_schemes + ["D2"]:
                 return lambda coefs: coefs[0]
         elif mode == "x":
-            if scheme in [
-                "LGL",
-                "D2",
-                "LGR",
-                "LGR_inv",
-                "LG",
-                "LG2",
-                "LGLm",
-                "JG",
-                "CG",
-                "CGR",
-                "CGR_inv",
-                "CGL",
-            ]:
+            if scheme not in _gauss_inv_schemes:
                 return lambda coefs: coefs[0]
         else:
             raise ValueError(f"Invalid mode {mode}, accepted are u and x")
     elif point == "end":
         if mode == "u":
-            if scheme in ["LGL", "D2", "LGR_inv", "JGR_inv", "JGL", "CGL", "CGR_inv"]:
+            if scheme in _lobato_like_schemes + _radau_inv_schemes + ["D2"]:
                 return lambda coefs: coefs[-1]
         elif mode == "x":
-            if scheme in [
-                "LGL",
-                "D2",
-                "LGR",
-                "LGR_inv",
-                "LG_inv",
-                "LG2",
-                "LGLm",
-                "JG",
-                "JG_inv",
-                "CG",
-                "CGR",
-                "CGR_inv",
-                "CGL",
-            ]:
+            if scheme not in _gauss_like_schemes:
                 return lambda coefs: coefs[-1]
         else:
             raise ValueError(f"Invalid mode {mode}, accepted are u and x")
     else:
         raise ValueError(f"Invalid point {point}, accepted are start and end")
 
-    p = 1 if point == "end" else -1
+    p = 1.0 if point == "end" else -1.0
     v_gen = v_coef_coll if mode == "u" else v_coef
     precission = 16
 
     v_arr = [v_gen(N, ii, scheme, precission, order) for ii in range(N)]
-    t_arr = coll_points(N, scheme, precission, order)
+    if mode == "u":
+        t_arr = coll_points(N, scheme, precission, order)
+    else:
+        t_arr = node_points(N, scheme, precission)
     # Barycentric Formula: Sup: Superior, Inf:Inferior
     sup = []
     for i in range(N):
-        sup.append(float(v_arr[i] / (p - t_arr[i])))
+        sup.append(float64(v_arr[i] / (p - t_arr[i])))
     inf = 0
     for i in range(N):
         inf += v_arr[i] / (p - t_arr[i])
-    inf = float(inf)
+    inf = float64(inf)
 
     def extpoint(coefs):
         numsup = 0
@@ -892,6 +870,29 @@ def get_bary_extreme_f(scheme, N, mode="u", point="start", order=2):
         return numsup / inf
 
     return extpoint
+
+
+@lru_cache(maxsize=2000)
+@store_results
+def get_bary_extreme_f_cas(scheme, N, mode="u", point="start", order=2):
+    from casadi import SX, vertsplit, Function
+    from .casadi import sympy2casadi
+
+    x_cas = SX.sym("x", N)
+    x_sympy = symbols(f"c0:{N}")
+    fun = get_bary_extreme_f(scheme, N, mode, point, order)
+    sympy_expr = fun(x_sympy)
+    cas_expr = sympy2casadi(sympy_expr, x_sympy, vertsplit(x_cas))
+    cas_f = Function(
+        "x_poly_endpoint",
+        [
+            x_cas,
+        ],
+        [
+            cas_expr,
+        ],
+    )
+    return cas_f
 
 
 # @lru_cache(maxsize=2000)
@@ -906,9 +907,9 @@ def get_bary_extreme_f(scheme, N, mode="u", point="start", order=2):
 
 @lru_cache(maxsize=2000)
 @store_results
-def LG_diff_end_p_fun(N, precission=16):
+def diff_end_p_fun(N, scheme="LG", precission=16):
     coefs = symbols(f"c_0:{N}")
-    taus = node_points(N, "LG", precission)
+    taus = node_points(N, scheme, precission)
     x = symbols("x")
     pol_lag = lagrangePolynomial(taus, coefs)
     res = pol_lag.diff(x).subs(x, 1)
@@ -927,9 +928,9 @@ def LG_diff_end_p_fun(N, precission=16):
 
 @lru_cache(maxsize=2000)
 @store_results
-def LG_inv_diff_start_p_fun(N, precission=16):
+def diff_start_p_fun(N, scheme="LG_inv", precission=16):
     coefs = symbols(f"c_0:{N}")
-    taus = node_points(N, "LG_inv", precission)
+    taus = node_points(N, scheme, precission)
     x = symbols("x")
     pol_lag = lagrangePolynomial(taus, coefs)
     res = pol_lag.diff(x).subs(x, 0)
@@ -938,13 +939,13 @@ def LG_inv_diff_start_p_fun(N, precission=16):
 
 @lru_cache(maxsize=2000)
 @store_results
-def LG_end_p_fun_cas(N, precission=16):
+def end_p_fun_cas(N, scheme="LG", precission=16):
     from casadi import SX, vertsplit, Function
     from .casadi import sympy2casadi
 
     x_cas = SX.sym("x", N)
     x_sympy = symbols(f"c0:{N}")
-    fun = get_bary_extreme_f("LG", N, mode="x", point="end")
+    fun = get_bary_extreme_f(scheme, N, mode="x", point="end")
     sympy_expr = fun(x_sympy)
     cas_expr = sympy2casadi(sympy_expr, x_sympy, vertsplit(x_cas))
     cas_f = Function(
@@ -961,45 +962,57 @@ def LG_end_p_fun_cas(N, precission=16):
 
 @lru_cache(maxsize=2000)
 @store_results
-def LG_diff_end_p_fun_cas(N, precission=16):
+def diff_end_p_fun_cas(N, scheme="LG", precission=16):
     from casadi import SX, vertsplit, Function
     from .casadi import sympy2casadi
 
     coefs = symbols(f"c_0:{N}")
-    taus = node_points(N, "LG", precission)
+    taus = node_points(N, scheme, precission)
     pol_lag = lagrangePolynomial(taus, coefs)
     x = symbols("x")
     res = pol_lag.diff(x).subs(x, 1)
     x_cas = SX.sym("x", N)
     res_cas = sympy2casadi(res, coefs, vertsplit(x_cas))
-    return Function("dynamics_x", [x_cas], [res_cas])
+    return Function("endpoint_diff", [x_cas], [res_cas])
 
 
 @lru_cache(maxsize=2000)
 @store_results
-def LG_inv_start_p_fun_cas(N, precission=16):
-    _f = LG_end_p_fun_cas(N, precission)
+def start_p_fun_cas(N, scheme="LG_inv", precission=16):
+    from casadi import SX, vertsplit, Function
+    from .casadi import sympy2casadi
 
-    def cas_f(x_cas):
-        return _f(x_cas[::-1, :])
-
+    x_cas = SX.sym("x", N)
+    x_sympy = symbols(f"c0:{N}")
+    fun = get_bary_extreme_f(scheme, N, mode="x", point="start")
+    sympy_expr = fun(x_sympy)
+    cas_expr = sympy2casadi(sympy_expr, x_sympy, vertsplit(x_cas))
+    cas_f = Function(
+        "x_poly_startpoint",
+        [
+            x_cas,
+        ],
+        [
+            cas_expr,
+        ],
+    )
     return cas_f
 
 
 @lru_cache(maxsize=2000)
 @store_results
-def LG_inv_diff_start_p_fun_cas(N, precission=16):
+def diff_start_p_fun_cas(N, scheme="LG_inv", precission=16):
     from casadi import SX, vertsplit, Function
     from .casadi import sympy2casadi
 
     coefs = symbols(f"c_0:{N}")
-    taus = node_points(N, "LG_inv", precission)
+    taus = node_points(N, scheme, precission)
     pol_lag = lagrangePolynomial(taus, coefs)
     x = symbols("x")
     res = pol_lag.diff(x).subs(x, 0)
     x_cas = SX.sym("x", N)
     res_cas = sympy2casadi(res, coefs, vertsplit(x_cas))
-    return Function("dynamics_x", [x_cas], [res_cas])
+    return Function("startpoint_diff", [x_cas], [res_cas])
 
 
 # --- Interpolations and dynamic errors ---

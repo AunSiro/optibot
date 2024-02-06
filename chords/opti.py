@@ -37,12 +37,21 @@ from .pseudospectral import (
     node_points,
     coll_points,
     matrix_D_bary,
-    LG_end_p_fun_cas,
-    LG_inv_diff_start_p_fun_cas,
-    get_bary_extreme_f,
+    # end_p_fun_cas,
+    # start_p_fun_cas,
+    get_bary_extreme_f_cas,
     get_coll_indices_from_nodes,
 )
 from .pseudospectral import _implemented_schemes as _implemented_pseudospectral_schemes
+from .pseudospectral import (
+    _gauss_like_schemes,
+    _gauss_inv_schemes,
+    _gauss_2_schemes,
+    _radau_like_schemes,
+    _radau_inv_schemes,
+    _lobato_like_schemes,
+    _other_schemes,
+)
 from .bu_pseudospectral import (
     BU_coll_points,
     BU_construction_points,
@@ -50,10 +59,6 @@ from .bu_pseudospectral import (
     Extreme_Matrix,
     tau_to_t_points,
     get_coll_indices,
-    _gauss_like_schemes,
-    _radau_like_schemes,
-    _radau_inv_schemes,
-    _lobato_like_schemes,
 )
 from .bu_pseudospectral import (
     _implemented_schemes as _implemented_bottom_up_pseudospectral_schemes,
@@ -229,8 +234,10 @@ def _get_cost_obj_trap_int(scheme, N, order=2, mode="u", squared=True):
     t_arr = BU_construction_points(N, scheme, order) + [1.0]
     t_arr = [float(ii) for ii in t_arr]
     if mode in "ux":
-        start_p_f = get_bary_extreme_f(scheme, N, mode=mode, point="start", order=order)
-        end_p_f = get_bary_extreme_f(scheme, N, mode=mode, point="end", order=order)
+        start_p_f = get_bary_extreme_f_cas(
+            scheme, N, mode=mode, point="start", order=order
+        )
+        end_p_f = get_bary_extreme_f_cas(scheme, N, mode=mode, point="end", order=order)
     exp = 2 if squared else 1
 
     def obj_f(coefs):
@@ -571,9 +578,23 @@ class _Pseudospectral:
         scheme = self.scheme
         t_start = self.t_start
         t_end = self.t_end
+        order = self.order
         self.n_coll = n_coll
         coll_index = get_coll_indices_from_nodes(scheme)
         self.coll_index = coll_index
+        try:
+            order = self.order
+            n_q = self.n_q
+            n_u = self.n_u
+
+        except AttributeError:
+            raise RuntimeError(
+                "Dynamics must be computed before opti setup, use dynamic_setup()"
+            )
+        if scheme in _gauss_2_schemes + [
+            "D2",
+        ]:
+            assert order == 2
 
         opti = cas.Opti()
         if p_opts is None:
@@ -591,180 +612,189 @@ class _Pseudospectral:
         opti.solver("ipopt", p_opts, s_opts)
         self.opti = opti
 
-        opt_dict = {
-            "LGL": [
-                n_coll,
-            ],
-            "D2": [
-                n_coll,
-            ],
-            "LG2": [
-                n_coll + 2,
-            ],
-            "LGLm": [
-                n_coll + 2,
-            ],
-            "LG": [
-                n_coll + 1,
-            ],
-            "LGR": [
-                n_coll + 1,
-            ],
-            "LGR_inv": [
-                n_coll + 1,
-            ],
-            "JG": [
-                n_coll + 2,
-            ],
-        }
-        N = opt_dict[scheme][0]
-        self.N = N
-
-        D_mat = array(matrix_D_bary(N, scheme, precission), dtype="float64")
-        self.D_mat = D_mat
-
-        try:
-            if scheme in ["LGL", "LG", "LGR", "LGR_inv"]:
-                x_opti = opti.variable(N, 2 * self.n_q)
-                x_dot_opti = 2 / (t_end - t_start) * D_mat @ x_opti
-                q_opti = x_opti[:, : self.n_q]
-                v_opti = x_opti[:, self.n_q :]
-                a_opti = x_dot_opti[:, self.n_q :]
-
-            elif scheme in ["LG2", "D2", "LGLm", "JG"]:
-                q_opti = opti.variable(N, self.n_q)
-                v_opti = 2 / (t_end - t_start) * D_mat @ q_opti
-                a_opti = 2 / (t_end - t_start) * D_mat @ v_opti
-                x_opti = cas.horzcat(q_opti, v_opti)
-                x_dot_opti = cas.horzcat(v_opti, a_opti)
+        if scheme in _gauss_like_schemes + _gauss_inv_schemes:
+            n_nodes = n_coll + 1
+        elif scheme in _radau_inv_schemes + _radau_like_schemes:
+            n_nodes = n_coll + 1
+        elif scheme in _gauss_2_schemes:
+            n_nodes = n_coll + 2
+        elif scheme in _lobato_like_schemes:
+            n_nodes = n_coll
+        elif scheme in _other_schemes:
+            if scheme == "D2":
+                n_nodes = n_coll
             else:
                 raise NotImplementedError(
-                    f"scheme {scheme} not implemented in opti_setup."
+                    f"unrecognized scheme {scheme}. "
+                    + "Implementede schemes are { _implemented_pseudospectral_schemes}"
                 )
-        except AttributeError:
-            raise RuntimeError(
-                "Dynamics must be computed before opti setup, use dynamic_setup()"
+        else:
+            raise NotImplementedError(
+                f"unrecognized scheme {scheme}. "
+                + "Implementede schemes are { _implemented_pseudospectral_schemes}"
             )
 
-        u_opti = opti.variable(n_coll, self.n_u)
-        u_like_x_opti = u_opti
-        tau_arr = array(node_points(N, scheme, precission), dtype="float64")
-        col_arr = array(coll_points(n_coll, scheme, precission), dtype="float64")
-        t_arr = ((t_end - t_start) * tau_arr + (t_start + t_end)) / 2
-        t_col_arr = ((t_end - t_start) * col_arr + (t_start + t_end)) / 2
+        collocation_points_tau = coll_points(n_coll, scheme, precission)
+        node_points_tau = node_points(n_nodes, scheme, precission)
+        arr_points_tau = node_points_tau
+        n_arr = n_nodes
+
+        if scheme in _gauss_like_schemes:
+            n_arr = n_nodes + 1
+            arr_points_tau = arr_points_tau + [
+                1.0,
+            ]
+        elif scheme in _gauss_inv_schemes:
+            n_arr = n_nodes + 1
+            arr_points_tau = [
+                -1.0,
+            ] + arr_points_tau
+
+        self.n_nodes = n_nodes
+        self.n_arr = n_arr
+
+        D_mat = array(matrix_D_bary(n_nodes, scheme, precission), dtype="float64")
+        self.D_mat = D_mat
+
+        x_opti = opti.variable(n_arr, order * n_q)
+        x_dot_opti = opti.variable(n_arr, order * n_q)
+        if scheme in _gauss_like_schemes:
+            x_node_opti = x_opti[:-1, :]
+            x_dot_node_opti = x_dot_opti[:-1, :]
+        elif scheme in _gauss_inv_schemes:
+            x_node_opti = x_opti[1:, :]
+            x_dot_node_opti = x_dot_opti[1:, :]
+        else:
+            x_node_opti = x_opti
+            x_dot_node_opti = x_dot_opti
+        u_opti = opti.variable(n_coll, n_u)
+        u_like_x_opti = u_opti  # in later steps extreme points are added
+
+        q_and_ders = []
+        for _ii in range(order):
+            q_and_ders.append(x_opti[:, n_q * _ii : n_q * (_ii + 1)])
+        q_and_ders.append(x_dot_opti[:, -n_q:])
+        self.q_and_ders_opti = q_and_ders
+
+        q_and_ders_node = []
+        for _ii in range(order):
+            q_and_ders_node.append(x_node_opti[:, n_q * _ii : n_q * (_ii + 1)])
+        q_and_ders_node.append(x_dot_node_opti[:, -n_q:])
+        self.q_and_ders_node_opti = q_and_ders_node
+
+        q_and_ders_names = get_q_and_ders_names(order)
+        self.q_and_ders_names = q_and_ders_names[: order + 1]
         lam_opti = opti.variable(n_coll, self.n_lambdas)
+
+        tau_arr = array(arr_points_tau, dtype="float64")
+        node_tau_arr = array(node_points_tau, dtype="float64")
+        col_tau_arr = array(collocation_points_tau, dtype="float64")
+
+        t_arr = tau_to_t_points(tau_arr, t_start, t_end)
+        node_t_arr = tau_to_t_points(node_tau_arr, t_start, t_end)
+        col_t_arr = tau_to_t_points(col_tau_arr, t_start, t_end)
 
         self.opti_arrs = {
             "x": x_opti,
+            "x_node": x_node_opti,
+            "x_like_u": x_node_opti[coll_index, :],
             "x_d": x_dot_opti,
-            "q": q_opti,
-            "v": v_opti,
-            "a": a_opti,
+            "x_d_node": x_dot_node_opti,
+            "x_d_like_u": x_dot_node_opti[coll_index, :],
             "u": u_opti,
-            "lam": lam_opti,
-            "tau": tau_arr,
-            "tau_col": col_arr,
             "t": t_arr,
-            "t_col": t_col_arr,
+            "t_node": node_t_arr,
+            "t_col": col_t_arr,
+            "tau": tau_arr,
+            "tau_node": node_tau_arr,
+            "tau_col": col_tau_arr,
+            "lam": lam_opti,
         }
-
-        if scheme == "LGinv":
-            start_p_func = LG_inv_diff_start_p_fun_cas(N)
-            x_start = start_p_func(x_opti)
-            x_dot_start = start_p_func(x_dot_opti)
-            q_start = start_p_func(q_opti)
-            v_start = start_p_func(v_opti)
-            a_start = start_p_func(a_opti)
-        else:
-            x_start = x_opti[0, :]
-            x_dot_start = x_dot_opti[0, :]
-            q_start = q_opti[0, :]
-            v_start = v_opti[0, :]
-            a_start = a_opti[0, :]
-
-        if scheme == "LG":
-            end_p_func = LG_end_p_fun_cas(N)
-            x_end = end_p_func(x_opti)
-            x_dot_end = end_p_func(x_dot_opti)
-            q_end = end_p_func(q_opti)
-            v_end = end_p_func(v_opti)
-            a_end = end_p_func(a_opti)
-        else:
-            x_end = x_opti[-1, :]
-            x_dot_end = x_dot_opti[-1, :]
-            q_end = q_opti[-1, :]
-            v_end = v_opti[-1, :]
-            a_end = a_opti[-1, :]
 
         self.opti_points = {
-            "x_s": x_start,
-            "x_e": x_end,
-            "x_d_s": x_dot_start,
-            "x_d_e": x_dot_end,
-            "q_s": q_start,
-            "q_e": q_end,
-            "v_s": v_start,
-            "v_e": v_end,
-            "a_s": a_start,
-            "a_e": a_end,
+            "x_s": x_opti[0, :],
+            "x_e": x_opti[-1, :],
+            "x_d_s": x_dot_opti[0, :],
+            "x_d_e": x_dot_opti[-1, :],
         }
-
-        if scheme in ["LGL", "D2", "LGR", "JGR", "JGL"]:
+        if scheme in _radau_like_schemes + _lobato_like_schemes + [
+            "D2",
+        ]:
             self.opti_points["u_s"] = u_opti[0, :]
         else:
-            start_f = get_bary_extreme_f(
-                scheme, n_coll, mode="u", point="start", order=self.order
+            start_f = get_bary_extreme_f_cas(
+                scheme, n_coll, mode="u", point="start", order=order
             )
             self.opti_points["u_s"] = start_f(u_opti)
             u_like_x_opti = cas.vertcat(self.opti_points["u_s"], u_like_x_opti)
 
-        if scheme in ["LGL", "D2", "LGR_inv", "JGR_inv", "JGL"]:
+        if scheme in _radau_inv_schemes + _lobato_like_schemes + [
+            "D2",
+        ]:
             self.opti_points["u_e"] = u_opti[-1, :]
         else:
-            end_f = get_bary_extreme_f(
-                scheme, n_coll, mode="u", point="end", order=self.order
+            end_f = get_bary_extreme_f_cas(
+                scheme, n_coll, mode="u", point="end", order=order
             )
             self.opti_points["u_e"] = end_f(u_opti)
-            if scheme != "LG":
-                u_like_x_opti = cas.vertcat(u_like_x_opti, self.opti_points["u_e"])
+            u_like_x_opti = cas.vertcat(u_like_x_opti, self.opti_points["u_e"])
+
         self.opti_arrs["u_like_x"] = u_like_x_opti
-        for _name in ["x", "x_d", "q", "v", "a"]:
-            _arr = self.opti_arrs[_name]
+
+        for _ii in range(order + 1):
+            _name = q_and_ders_names[_ii]
+            _arr = q_and_ders[_ii]
+            _arr_node = q_and_ders_node[_ii]
             self.opti_arrs[_name] = _arr
-            self.opti_arrs[_name + "_like_u"] = _arr[coll_index, :]
+            self.opti_arrs[_name + "_node"] = _arr_node
+            self.opti_arrs[_name + "_like_u"] = _arr_node[coll_index, :]
+            self.opti_points[_name + "_s"] = _arr[0, :]
+            self.opti_points[_name + "_e"] = _arr[-1, :]
 
-    def u_sq_cost(self):
-        """
-        Calculates a trapezoidal integration of u squared and sets it
-        as the optimization cost to minimize
+        # try:
+        #     if scheme in ["LGL", "LG", "LGR", "LGR_inv"]:
+        #         x_opti = opti.variable(N, 2 * self.n_q)
+        #         x_dot_opti = 2 / (t_end - t_start) * D_mat @ x_opti
+        #         q_opti = x_opti[:, : self.n_q]
+        #         v_opti = x_opti[:, self.n_q :]
+        #         a_opti = x_dot_opti[:, self.n_q :]
 
-        Requires the functions dynamic_setup() and opti_setup(), in that order,
-        to have been run prior.
+        #     elif scheme in ["LG2", "D2", "LGLm", "JG"]:
+        #         q_opti = opti.variable(N, self.n_q)
+        #         v_opti = 2 / (t_end - t_start) * D_mat @ q_opti
+        #         a_opti = 2 / (t_end - t_start) * D_mat @ v_opti
+        #         x_opti = cas.horzcat(q_opti, v_opti)
+        #         x_dot_opti = cas.horzcat(v_opti, a_opti)
+        #     else:
+        #         raise NotImplementedError(
+        #             f"scheme {scheme} not implemented in opti_setup."
+        #         )
+        # except AttributeError:
+        #     raise RuntimeError(
+        #         "Dynamics must be computed before opti setup, use dynamic_setup()"
+        #     )
 
-        Raises
-        ------
-        RuntimeError
-            If opti_setup() or dynamic_setup() have not ben run previously
+        # u_opti = opti.variable(n_coll, self.n_u)
+        # u_like_x_opti = u_opti
+        # tau_arr = array(node_points(N, scheme, precission), dtype="float64")
+        # col_arr = array(coll_points(n_coll, scheme, precission), dtype="float64")
+        # t_arr = ((t_end - t_start) * tau_arr + (t_start + t_end)) / 2
+        # t_col_arr = ((t_end - t_start) * col_arr + (t_start + t_end)) / 2
+        # lam_opti = opti.variable(n_coll, self.n_lambdas)
 
-        Returns
-        -------
-        None.
-
-        """
-        try:
-            U = self.opti_arrs["u"]
-        except AttributeError:
-            raise RuntimeError(
-                "opti must be set up before defining cost, use opti_setup()"
-            )
-
-        dt = self.t_end - self.t_start
-
-        f_u_cost = _get_cost_obj_quad_int_cas(self.scheme, self.n_coll, squared=True)
-        cost = dt * cas.sum2(f_u_cost(U))
-
-        self.cost = cost
-        self.opti.minimize(cost)
+        # self.opti_arrs = {
+        #     "x": x_opti,
+        #     "x_d": x_dot_opti,
+        #     "q": q_opti,
+        #     "v": v_opti,
+        #     "a": a_opti,
+        #     "u": u_opti,
+        #     "lam": lam_opti,
+        #     "tau": tau_arr,
+        #     "tau_col": col_arr,
+        #     "t": t_arr,
+        #     "t_col": t_col_arr,
+        # }
 
     def quad_cost(self, arr, squared=False):
         """
@@ -803,6 +833,27 @@ class _Pseudospectral:
         self.cost = cost
         self.opti.minimize(cost)
 
+    def u_sq_cost(self):
+        """
+        Calculates a quadrature integration of u squared and sets it
+        as the optimization cost to minimize
+
+        Requires the functions dynamic_setup() and opti_setup(), in that order,
+        to have been run prior.
+
+        Raises
+        ------
+        RuntimeError
+            If opti_setup() or dynamic_setup() have not ben run previously
+
+        Returns
+        -------
+        None.
+
+        """
+        u_opti = self.opti_arrs["u"]
+        self.quad_cost(u_opti, squared=True)
+
     def trapz_cost(self, arr, squared=False):
         """
         Calculates a trapezoidal integration of an array and sets it
@@ -823,13 +874,13 @@ class _Pseudospectral:
         """
 
         dt = self.t_end - self.t_start
-        N = self.N
-        N_col = self.n_coll
-        N_arr = arr.shape[0]
+        n_arr = self.n_arr
+        n_coll = self.n_coll
+        N_arr_opt = arr.shape[0]
 
-        if N_arr == N_col:
+        if N_arr_opt == n_coll:
             mode = "u"
-        elif N_arr == N:
+        elif N_arr_opt == n_arr:
             mode = "x"
         else:
             raise ValueError(
@@ -865,127 +916,189 @@ class _Pseudospectral:
         """
         scheme = self.scheme
         try:
-            N = self.N
+            n_coll = self.n_coll
         except AttributeError:
             raise RuntimeError(
                 "opti must be set up before applying constraints, use opti_setup()"
             )
 
         dynam_f_x = self.dyn_f_restr
-        dynam_g_q = self.dyn_g_restr
+        # dynam_g_q = self.dyn_g_restr
         x_opti = self.opti_arrs["x"]
+        x_node_opti = self.opti_arrs["x_node"]
         x_dot_opti = self.opti_arrs["x_d"]
-        q_opti = self.opti_arrs["q"]
-        v_opti = self.opti_arrs["v"]
-        a_opti = self.opti_arrs["a"]
+        x_dot_node_opti = self.opti_arrs["x_d_node"]
+        # q_opti = self.opti_arrs["q"]
+        # v_opti = self.opti_arrs["v"]
+        # a_opti = self.opti_arrs["a"]
         u_opti = self.opti_arrs["u"]
         lam_opti = self.opti_arrs["lam"]
         params = self.params
+        q_and_ders = self.q_and_ders_opti
+        q_and_ders_node = self.q_and_ders_node_opti
+        D_mat = self.D_mat
+        t_start = self.t_start
+        t_end = self.t_end
+        n_nodes = self.n_nodes
 
-        if scheme == "LGL":
-            for ii in range(N):
-                self.opti.subject_to(
-                    dynam_f_x(
-                        x_opti[ii, :],
-                        x_dot_opti[ii, :],
-                        u_opti[ii, :],
-                        lam_opti[ii, :],
-                        params,
-                    )
-                    == 0
-                )
-        elif scheme == "LG":
-            for ii in range(1, N):
-                self.opti.subject_to(
-                    dynam_f_x(
-                        x_opti[ii, :],
-                        x_dot_opti[ii, :],
-                        u_opti[ii - 1, :],
-                        lam_opti[ii - 1, :],
-                        params,
-                    )
-                    == 0
-                )
-        elif scheme == "LGR":
-            for ii in range(N - 1):
-                self.opti.subject_to(
-                    dynam_f_x(
-                        x_opti[ii, :],
-                        x_dot_opti[ii, :],
-                        u_opti[ii, :],
-                        lam_opti[ii, :],
-                        params,
-                    )
-                    == 0
-                )
-        elif scheme == "LGR_inv":
-            for ii in range(1, N):
-                self.opti.subject_to(
-                    dynam_f_x(
-                        x_opti[ii, :],
-                        x_dot_opti[ii, :],
-                        u_opti[ii - 1, :],
-                        lam_opti[ii - 1, :],
-                        params,
-                    )
-                    == 0
-                )
-        elif scheme == "D2":
-            for ii in range(N):
-                self.opti.subject_to(
-                    dynam_g_q(
-                        q_opti[ii, :],
-                        v_opti[ii, :],
-                        a_opti[ii, :],
-                        u_opti[ii, :],
-                        lam_opti[ii, :],
-                        params,
-                    )
-                    == 0
-                )
-        elif scheme == "LG2":
-            for ii in range(1, N - 1):
-                self.opti.subject_to(
-                    dynam_g_q(
-                        q_opti[ii, :],
-                        v_opti[ii, :],
-                        a_opti[ii, :],
-                        u_opti[ii - 1, :],
-                        lam_opti[ii - 1, :],
-                        params,
-                    )
-                    == 0
-                )
-        elif scheme == "LGLm":
-            for ii in range(1, N - 1):
-                self.opti.subject_to(
-                    dynam_g_q(
-                        q_opti[ii, :],
-                        v_opti[ii, :],
-                        a_opti[ii, :],
-                        u_opti[ii - 1, :],
-                        lam_opti[ii - 1, :],
-                        params,
-                    )
-                    == 0
-                )
-        elif scheme == "JG":
-            for ii in range(1, N - 1):
-                self.opti.subject_to(
-                    dynam_g_q(
-                        q_opti[ii, :],
-                        v_opti[ii, :],
-                        a_opti[ii, :],
-                        u_opti[ii - 1, :],
-                        lam_opti[ii - 1, :],
-                        params,
-                    )
-                    == 0
-                )
+        # --- Scheme constraints ---
+        if scheme in _gauss_2_schemes + ["D2"]:
+            q_opti_node = q_and_ders_node[0]
+            v_opti_node = q_and_ders_node[1]
+            a_opti_node = q_and_ders_node[2]
+
+            v_calc = 2 / (t_end - t_start) * D_mat @ q_opti_node
+            a_calc = 2 / (t_end - t_start) * D_mat @ v_opti_node
+            self.opti.subject_to(v_opti_node == v_calc)
+            self.opti.subject_to(a_opti_node == a_calc)
         else:
-            raise NotImplementedError(
-                f"scheme {scheme} not implemented in apply_scheme."
+            x_d_calc = 2 / (t_end - t_start) * D_mat @ x_node_opti
+            self.opti.subject_to(x_dot_node_opti == x_d_calc)
+
+        # --- Scheme not-node end values constraints ---
+        if scheme in _gauss_inv_schemes:
+            f_start = get_bary_extreme_f_cas(
+                scheme, n_nodes, mode="x", point="start", order=self.order
             )
+            x_start = f_start(x_node_opti)
+            self.opti.subject_to(x_opti[0, :] == x_start)
+            highest_q_d_opti = q_and_ders[-1]
+            highest_q_d_node_opti = q_and_ders_node[-1]
+            hqd_start = f_start(highest_q_d_node_opti)
+            self.opti.subject_to(highest_q_d_opti[0, :] == hqd_start)
+
+        if scheme in _gauss_like_schemes:
+            f_end = get_bary_extreme_f_cas(
+                scheme, n_nodes, mode="x", point="end", order=self.order
+            )
+            x_end = f_end(x_node_opti)
+            self.opti.subject_to(x_opti[-1, :] == x_end)
+            highest_q_d_opti = q_and_ders[-1]
+            highest_q_d_node_opti = q_and_ders_node[-1]
+            hqd_end = f_end(highest_q_d_node_opti)
+            self.opti.subject_to(highest_q_d_opti[-1, :] == hqd_end)
+
+        # --- Collocation Constraints ---
+        if scheme in _lobato_like_schemes + _radau_like_schemes + ["D2"]:
+            i0 = 0
+        else:
+            i0 = 1
+
+        for ii in range(n_coll):
+            self.opti.subject_to(
+                dynam_f_x(
+                    x_opti[i0 + ii, :],
+                    x_dot_opti[i0 + ii, :],
+                    u_opti[ii, :],
+                    lam_opti[ii, :],
+                    params,
+                )
+                == 0
+            )
+        # if scheme == "LGL":
+        #     for ii in range(N):
+        #         self.opti.subject_to(
+        #             dynam_f_x(
+        #                 x_opti[ii, :],
+        #                 x_dot_opti[ii, :],
+        #                 u_opti[ii, :],
+        #                 lam_opti[ii, :],
+        #                 params,
+        #             )
+        #             == 0
+        #         )
+        # elif scheme == "LG":
+        #     for ii in range(1, N):
+        #         self.opti.subject_to(
+        #             dynam_f_x(
+        #                 x_opti[ii, :],
+        #                 x_dot_opti[ii, :],
+        #                 u_opti[ii - 1, :],
+        #                 lam_opti[ii - 1, :],
+        #                 params,
+        #             )
+        #             == 0
+        #         )
+        # elif scheme == "LGR":
+        #     for ii in range(N - 1):
+        #         self.opti.subject_to(
+        #             dynam_f_x(
+        #                 x_opti[ii, :],
+        #                 x_dot_opti[ii, :],
+        #                 u_opti[ii, :],
+        #                 lam_opti[ii, :],
+        #                 params,
+        #             )
+        #             == 0
+        #         )
+        # elif scheme == "LGR_inv":
+        #     for ii in range(1, N):
+        #         self.opti.subject_to(
+        #             dynam_f_x(
+        #                 x_opti[ii, :],
+        #                 x_dot_opti[ii, :],
+        #                 u_opti[ii - 1, :],
+        #                 lam_opti[ii - 1, :],
+        #                 params,
+        #             )
+        #             == 0
+        #         )
+        # elif scheme == "D2":
+        #     for ii in range(N):
+        #         self.opti.subject_to(
+        #             dynam_g_q(
+        #                 q_opti[ii, :],
+        #                 v_opti[ii, :],
+        #                 a_opti[ii, :],
+        #                 u_opti[ii, :],
+        #                 lam_opti[ii, :],
+        #                 params,
+        #             )
+        #             == 0
+        #         )
+        # elif scheme == "LG2":
+        #     for ii in range(1, N - 1):
+        #         self.opti.subject_to(
+        #             dynam_g_q(
+        #                 q_opti[ii, :],
+        #                 v_opti[ii, :],
+        #                 a_opti[ii, :],
+        #                 u_opti[ii - 1, :],
+        #                 lam_opti[ii - 1, :],
+        #                 params,
+        #             )
+        #             == 0
+        #         )
+        # elif scheme == "LGLm":
+        #     for ii in range(1, N - 1):
+        #         self.opti.subject_to(
+        #             dynam_g_q(
+        #                 q_opti[ii, :],
+        #                 v_opti[ii, :],
+        #                 a_opti[ii, :],
+        #                 u_opti[ii - 1, :],
+        #                 lam_opti[ii - 1, :],
+        #                 params,
+        #             )
+        #             == 0
+        #         )
+        # elif scheme == "JG":
+        #     for ii in range(1, N - 1):
+        #         self.opti.subject_to(
+        #             dynam_g_q(
+        #                 q_opti[ii, :],
+        #                 v_opti[ii, :],
+        #                 a_opti[ii, :],
+        #                 u_opti[ii - 1, :],
+        #                 lam_opti[ii - 1, :],
+        #                 params,
+        #             )
+        #             == 0
+        #         )
+        # else:
+        #     raise NotImplementedError(
+        #         f"scheme {scheme} not implemented in apply_scheme."
+        #     )
 
 
 class _BU_Pseudospectral:
@@ -1106,7 +1219,7 @@ class _BU_Pseudospectral:
         if scheme in _radau_like_schemes + _lobato_like_schemes:
             self.opti_points["u_s"] = u_opti[0, :]
         else:
-            start_f = get_bary_extreme_f(
+            start_f = get_bary_extreme_f_cas(
                 scheme, n_coll, mode="u", point="start", order=order
             )
             self.opti_points["u_s"] = start_f(u_opti)
@@ -1115,7 +1228,7 @@ class _BU_Pseudospectral:
         if scheme in _radau_inv_schemes + _lobato_like_schemes:
             self.opti_points["u_e"] = u_opti[-1, :]
         else:
-            end_f = get_bary_extreme_f(
+            end_f = get_bary_extreme_f_cas(
                 scheme, n_coll, mode="u", point="end", order=order
             )
             self.opti_points["u_e"] = end_f(u_opti)
@@ -1453,7 +1566,7 @@ class _TD_Pseudospectral:
         if scheme in _radau_like_schemes + _lobato_like_schemes:
             self.opti_points["u_s"] = u_opti[0, :]
         else:
-            start_f = get_bary_extreme_f(
+            start_f = get_bary_extreme_f_cas(
                 scheme, n_coll, mode="u", point="start", order=order
             )
             self.opti_points["u_s"] = start_f(u_opti)
@@ -1462,7 +1575,7 @@ class _TD_Pseudospectral:
         if scheme in _radau_inv_schemes + _lobato_like_schemes:
             self.opti_points["u_e"] = u_opti[-1, :]
         else:
-            end_f = get_bary_extreme_f(
+            end_f = get_bary_extreme_f_cas(
                 scheme, n_coll, mode="u", point="end", order=order
             )
             self.opti_points["u_e"] = end_f(u_opti)
@@ -3180,10 +3293,9 @@ class _Lin_init:
         elif self.scheme_mode in [
             "bottom-up pseudospectral",
             "top-down pseudospectral",
+            "pseudospectral",
         ]:
             N = self.n_arr  # Number of points in X
-        elif self.scheme_mode == "pseudospectral":
-            N = self.N  # Number of Node Points
         else:
             raise NotImplementedError(
                 f"Linear init not implemented for scheme mode {self.scheme_mode}"
