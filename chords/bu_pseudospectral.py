@@ -585,11 +585,14 @@ def interpolations_BU_pseudospectral(
             'CGR_inv'
             'CGL'
     problem_order : int
-        differential order of the problem
+        differential order of the problem that will be used for
+        generating the interpolations
     t0 : float
         starting time of interval of analysis
-    t1 : float
+    tf : float
         ending time of interval of analysis
+    scheme_order : int, default 2
+        For Jacobi schemes, order of the scheme. otherwise, not used
     u_interp :  string, optional
         Model of the interpolation that must be used. The default is "pol".
         Acceptable values are:

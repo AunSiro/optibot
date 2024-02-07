@@ -447,7 +447,7 @@ class _Opti_Problem:
             self.results["n_coll"] = self.n_coll
             if self.scheme_mode == "bottom-up pseudospectral":
                 self.results["scheme"] = "BU_" + self.scheme
-            elif self.scheme_mode == "top-up pseudospectral":
+            elif self.scheme_mode == "top-down pseudospectral":
                 self.results["scheme"] = "TD_" + self.scheme
             else:
                 self.results["scheme"] = self.scheme
@@ -2162,6 +2162,7 @@ class _Equispaced:
             "u": u_opti,
             "u_like_x": u_opti,
             "t": t_arr,
+            "t_col": t_arr,
             "lam": lam_opti,
         }
 

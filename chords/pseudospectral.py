@@ -1296,7 +1296,6 @@ def interpolations_pseudospectral(
     t1,
     u_interp="pol",
     x_interp="pol",
-    g_func=lambda q, v, u, p: u,
     params=None,
     n_interp=5000,
 ):
@@ -1380,8 +1379,6 @@ def interpolations_pseudospectral(
     N = len(qq)
     tau_arr = linspace(-1, 1, n_interp)
 
-    g_func = try_array_f(g_func)
-
     if u_interp == "pol":
         pol_u = get_pol_u(scheme, uu)
         u_arr = pol_u(tau_arr)
@@ -1432,7 +1429,10 @@ def interpolations_pseudospectral(
         q_arr_d_d = zeros_like(q_arr)
     elif x_interp == "Hermite":
         tau_x, qq, vv = extend_x_arrays(qq, vv, scheme)
-        aa = g_func(qq, vv, uu, params)
+        n_nodes = vv.shape[0]
+        D_mat = array(matrix_D_bary(n_nodes, scheme, precission=16), dtype="float64")
+        aa = 2 / (t1 - t0) * D_mat @ vv
+
         her_q, her_v, her_q_d, her_v_d, her_q_d_d = get_hermite_x(
             qq, vv, aa, tau_x, t0, t1
         )

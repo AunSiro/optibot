@@ -23,7 +23,12 @@ from .opti import (
     _implemented_bottom_up_pseudospectral_schemes,
     _implemented_equispaced_schemes,
     _implemented_pseudospectral_schemes,
+    _implemented_top_down_pseudospectral_schemes,
 )
+from .pseudospectral import interpolations_pseudospectral
+from .bu_pseudospectral import interpolations_BU_pseudospectral
+from .td_pseudospectral import interpolations_TD_pseudospectral
+
 from scipy.optimize import root, minimize
 from scipy.integrate import quad
 from functools import lru_cache
@@ -271,29 +276,16 @@ def generate_G(M, F_impl, order=2):
 
 def interpolation(
     res,
-    scheme,
     params,
+    problem_order=2,
     scheme_order=2,
     x_interp=None,
     u_interp=None,
     n_interp=1000,
     **kwargs,
 ):
-    if scheme in _implemented_equispaced_schemes:
-        mode = "equi"
-    elif scheme in _implemented_pseudospectral_schemes:
-        mode = "pseudo"
-    elif scheme in _implemented_bottom_up_pseudospectral_schemes:
-        mode = "bu_ps"
-    else:
-        _v = (
-            _implemented_equispaced_schemes
-            + _implemented_pseudospectral_schemes
-            + _implemented_bottom_up_pseudospectral_schemes
-        )
-        raise NotImplementedError(
-            f"scheme {scheme} not implemented. Valid methods are {_v}."
-        )
+    scheme = res["scheme"]
+    mode = res["scheme_mode"]
 
     xx = res["x"]
     xx_d = res["x_d"]
@@ -302,8 +294,8 @@ def interpolation(
     uu = res["u"]
     tt = res["t"]
     t0 = tt[0]
-    if mode == "equi":
-        tf = tt[-1]
+    tf = tt[-1]
+    if mode == "equispaced":
         t_arr = linspace(t0, tf, n_interp)
         h = (tf - t0) / (tt.shape[0] - 1)
         if u_interp is None:
@@ -324,7 +316,7 @@ def interpolation(
         else:
             scheme_params = {}
 
-        new_X, new_U = interpolated_array(
+        x_arr, u_arr = interpolated_array(
             X=xx,
             U=uu,
             h=h,
@@ -336,13 +328,25 @@ def interpolation(
             u_scheme=u_interp,
             scheme_params=scheme_params,
         )
-    elif mode == "pseudo":
-        ttau = res["tau"]
-        tf = mean(2 * (tt[1:] - t0) / (1 + ttau[1:]))
-        if scheme == "LG_inv":
-            tf = tt[-1]
-            t0 = mean(2 * (tt[:-1] - tf) / (ttau[:-1] - 1))
-        t_arr = linspace(t0, tf, n_interp)
+        x_dot_arr = interpolated_array_derivative(
+            X=xx,
+            U=uu,
+            h=h,
+            t_array=t_arr,
+            params=params,
+            F=None,
+            X_dot=xx_d,
+            scheme=scheme,
+            order=1,
+            scheme_params=scheme_params,
+        )
+    elif mode == "pseudospectral":
+        if u_interp is None:
+            u_interp = "pol"
+        if x_interp is None:
+            x_interp = "pol"
+        qq = res["q_node"]
+        vv = res["v_node"]
         (
             q_arr,
             q_arr_d,
@@ -356,29 +360,57 @@ def interpolation(
             uu,
             scheme,
             t0,
-            t1,
-            u_interp="pol",
-            x_interp="pol",
-            g_func=lambda q, v, u, p: u,
-            params=None,
-            n_interp=5000,
+            tf,
+            u_interp=u_interp,
+            x_interp=x_interp,
+            params=params,
+            n_interp=n_interp,
         )
+        x_arr = concatenate((q_arr, v_arr), axis=1)
+        x_dot_arr = concatenate((q_arr_d, v_arr_d), axis=1)
 
-    elif mode == "bu_ps":
-        tf = tt[-1]
-        t_arr = linspace(t0, tf, n_interp)
+    elif mode == "bottom-up pseudospectral":
+        if u_interp is None:
+            u_interp = "pol"
+        if x_interp is None:
+            x_interp = "pol"
+
         x_arr, x_dot_arr, u_arr = interpolations_BU_pseudospectral(
             xx,
-            xx_dot,
+            xx_d,
             uu,
             scheme,
-            scheme_order,
+            problem_order,
             t0,
             tf,
-            u_interp="pol",
-            x_interp="pol",
-            n_interp=5000,
+            scheme_order=scheme_order,
+            u_interp=u_interp,
+            x_interp=x_interp,
+            n_interp=n_interp,
         )
+    elif mode == "top-down pseudospectral":
+        if u_interp is None:
+            u_interp = "pol"
+        if x_interp is None:
+            x_interp = "pol"
+
+        q_constr = res["q_constr"]
+        x_arr, x_dot_arr, u_arr = interpolations_TD_pseudospectral(
+            q_constr,
+            xx,
+            xx_d,
+            uu,
+            scheme,
+            t0,
+            tf,
+            scheme_order=scheme_order,
+            u_interp=u_interp,
+            x_interp=x_interp,
+            n_interp=n_interp,
+        )
+    else:
+        raise ValueError(f"Unrecognized mode {mode}")
+    return x_arr, x_dot_arr, u_arr
 
 
 def dynamic_error_implicit(
