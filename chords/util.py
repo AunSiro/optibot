@@ -55,6 +55,10 @@ def sch_to_lab(sch):
         sch = sch[3:]
         label = label_dict[sch]
         label += " bottom-up"
+    if sch[:3] == "TD_":
+        sch = sch[3:]
+        label = label_dict[sch]
+        label += " top-down"
     else:
         label = label_dict[sch]
     return label
@@ -125,6 +129,10 @@ def sch_to_long_label(sch):
         sch = sch[3:]
         label = lname_dict[sch]
         label += " bottom-up"
+    elif sch[:3] == "TD_":
+        sch = sch[3:]
+        label = lname_dict[sch]
+        label += " top-down"
     else:
         label = lname_dict[sch]
     return label
@@ -165,6 +173,7 @@ def sch_to_color(sch):
     sch = sch.replace("trapz_n", "trapz_mod")
     sch = sch.replace("hsn", "hs_mod")
     sch = sch.replace("BU_", "")
+    sch = sch.replace("TD_", "")
     return color_dict[sch]
 
 

@@ -24,10 +24,17 @@ from .opti import (
     _implemented_equispaced_schemes,
     _implemented_pseudospectral_schemes,
     _implemented_top_down_pseudospectral_schemes,
+    get_q_and_ders_names,
 )
 from .pseudospectral import interpolations_pseudospectral
-from .bu_pseudospectral import interpolations_BU_pseudospectral
-from .td_pseudospectral import interpolations_TD_pseudospectral
+from .bu_pseudospectral import (
+    interpolations_BU_pseudospectral,
+    interpolations_deriv_BU_pseudospectral,
+)
+from .td_pseudospectral import (
+    interpolations_TD_pseudospectral,
+    interpolations_deriv_TD_pseudospectral,
+)
 
 from scipy.optimize import root, minimize
 from scipy.integrate import quad
@@ -41,13 +48,15 @@ from numpy import (
     expand_dims,
     interp,
     array,
-    sum,
-    abs,
-    max,
     sqrt,
     trapz,
     mean,
 )
+
+from numpy import sum as npsum
+from numpy import abs as npabs
+from numpy import max as npmax
+
 from numpy.linalg import inv, solve
 from scipy.interpolate import CubicHermiteSpline as hermite
 from copy import copy
@@ -276,25 +285,29 @@ def generate_G(M, F_impl, order=2):
 
 def interpolation(
     res,
-    params,
     problem_order=2,
     scheme_order=2,
     x_interp=None,
     u_interp=None,
     n_interp=1000,
-    **kwargs,
 ):
     scheme = res["scheme"]
     mode = res["scheme_mode"]
+    interp_order = res["solve_order"]
+    params = res["params"]
 
     xx = res["x"]
     xx_d = res["x_d"]
-    qq = res["q"]
-    vv = res["v"]
     uu = res["u"]
     tt = res["t"]
     t0 = tt[0]
     tf = tt[-1]
+
+    q_and_d_names = get_q_and_ders_names(problem_order)
+    n_x = xx.shape[-1]
+    # n_q = n_x // problem_order
+    assert n_x % problem_order == 0
+
     if mode == "equispaced":
         t_arr = linspace(t0, tf, n_interp)
         h = (tf - t0) / (tt.shape[0] - 1)
@@ -315,6 +328,8 @@ def interpolation(
             }
         else:
             scheme_params = {}
+        if "n" in scheme:
+            scheme_params["order"] = interp_order
 
         x_arr, u_arr = interpolated_array(
             X=xx,
@@ -328,18 +343,22 @@ def interpolation(
             u_scheme=u_interp,
             scheme_params=scheme_params,
         )
-        x_dot_arr = interpolated_array_derivative(
-            X=xx,
-            U=uu,
-            h=h,
-            t_array=t_arr,
-            params=params,
-            F=None,
-            X_dot=xx_d,
-            scheme=scheme,
-            order=1,
-            scheme_params=scheme_params,
-        )
+        interpolations = {"x": x_arr, "u": u_arr}
+        for ii in range(1, problem_order + 1):
+            _arr = interpolated_array_derivative(
+                X=xx,
+                U=uu,
+                h=h,
+                t_array=t_arr,
+                params=params,
+                F=None,
+                X_dot=xx_d,
+                scheme=scheme,
+                order=ii,
+                scheme_params=scheme_params,
+            )
+            interpolations["x" + "_d" * ii] = _arr
+
     elif mode == "pseudospectral":
         if u_interp is None:
             u_interp = "pol"
@@ -368,6 +387,7 @@ def interpolation(
         )
         x_arr = concatenate((q_arr, v_arr), axis=1)
         x_dot_arr = concatenate((q_arr_d, v_arr_d), axis=1)
+        interpolations = {"x": x_arr, "x_d": x_dot_arr, "u": u_arr}
 
     elif mode == "bottom-up pseudospectral":
         if u_interp is None:
@@ -380,7 +400,7 @@ def interpolation(
             xx_d,
             uu,
             scheme,
-            problem_order,
+            interp_order,
             t0,
             tf,
             scheme_order=scheme_order,
@@ -388,11 +408,29 @@ def interpolation(
             x_interp=x_interp,
             n_interp=n_interp,
         )
+        interpolations = {"x": x_arr, "x_d": x_dot_arr, "u": u_arr}
+        for ii in range(2, problem_order + 1):
+            _arr = interpolations_deriv_BU_pseudospectral(
+                xx,
+                xx_d,
+                scheme,
+                interp_order,
+                ii,
+                t0,
+                tf,
+                scheme_order=scheme_order,
+                x_interp=x_interp,
+                n_interp=n_interp,
+            )
+            interpolations["x" + "_d" * ii] = _arr
+
     elif mode == "top-down pseudospectral":
         if u_interp is None:
             u_interp = "pol"
         if x_interp is None:
             x_interp = "pol"
+
+        n_coll = uu.shape[0]
 
         q_constr = res["q_constr"]
         x_arr, x_dot_arr, u_arr = interpolations_TD_pseudospectral(
@@ -408,9 +446,116 @@ def interpolation(
             x_interp=x_interp,
             n_interp=n_interp,
         )
+        interpolations = {"x": x_arr, "x_d": x_dot_arr, "u": u_arr}
+        for ii in range(2, problem_order + 1):
+            _arr = interpolations_deriv_TD_pseudospectral(
+                q_constr,
+                xx,
+                xx_d,
+                scheme,
+                ii,
+                t0,
+                tf,
+                n_coll,
+                scheme_order=scheme_order,
+                x_interp=x_interp,
+                n_interp=n_interp,
+            )
+            interpolations["x" + "_d" * ii] = _arr
+
     else:
         raise ValueError(f"Unrecognized mode {mode}")
-    return x_arr, x_dot_arr, u_arr
+
+    # distributing q and derivatives arrays
+    if mode == "pseudospectral":
+        if problem_order == 1:
+            interpolations["q"] = x_arr
+            interpolations["q_d"] = x_dot_arr
+            interpolations["v"] = x_dot_arr
+        elif problem_order == 2:
+            interpolations["q"] = q_arr
+            interpolations["q_d"] = q_arr_d
+            interpolations["q_d_d"] = q_arr_d_d
+            interpolations["v"] = v_arr
+            interpolations["v_d"] = v_arr_d
+            interpolations["a"] = v_arr_d
+        else:
+            raise NotImplementedError(
+                "pseudospectral schemes not prepared for higher order interpolations"
+            )
+    else:
+        for ii in range(problem_order + 1):
+            _arr = interpolations["x" + "_d" * ii]
+            _arr_divs = get_x_divisions(_arr, problem_order)
+            for jj in range(problem_order - max([1, ii]) + 1):
+                arr_name = q_and_d_names[jj] + "_d" * ii
+                interpolations[arr_name] = _arr_divs[jj]
+        interpolations[q_and_d_names[-1]] = interpolations[q_and_d_names[-2] + "_d"]
+
+    res["interpolations"] = interpolations
+
+    return interpolations
+
+
+def dynamic_errors(
+    res,
+    F,
+    dynamics_error_mode="q",
+    problem_order=2,
+    scheme_order=2,
+    x_interp=None,
+    u_interp=None,
+    n_interp=1000,
+):
+
+    q_and_d_names = get_q_and_ders_names(problem_order)
+
+    interpolations = interpolation(
+        res,
+        problem_order,
+        scheme_order,
+        x_interp,
+        u_interp,
+        n_interp,
+    )
+
+    q_and_d_interp = [interpolations["q" + ii * "_d"] for ii in range(problem_order)]
+    q_and_d_interp = concatenate(q_and_d_interp, 1)
+    if dynamics_error_mode == "q":
+        x_in_f = q_and_d_interp
+    elif dynamics_error_mode == "x":
+        x_in_f = interpolations["x"]
+    else:
+        raise ValueError(
+            f"Value of dynamics_error_mode {dynamics_error_mode} not valid. Valid values are 'q' and 'x'."
+        )
+
+    params = res["params"]
+    u_arr = interpolations["u"]
+    n_x = interpolations["x"].shape[-1]
+    n_q = n_x // problem_order
+    assert n_x % problem_order == 0
+
+    f_interp = zeros([n_interp, n_q])
+    for ii in range(n_interp):
+        f_interp[ii, :] = F(x_in_f[ii], u_arr[ii], params)[-n_q:]
+    interpolations["f"] = f_interp
+    q_highest_d = interpolations["q" + "_d" * (problem_order)]
+
+    # Errors as defined on section 6.3 of Collocation methods for second
+    # and higher order systems
+    # https://link.springer.com/article/10.1007/s10514-023-10155-z
+
+    errors = {"dyn_err_interp": q_highest_d - f_interp}
+
+    for jj in range(problem_order - 1):
+        err_name = f"compat_err_{jj+1}_interp"
+        arr1 = interpolations["q" + "_d" * (jj + 1)]
+        arr2 = interpolations[q_and_d_names[jj + 1]]
+        errors[err_name] = arr1 - arr2
+
+    res["error"] = errors
+    return errors
 
 
 def dynamic_error_implicit(
@@ -625,20 +770,20 @@ def dynamic_error_implicit(
 
 
 def arr_mod(x):
-    x_1 = sum(x * x, axis=1)
+    x_1 = npsum(x * x, axis=1)
     return sqrt(x_1)
 
 
 def arr_sum(x):
-    return sum(abs(x), axis=1)
+    return npsum(npabs(x), axis=1)
 
 
 def arr_max(x):
-    return max(abs(x), axis=1)
+    return npmax(npabs(x), axis=1)
 
 
 def arr_abs_integr_vert(t_arr, x):
-    errors = trapz(abs(x), t_arr, axis=0)
+    errors = trapz(npabs(x), t_arr, axis=0)
     return errors
 
 
@@ -822,7 +967,7 @@ def quad_problem(
         x_d = array(
             _newpoint_der(x_arr, x_dot_arr, h, t, params, scheme, 1, scheme_params)
         ).flatten()
-        return abs(E - x_d[dim:])
+        return npabs(E - x_d[dim:])
 
     errors = []
 

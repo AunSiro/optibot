@@ -503,8 +503,9 @@ def dynamic_error_TD(
             x' = F(x, u, params)
     t0 : float, default = 0
         starting time of interval of analysis
-    order : int, default 2
-        differential order of the problem
+    problem_order : int, default 2
+        differential order of the problem. It will be used for dividing
+        x but not for calculating the interpolation.
     u_interp :  string, optional
         Model of the interpolation that must be used. The default is "pol".
         Acceptable values are:

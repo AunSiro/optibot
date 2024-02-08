@@ -439,7 +439,8 @@ class _Opti_Problem:
         self.results["scheme_mode"] = self.scheme_mode
         self.results["n_q"] = self.n_q
         self.results["n_u"] = self.n_u
-        self.results["order"] = self.order
+        self.results["solve_order"] = self.order
+        self.results["params"] = self.params
         if self.scheme_mode == "equispaced":
             self.results["N"] = self.N
             self.results["scheme"] = self.scheme

@@ -547,7 +547,7 @@ def interpolations_BU_pseudospectral(
     xx_dot,
     uu,
     scheme,
-    problem_order,
+    interp_order,
     t0,
     tf,
     scheme_order=2,
@@ -584,7 +584,7 @@ def interpolations_BU_pseudospectral(
             'CGR'
             'CGR_inv'
             'CGL'
-    problem_order : int
+    interp_order : int
         differential order of the problem that will be used for
         generating the interpolations
     t0 : float
@@ -624,7 +624,7 @@ def interpolations_BU_pseudospectral(
         x_0 = xx[0, :]
     else:
         x_0 = xx[0]
-    n_q = len(x_0) // problem_order
+    n_q = len(x_0) // interp_order
     highest_der = xx_dot[:, -n_q:]
     coll_index = get_coll_indices(scheme)
     highest_der_col = highest_der[coll_index, :]
@@ -643,7 +643,7 @@ def interpolations_BU_pseudospectral(
 
     if "pol" in [x_interp, u_interp]:
         u_pol, q_and_der_polys = Polynomial_interpolations_BU(
-            xx_dot, x_0, uu, scheme, problem_order, t0, tf, n_col
+            xx_dot, x_0, uu, scheme, interp_order, t0, tf, n_col
         )
 
     if u_interp == "pol":
@@ -672,7 +672,7 @@ def interpolations_BU_pseudospectral(
         )
     if x_interp == "pol":
         q_and_der_arrs = []
-        for ii in range(problem_order + 1):
+        for ii in range(interp_order + 1):
             q_and_der_arrs.append(q_and_der_polys[ii](t_arr))
         q_and_der_arrs = concatenate(tuple(q_and_der_arrs), axis=1)
         x_arr = q_and_der_arrs[:, :-n_q]
@@ -786,7 +786,7 @@ def interpolations_deriv_BU_pseudospectral(
             'CGR'
             'CGR_inv'
             'CGL'
-    scheme_order : int
+    interp_order : int
         differential order of the problem
     deriv_order : int
         differential order of the interpolations
