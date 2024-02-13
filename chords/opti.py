@@ -1404,14 +1404,14 @@ class _BU_Pseudospectral:
 
         # ----- Extremes of highest derivative Constraints -----
 
-        if scheme in ["LG", "LGR_inv", "JG", "JGR_inv"]:
+        if scheme in _gauss_like_schemes + _radau_inv_schemes:
             start_mat = Extreme_Matrix(
                 n_coll, scheme, "start", scheme_order=order, precission=self.precission
             )
             self.opti.subject_to(
                 highest_q_d_opti[0, :] == start_mat @ highest_q_d_opti_coll
             )
-        if scheme in ["LG", "LGR", "JG", "JGR"]:
+        if scheme in _gauss_like_schemes + _radau_like_schemes:
             end_mat = Extreme_Matrix(
                 n_coll, scheme, "end", scheme_order=order, precission=self.precission
             )
