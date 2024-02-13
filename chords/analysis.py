@@ -385,8 +385,20 @@ def interpolation(
             params=params,
             n_interp=n_interp,
         )
-        x_arr = concatenate((q_arr, v_arr), axis=1)
-        x_dot_arr = concatenate((q_arr_d, v_arr_d), axis=1)
+
+        if interp_order == 2:
+            x_arr = concatenate((q_arr, v_arr), axis=1)
+            x_dot_arr = concatenate((q_arr_d, v_arr_d), axis=1)
+        elif interp_order == 1:
+            x_arr = q_arr
+            x_dot_arr = v_arr
+            _arr_d_d = get_x_divisions(q_arr_d_d, problem_order)
+            q_arr_d_d = _arr_d_d[0]
+        else:
+            raise NotImplementedError(
+                "Pseudospectral schemes not yet prepared for higher than 2 order"
+            )
+
         interpolations = {"x": x_arr, "x_d": x_dot_arr, "u": u_arr}
 
     elif mode == "bottom-up pseudospectral":
@@ -473,6 +485,8 @@ def interpolation(
             interpolations["q_d"] = x_dot_arr
             interpolations["v"] = x_dot_arr
         elif problem_order == 2:
+            q_arr, v_arr = get_x_divisions(x_arr, problem_order)
+            q_arr_d, v_arr_d = get_x_divisions(x_dot_arr, problem_order)
             interpolations["q"] = q_arr
             interpolations["q_d"] = q_arr_d
             interpolations["q_d_d"] = q_arr_d_d
