@@ -386,6 +386,13 @@ def interpolation(
             n_interp=n_interp,
         )
 
+        if len(q_arr.shape) == 1:
+            q_arr = expand_dims(q_arr, 1)
+            q_arr_d = expand_dims(q_arr_d, 1)
+            q_arr_d_d = expand_dims(q_arr_d_d, 1)
+            v_arr = expand_dims(v_arr, 1)
+            v_arr_d = expand_dims(v_arr_d, 1)
+
         if interp_order == 2:
             x_arr = concatenate((q_arr, v_arr), axis=1)
             x_dot_arr = concatenate((q_arr_d, v_arr_d), axis=1)
@@ -520,6 +527,7 @@ def dynamic_errors(
     x_interp=None,
     u_interp=None,
     n_interp=1000,
+    save_in_res=True,
 ):
 
     q_and_d_names = get_q_and_ders_names(problem_order)
@@ -568,7 +576,8 @@ def dynamic_errors(
         arr2 = interpolations[q_and_d_names[jj + 1]]
         errors[err_name] = arr1 - arr2
 
-    res["error"] = errors
+    if save_in_res:
+        res["error"] = errors
     return errors
 
 

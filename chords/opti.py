@@ -1757,7 +1757,7 @@ class _TD_Pseudospectral:
 
         for ii in range(order + 1):
             q_and_der_matrix = self.opti_arrs[q_and_ders_names[ii]]
-            deriv_matrix = 2 / h * L @ matrix_power(D_nu, ii)
+            deriv_matrix = (2 / h) ** ii * L @ matrix_power(D_nu, ii)
             self.opti.subject_to(q_and_der_matrix == deriv_matrix @ q_constr_opti)
 
         # ----- Dynamics Constraints ----

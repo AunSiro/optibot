@@ -30,7 +30,8 @@ from numpy import sum as npsum
 from numpy import max as npmax
 from numpy import min as npmin
 from numpy import round as npround
-from numba import njit
+
+# from numba import njit
 from .numpy import combinefunctions, store_results
 from .piecewise import interp_2d
 
@@ -1447,6 +1448,143 @@ def interpolations_pseudospectral(
             'Invalid interpolation method for x.\n valid options are "pol", "lin", "Hermite"'
         )
     return q_arr, q_arr_d, v_arr, v_arr_d, q_arr_d_d, u_arr
+
+
+def interpolations_deriv_pseudospectral(
+    q_constr,
+    xx,
+    xx_dot,
+    scheme,
+    deriv_order,
+    t0,
+    tf,
+    n_coll,
+    scheme_order,
+    x_interp="pol",
+    n_interp=5000,
+):
+    """
+    Generates arrays of equispaced points with values of interpolations of the
+    derivatives of x.
+
+    'x_interp' define the way in which we interpolate the values
+    of q, v and u between the given points.
+
+    Parameters
+    ----------
+    xx : Numpy Array
+        Values known of x(t)
+    xx_dot : Numpy Array
+        Values known of x_dot(t)
+    scheme : str
+        Pseudospectral scheme used in the optimization.
+        Acceptable values are:
+            'LG'
+            'LGR'
+            'LGR_inv'
+            'LGL'
+            'JG'
+            'JGR'
+            'JGR_inv'
+            'JGL'
+            'CG'
+            'CGR'
+            'CGR_inv'
+            'CGL'
+    order : int
+        differential order of the problem
+    deriv_order : int
+        differential order of the interpolations
+    t0 : float
+        starting time of interval of analysis
+    t1 : float
+        ending time of interval of analysis
+    u_interp :  string, optional
+        Model of the interpolation that must be used. The default is "pol".
+        Acceptable values are:
+            "pol": corresponding polynomial interpolation
+            "lin": lineal interpolation
+            "smooth": 3d order spline interpolation
+    x_interp : string, optional
+        Model of the interpolation that must be used. The default is "pol".
+        Acceptable values are:
+            "pol": corresponding polynomial interpolation
+            "lin": lineal interpolation
+            "Hermite": Hermite's 3d order spline interpolation
+    n_interp : int, default 5000
+        number of interpolation points
+
+    Raises
+    ------
+    NameError
+        When an unsupported value for scheme, x_interp or u_interp is used.
+
+    Returns
+    -------
+    x_arr, x_dot_arr, u_arr : Numpy array
+        equispaced values of interpolations.
+    """
+    if scheme[:3] == "TD_":
+        scheme = scheme[3:]
+
+    N = q_constr.shape[0]
+    n_q = q_constr.shape[-1]
+    n_x = xx.shape[-1]
+    problem_order = n_x // n_q
+    assert N == problem_order + n_coll
+    # coll_points = tau_to_t_points(BU_coll_points(n_coll, scheme, order), t0, tf)
+    t_x = tau_to_t_points(
+        TD_construction_points(n_coll, scheme, order=scheme_order), t0, tf
+    )
+    CGL_points = tau_to_t_points(CGL(N), t0, tf)
+
+    if x_interp == "Hermite":
+        from scipy.interpolate import CubicHermiteSpline as hermite
+
+    if scheme not in _implemented_schemes:
+        NameError(f"Invalid scheme.\n valid options are {_implemented_schemes}")
+
+    t_arr = linspace(t0, tf, n_interp)
+
+    if x_interp == "pol":
+        q_and_der_polys = Polynomial_interpolations_TD(
+            q_constr,
+            None,
+            t0,
+            tf,
+            n_coll,
+            scheme,
+            scheme_order,
+        )
+        D_nu = matrix_D_nu(N)
+
+        for jj in range(deriv_order - 1):
+            coefs = matrix_power(D_nu, jj + problem_order + 1) @ q_constr
+            q_and_der_polys.append(bary_poly_2d(CGL_points, coefs))
+
+        q_and_der_arrs = []
+        for ii in range(problem_order):
+            q_and_der_arrs.append(q_and_der_polys[ii + deriv_order](t_arr))
+        x_deriv_arr = concatenate(tuple(q_and_der_arrs), axis=1)
+
+    elif x_interp == "lin":
+        if deriv_order == 0:
+            x_deriv_arr = interp_2d(t_arr, t_x, xx)
+        elif deriv_order == 1:
+            x_deriv_arr = find_der_polyline(t_arr, t_x, xx)
+        else:
+            x_deriv_arr = zeros_like(xx)
+
+    elif x_interp == "Hermite":
+        herm = hermite(t_x, xx, xx_dot)
+        for ii in range(deriv_order):
+            herm = herm.derivative()
+        x_deriv_arr = herm(t_arr)
+    else:
+        raise NameError(
+            'Invalid interpolation method for x.\n valid options are "pol", "lin", "Hermite"'
+        )
+    return x_deriv_arr
 
 
 def dynamic_error_pseudospectral(

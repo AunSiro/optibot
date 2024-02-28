@@ -79,7 +79,7 @@ def TD_construction_points(N, scheme, order=2, precission=16):
     """
     coll_p = BU_coll_points(N, scheme, order, precission)
     if scheme in _gauss_like_schemes:
-        return [-1 - 0] + coll_p + [1.0]
+        return [-1.0] + coll_p + [1.0]
     elif scheme in _radau_like_schemes:
         return coll_p + [1.0]
     elif scheme in _radau_inv_schemes:
@@ -128,6 +128,7 @@ def Polynomial_interpolations_TD(
         scheme = scheme[3:]
     N = q_constr.shape[0]
     interp_order = N - n_coll
+    h = tf - t0
     # assert N == order + n_coll
 
     coll_points = tau_to_t_points(BU_coll_points(n_coll, scheme, scheme_order), t0, tf)
@@ -136,7 +137,7 @@ def Polynomial_interpolations_TD(
     q_and_der_polys = []
     D_nu = matrix_D_nu(N)
     for ii in range(interp_order + 1):
-        coefs = matrix_power(D_nu, ii) @ q_constr
+        coefs = (2 / h) ** ii * matrix_power(D_nu, ii) @ q_constr
         q_and_der_polys.append(bary_poly_2d(CGL_points, coefs))
 
     if uu is None:
@@ -388,6 +389,7 @@ def interpolations_deriv_TD_pseudospectral(
         TD_construction_points(n_coll, scheme, order=scheme_order), t0, tf
     )
     CGL_points = tau_to_t_points(CGL(N), t0, tf)
+    h = tf - t0
 
     if x_interp == "Hermite":
         from scipy.interpolate import CubicHermiteSpline as hermite
@@ -410,7 +412,9 @@ def interpolations_deriv_TD_pseudospectral(
         D_nu = matrix_D_nu(N)
 
         for jj in range(deriv_order - 1):
-            coefs = matrix_power(D_nu, jj + problem_order + 1) @ q_constr
+            ii = jj + problem_order + 1
+
+            coefs = (2 / h) ** ii * matrix_power(D_nu, ii) @ q_constr
             q_and_der_polys.append(bary_poly_2d(CGL_points, coefs))
 
         q_and_der_arrs = []
