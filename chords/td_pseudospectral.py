@@ -14,7 +14,16 @@ barycentric formulas are constructed.
 
 from .util import Lag_pol_2d
 from .numpy import store_results
-from numpy import array, linspace, interp, gradient, concatenate, zeros_like, zeros
+from numpy import (
+    array,
+    linspace,
+    interp,
+    gradient,
+    concatenate,
+    zeros_like,
+    zeros,
+    expand_dims,
+)
 from numpy.linalg import matrix_power
 from .bu_pseudospectral import (
     BU_coll_points,
@@ -34,7 +43,7 @@ from .pseudospectral import (
     CGL,
     find_der_polyline,
 )
-from .piecewise import interp_2d, get_x_divisions
+from .piecewise import interp_2d, get_x_divisions, is2d, force2d
 from copy import copy
 
 
@@ -227,8 +236,17 @@ def interpolations_TD_pseudospectral(
         scheme = scheme[3:]
     n_coll = uu.shape[0]
     N = q_constr.shape[0]
-    n_q = q_constr.shape[-1]
-    n_x = xx.shape[-1]
+
+    if is2d(q_constr):
+        n_q = q_constr.shape[-1]
+    else:
+        n_q = 1
+
+    if is2d(xx):
+        n_x = xx.shape[-1]
+    else:
+        n_x = 1
+
     problem_order = n_x // n_q
     assert N == problem_order + n_coll
     t_x = tau_to_t_points(
@@ -283,7 +301,8 @@ def interpolations_TD_pseudospectral(
     if x_interp == "pol":
         q_and_der_arrs = []
         for ii in range(problem_order + 1):
-            q_and_der_arrs.append(q_and_der_polys[ii](t_arr))
+            _newarr = force2d(q_and_der_polys[ii](t_arr))
+            q_and_der_arrs.append(_newarr)
         q_and_der_arrs = concatenate(tuple(q_and_der_arrs), axis=1)
         x_arr = q_and_der_arrs[:, :-n_q]
         x_dot_arr = q_and_der_arrs[:, n_q:]
@@ -380,8 +399,17 @@ def interpolations_deriv_TD_pseudospectral(
         scheme = scheme[3:]
 
     N = q_constr.shape[0]
-    n_q = q_constr.shape[-1]
-    n_x = xx.shape[-1]
+
+    if is2d(q_constr):
+        n_q = q_constr.shape[-1]
+    else:
+        n_q = 1
+
+    if is2d(xx):
+        n_x = xx.shape[-1]
+    else:
+        n_x = 1
+
     problem_order = n_x // n_q
     assert N == problem_order + n_coll
     # coll_points = tau_to_t_points(BU_coll_points(n_coll, scheme, order), t0, tf)
@@ -419,7 +447,8 @@ def interpolations_deriv_TD_pseudospectral(
 
         q_and_der_arrs = []
         for ii in range(problem_order):
-            q_and_der_arrs.append(q_and_der_polys[ii + deriv_order](t_arr))
+            _newarr = force2d(q_and_der_polys[ii + deriv_order](t_arr))
+            q_and_der_arrs.append(_newarr)
         x_deriv_arr = concatenate(tuple(q_and_der_arrs), axis=1)
 
     elif x_interp == "lin":

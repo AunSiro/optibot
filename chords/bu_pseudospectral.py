@@ -27,7 +27,7 @@ from .pseudospectral import (
     find_der_polyline,
 )
 from .util import gauss_rep_integral, poly_integral_2d, Lag_integ_2d
-from .piecewise import interp_2d, is2d, get_x_divisions
+from .piecewise import interp_2d, is2d, get_x_divisions, force2d
 from .numpy import store_results
 from functools import lru_cache
 from numpy import (
@@ -673,7 +673,8 @@ def interpolations_BU_pseudospectral(
     if x_interp == "pol":
         q_and_der_arrs = []
         for ii in range(interp_order + 1):
-            q_and_der_arrs.append(q_and_der_polys[ii](t_arr))
+            _newarr = force2d(q_and_der_polys[ii](t_arr))
+            q_and_der_arrs.append(_newarr)
         q_and_der_arrs = concatenate(tuple(q_and_der_arrs), axis=1)
         x_arr = q_and_der_arrs[:, :-n_q]
         x_dot_arr = q_and_der_arrs[:, n_q:]
@@ -854,7 +855,8 @@ def interpolations_deriv_BU_pseudospectral(
 
         q_and_der_arrs = []
         for ii in range(problem_order):
-            q_and_der_arrs.append(q_and_der_polys[ii + deriv_order](t_arr))
+            _newarr = force2d(q_and_der_polys[ii + deriv_order](t_arr))
+            q_and_der_arrs.append(_newarr)
         x_deriv_arr = concatenate(tuple(q_and_der_arrs), axis=1)
 
     elif x_interp == "lin":

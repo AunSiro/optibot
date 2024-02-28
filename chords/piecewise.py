@@ -49,6 +49,13 @@ def is2d(x):
         return False
 
 
+def force2d(x):
+    if is2d(x):
+        return x
+    else:
+        return expand_dims(x, axis=1)
+
+
 def vec_len(x):
     if type(x) == int or type(x) == float:
         return 1
