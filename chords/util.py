@@ -8,6 +8,7 @@ Here we present some useful functions that whose objective is to simplify
 the workflow and to streamline the utilization of Chords and plotting the results.
 """
 import matplotlib.pyplot as plt
+from matplotlib import colormaps
 import numpy as np
 
 # from sympy import legendre_poly
@@ -34,9 +35,9 @@ def sch_to_lab(sch):
         "hsj_parab": "HSJ",
         "hsj_parab_mod": "HSJ (sep $u_c$)",
         "rk4": "rk4",
-        "hsn": "HS-3-Topputo",
-        "hsn_parab": "HS-3",
-        "trapz_n": "TZ-3",
+        "hsn": "HS-M-Topputo",
+        "hsn_parab": "HS-M",
+        "trapz_n": "TZ-M",
         "LG": "LG",
         "LGL": "LGL",
         "LGR": "LGR",
@@ -54,11 +55,11 @@ def sch_to_lab(sch):
     if sch[:3] == "BU_":
         sch = sch[3:]
         label = label_dict[sch]
-        label += " bottom-up"
-    if sch[:3] == "TD_":
+        label += " B-U"
+    elif sch[:3] == "TD_":
         sch = sch[3:]
         label = label_dict[sch]
-        label += " top-down"
+        label += " T-D"
     else:
         label = label_dict[sch]
     return label
@@ -76,9 +77,9 @@ def sch_to_long_label(sch):
         "Hermite-Simpson-Jacobi",
         "Hermite-Simpson-Jacobi (mod_u)",
         "Runge-Kutta 4",
-        "3rd order Hermite Simpson",
-        "3rd order Hermite Simpson (Topputo)",
-        "3rd order Trapezoidal",
+        "Mth order Hermite Simpson",
+        "Mth  order Hermite Simpson (Topputo)",
+        "Mth  order Trapezoidal",
         "LG",
         "LGL",
         "LGR",
@@ -140,40 +141,48 @@ def sch_to_long_label(sch):
 
 def sch_to_color(sch):
     color_dict = {}
-    for ii, sc_name in enumerate(
-        [
-            "hs",
-            "trapz_mod",
-            "trapz",
-            "hs_mod",
-            "hsj",
-            "rk4",
-            "hsj_mod",
-        ]
-    ):
+    piece_sch = [
+        "hs",
+        "trapz_mod",
+        "trapz",
+        "hs_mod",
+        "hsj",
+        "rk4",
+        "hsj_mod",
+    ]
+    pseud_sch = [
+        "LG",
+        "LGL",
+        "LGR",
+        "JG",
+        "JGR",
+        "JGL",
+        "CG",
+        "CGL",
+        "CGR",
+    ]
+    n_sch = len(pseud_sch)
+
+    for ii, sc_name in enumerate(piece_sch):
         color_dict[sc_name] = f"C{ii}"
 
-    for ii, sc_name in enumerate(
-        [
-            "LG",
-            "LGL",
-            "LGR",
-            "JG",
-            "JGR",
-            "JGL",
-            "CG",
-            "CGL",
-            "CGR",
-        ]
-    ):
+    for ii, sc_name in enumerate(pseud_sch):
         color_dict[sc_name] = f"C{ii}"
+
+    cc = colormaps["cubehelix"](np.linspace(0.2, 0.9, n_sch))
+    for ii, sc_name in enumerate(pseud_sch):
+        color_dict["BU_" + sc_name] = cc[ii]
+
+    cc = colormaps["gnuplot2"](np.linspace(0.85, 0.2, n_sch))
+    for ii, sc_name in enumerate(pseud_sch):
+        color_dict["TD_" + sc_name] = cc[ii]
 
     sch = sch.replace("_parab", "")
     sch = sch.replace("_inv", "")
     sch = sch.replace("trapz_n", "trapz_mod")
     sch = sch.replace("hsn", "hs_mod")
-    sch = sch.replace("BU_", "")
-    sch = sch.replace("TD_", "")
+    # sch = sch.replace("BU_", "")
+    # sch = sch.replace("TD_", "")
     return color_dict[sch]
 
 
