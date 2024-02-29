@@ -39,6 +39,7 @@ def sch_to_lab(sch):
         "hsn_parab": "HS-M",
         "trapz_n": "TZ-M",
         "LG": "LG",
+        "LG2": "LG2",
         "LGL": "LGL",
         "LGR": "LGR",
         "LGR_inv": "LGR_inv",
@@ -81,6 +82,7 @@ def sch_to_long_label(sch):
         "Mth  order Hermite Simpson (Topputo)",
         "Mth  order Trapezoidal",
         "LG",
+        "LG2",
         "LGL",
         "LGR",
         "LGR_inv",
@@ -109,6 +111,7 @@ def sch_to_long_label(sch):
         "hsn",
         "trapz_n",
         "LG",
+        "LG2",
         "LGL",
         "LGR",
         "LGR_inv",
@@ -150,17 +153,7 @@ def sch_to_color(sch):
         "rk4",
         "hsj_mod",
     ]
-    pseud_sch = [
-        "LG",
-        "LGL",
-        "LGR",
-        "JG",
-        "JGR",
-        "JGL",
-        "CG",
-        "CGL",
-        "CGR",
-    ]
+    pseud_sch = ["LG", "LGL", "LGR", "JG", "JGR", "JGL", "CG", "CGL", "CGR", "LG2"]
     n_sch = len(pseud_sch)
 
     for ii, sc_name in enumerate(piece_sch):
@@ -286,12 +279,12 @@ def gauss_integral(f, N, t0, t1):
     scale = t1 - t0
     points, weights = leggauss(N)
     # points = (np.array(LG(N)) + 1) / 2
-    points = (points + 1) / 2
+    points = (points + 1.0) / 2.0
     points = t0 + scale * points
     # weights = [LG_weight(N, ii) for ii in range(N)]
-    f_vals = [f(points[ii]) for ii in range(N)]
+    f_vals = np.array([f(points[ii]) for ii in range(N)], dtype="float64").flatten()
     _a = weights * f_vals
-    return scale * np.sum(_a) / 2
+    return scale * np.sum(_a) / 2.0
 
 
 def gauss_integral_2d(f, N, t0, t1):
@@ -317,18 +310,21 @@ def gauss_rep_integral(f, t0, t1, n_pol, n_integ=1, f2d=False):
 def poly_integral(f, n_pol, t0, t1, y0=0):
     scale = t1 - t0
 
-    points = (np.array(leggauss(n_pol + 1)[0]) + 1) / 2
+    points = (np.array(leggauss(n_pol + 1)[0], dtype="float64") + 1) / 2
     points = t0 + scale * points
     points = list(points)
 
     N_gauss = ceil((n_pol + 1) / 2)
-    y = [y0 + gauss_integral(f, N_gauss, t0, ii) for ii in points]
-    points = [
-        t0,
-    ] + points
-    y = [
-        y0,
-    ] + y
+    y = [y0] + [y0 + gauss_integral(f, N_gauss, t0, ii) for ii in points]
+
+    points = np.array(
+        [
+            t0,
+        ]
+        + points,
+        dtype="float64",
+    )
+    y = np.array(y, dtype="float64").flatten()
     return bary_poly(points, y)
 
 
@@ -339,7 +335,7 @@ def poly_integral_2d(f, n_pol, t0, t1, y0=0):
             f"The output of f has shape {y_example.shape} but implemented "
             + "methods only allow for shape (n,)"
         )
-    if len(y_example) == 1:
+    if y_example.shape == () or len(y_example) == 1:
         return poly_integral(f, n_pol, t0, t1, y0)
     dim = y_example.shape[0]
 
