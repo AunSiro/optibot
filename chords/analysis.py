@@ -290,6 +290,7 @@ def interpolation(
     x_interp=None,
     u_interp=None,
     n_interp=1000,
+    save_in_res=True,
 ):
     scheme = res["scheme"]
     mode = res["scheme_mode"]
@@ -513,34 +514,16 @@ def interpolation(
                 interpolations[arr_name] = _arr_divs[jj]
         interpolations[q_and_d_names[-1]] = interpolations[q_and_d_names[-2] + "_d"]
 
-    res["interpolations"] = interpolations
+    if save_in_res:
+        res["interpolations"] = interpolations
 
     return interpolations
 
 
-def dynamic_errors(
-    res,
-    F,
-    dynamics_error_mode="q",
-    problem_order=2,
-    scheme_order=2,
-    x_interp=None,
-    u_interp=None,
-    n_interp=1000,
-    save_in_res=True,
+def dynamic_errors_from_interp(
+    interpolations, F, params, dynamics_error_mode="q", problem_order=2
 ):
-
     q_and_d_names = get_q_and_ders_names(problem_order)
-
-    interpolations = interpolation(
-        res,
-        problem_order,
-        scheme_order,
-        x_interp,
-        u_interp,
-        n_interp,
-    )
-
     q_and_d_interp = [interpolations["q" + ii * "_d"] for ii in range(problem_order)]
     q_and_d_interp = concatenate(q_and_d_interp, 1)
     if dynamics_error_mode == "q":
@@ -552,8 +535,8 @@ def dynamic_errors(
             f"Value of dynamics_error_mode {dynamics_error_mode} not valid. Valid values are 'q' and 'x'."
         )
 
-    params = res["params"]
     u_arr = interpolations["u"]
+    n_interp = interpolations["x"].shape[0]
     n_x = interpolations["x"].shape[-1]
     n_q = n_x // problem_order
     assert n_x % problem_order == 0
@@ -576,8 +559,39 @@ def dynamic_errors(
         arr2 = interpolations[q_and_d_names[jj + 1]]
         errors[err_name] = arr1 - arr2
 
+    return errors
+
+
+def dynamic_errors(
+    res,
+    F,
+    dynamics_error_mode="q",
+    problem_order=2,
+    scheme_order=2,
+    x_interp=None,
+    u_interp=None,
+    n_interp=1000,
+    save_in_res=True,
+):
+
+    interpolations = interpolation(
+        res,
+        problem_order,
+        scheme_order,
+        x_interp,
+        u_interp,
+        n_interp,
+    )
+
+    params = res["params"]
+
+    errors = dynamic_errors_from_interp(
+        interpolations, F, params, dynamics_error_mode, problem_order
+    )
+
     if save_in_res:
         res["error"] = errors
+
     return errors
 
 
