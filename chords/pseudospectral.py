@@ -146,18 +146,26 @@ def JG2(N, precission=16):
 
 
 def CG(N):
-    theta = pi * (2 * arange(N, dtype="float64") + 1) / N / 2
-    return list(cos(theta)[::-1])
+    theta = pi * (2 * arange(N, dtype="float128") + 1) / N / 2
+    tau = cos(theta)[::-1]
+    tau = (tau -tau[::-1])/2
+    tau = array(tau, dtype="float64")
+    return list(tau)
 
 
 def CGL(N):
-    theta = pi * (arange(0, N, dtype="float64")) / (N - 1)
-    return list(cos(theta)[::-1])
+    theta = pi * (arange(0, N, dtype="float128")) / (N - 1)
+    tau = cos(theta)[::-1]
+    tau = (tau -tau[::-1])/2
+    tau = array(tau, dtype="float64")
+    return list(tau)
 
 
 def CGR(N):
-    theta = pi * (2 * arange(N, dtype="float64")) / (2 * N - 1)
-    return list(-cos(theta))
+    theta = pi * (2 * arange(N, dtype="float128")) / (2 * N - 1)
+    tau = -cos(theta)
+    tau = array(tau, dtype="float64")
+    return list(tau)
 
 
 @lru_cache(maxsize=2000)

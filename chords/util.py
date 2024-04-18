@@ -179,7 +179,7 @@ def sch_to_color(sch):
     return color_dict[sch]
 
 
-def scheme_kwargs(sch, longlabel=False, colors_for_parab=False):
+def scheme_kwargs(sch, longlabel=False, colors_for_parab=False, order = None):
     if colors_for_parab:
         color = sch_to_color(sch)
         ls = "-"
@@ -189,11 +189,26 @@ def scheme_kwargs(sch, longlabel=False, colors_for_parab=False):
             ls = "--"
         else:
             ls = "-"
-    kwargs = {"marker": "o", "c": color, "ls": ls}
+            
     if longlabel:
-        kwargs["label"] = sch_to_long_label(sch)
+        label = sch_to_long_label(sch)
     else:
-        kwargs["label"] = sch_to_lab(sch)
+        label = sch_to_lab(sch)
+            
+    if order is None:
+        pass
+    else:
+        if order == 1:
+            ls = '-'  
+        elif order == 2:
+            ls = ':'
+        else:
+           ls = '--'
+        
+        label = label +' order '+str(order)
+                                       
+    kwargs = {"marker": "o", "c": color, "ls": ls, "label": label}
+    
     return kwargs
 
 
