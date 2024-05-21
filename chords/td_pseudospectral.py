@@ -40,7 +40,7 @@ from .pseudospectral import (
     matrix_D_bary,
     bary_poly_2d,
     extend_u_array,
-    CGL,
+    LGL,
     find_der_polyline,
 )
 from .piecewise import interp_2d, get_x_divisions, is2d, force2d
@@ -111,7 +111,7 @@ def TD_construction_points(N, scheme, order=2, precission=16):
 @lru_cache(maxsize=2000)
 @store_results
 def matrix_D_nu(size):
-    return matrix_D_bary(size, "CGL")
+    return matrix_D_bary(size, "LGL")
 
 
 @lru_cache(maxsize=2000)
@@ -120,7 +120,7 @@ def matrix_L(N, scheme, order=2, precission=16):
     constr_points = TD_construction_points(N, scheme, order, precission)
     constr_points = array(constr_points, dtype="float64")
     l = N + order
-    polynomial = Lag_pol_2d(l, "CGL")
+    polynomial = Lag_pol_2d(l, "LGL")
     return polynomial(constr_points)
 
 
@@ -141,13 +141,13 @@ def Polynomial_interpolations_TD(
     # assert N == order + n_coll
 
     coll_points = tau_to_t_points(BU_coll_points(n_coll, scheme, scheme_order), t0, tf)
-    CGL_points = tau_to_t_points(CGL(N), t0, tf)
+    LGL_points = tau_to_t_points(LGL(N), t0, tf)
 
     q_and_der_polys = []
     D_nu = matrix_D_nu(N)
     for ii in range(interp_order + 1):
         coefs = (2 / h) ** ii * matrix_power(D_nu, ii) @ q_constr
-        q_and_der_polys.append(bary_poly_2d(CGL_points, coefs))
+        q_and_der_polys.append(bary_poly_2d(LGL_points, coefs))
 
     if uu is None:
         return q_and_der_polys
@@ -178,7 +178,7 @@ def interpolations_TD_pseudospectral(
     Parameters
     ----------
     q_constr: Numpy Array
-        Values of q(t) caculated at certain CGL points in the top-down
+        Values of q(t) caculated at certain LGL points in the top-down
         formulation
     xx : Numpy Array
         Values known of x(t)
@@ -416,7 +416,7 @@ def interpolations_deriv_TD_pseudospectral(
     t_x = tau_to_t_points(
         TD_construction_points(n_coll, scheme, order=scheme_order), t0, tf
     )
-    CGL_points = tau_to_t_points(CGL(N), t0, tf)
+    LGL_points = tau_to_t_points(LGL(N), t0, tf)
     h = tf - t0
 
     if x_interp == "Hermite":
@@ -443,7 +443,7 @@ def interpolations_deriv_TD_pseudospectral(
             ii = jj + problem_order + 1
 
             coefs = (2 / h) ** ii * matrix_power(D_nu, ii) @ q_constr
-            q_and_der_polys.append(bary_poly_2d(CGL_points, coefs))
+            q_and_der_polys.append(bary_poly_2d(LGL_points, coefs))
 
         q_and_der_arrs = []
         for ii in range(problem_order):
@@ -586,7 +586,7 @@ def dynamic_error_TD(
     # assert N == order + n_coll
     # coll_points = tau_to_t_points(BU_coll_points(n_coll, scheme, order), t0, tf)
     # t_x = tau_to_t_points(TD_construction_points(n_coll, scheme, order=scheme_order), t0, tf)
-    # CGL_points = tau_to_t_points(CGL(N), t0, tf)
+    # LGL_points = tau_to_t_points(LGL(N), t0, tf)
 
     if scheme_params is None:
         scheme_params = {}
