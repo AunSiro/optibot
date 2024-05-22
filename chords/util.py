@@ -179,7 +179,7 @@ def sch_to_color(sch):
     return color_dict[sch]
 
 
-def scheme_kwargs(sch, longlabel=False, colors_for_parab=False, order = None):
+def scheme_kwargs(sch, longlabel=False, colors_for_parab=False, order=None):
     if colors_for_parab:
         color = sch_to_color(sch)
         ls = "-"
@@ -189,26 +189,26 @@ def scheme_kwargs(sch, longlabel=False, colors_for_parab=False, order = None):
             ls = "--"
         else:
             ls = "-"
-            
+
     if longlabel:
         label = sch_to_long_label(sch)
     else:
         label = sch_to_lab(sch)
-            
+
     if order is None:
         pass
     else:
         if order == 1:
-            ls = '-'  
+            ls = "-"
         elif order == 2:
-            ls = ':'
+            ls = ":"
         else:
-           ls = '--'
-        
-        label = label +' order '+str(order)
-                                       
+            ls = "--"
+
+        label = label + " order " + str(order)
+
     kwargs = {"marker": "o", "c": color, "ls": ls, "label": label}
-    
+
     return kwargs
 
 
@@ -270,6 +270,51 @@ def plot_by_segments(
     plt.xlabel("Time(s)")
     plt.ylabel(ylabel)
     plt.tight_layout(pad=0.0)
+
+
+def gen_fig_filename(
+    problem_name,
+    graph_name,
+    schemes_printed,
+    save_format="eps",
+    N=None,
+    q_counter=None,
+):
+    from os.path import join
+
+    folder_name = problem_name + "_figs"
+    schemes_printed.sort()
+    title = f"{problem_name}_{graph_name}"
+    if not (q_counter is None):
+        title += f"_q_{q_counter+1}"
+    if N is None:
+        title += "_vs_N"
+    else:
+        title += f"_N{N}"
+    for scheme in schemes_printed:
+        title += f"--{scheme}"
+    title += f".{save_format}"
+    filename = join(folder_name, title)
+    return filename
+
+
+def save_fig(
+    problem_name,
+    graph_name,
+    schemes_printed,
+    save_format="eps",
+    N=None,
+    q_counter=None,
+):
+    filename = gen_fig_filename(
+        problem_name,
+        graph_name,
+        schemes_printed,
+        save_format,
+        N,
+        q_counter,
+    )
+    plt.savefig(filename, format=save_format)
 
 
 # --------------------------- Gauss Integration -------------------------------

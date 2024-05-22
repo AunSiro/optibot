@@ -2225,7 +2225,7 @@ class _Equispaced:
                 u_j_opti = opti.variable(N, self.n_u)
                 self.opti_arrs["u_j"] = u_j_opti
 
-    def quad_cost(self, arr, arr_c=None, squared = False):
+    def quad_cost(self, arr, arr_c=None, squared=False):
         """
         Calculates a quadrature integration of an array and sets it
         as the optimization cost to minimize
