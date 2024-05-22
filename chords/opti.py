@@ -327,7 +327,7 @@ def _get_cost_obj_trap_int_cas(scheme, N, order=2, mode="u", squared=True):
 
 
 @lru_cache(maxsize=None)
-def _get_cost_obj_quad_int_cas(scheme, N, order=2, squared=False):
+def _get_cost_obj_quad_int_cas(scheme, N, order=2, squared=False, mode="u"):
     """For a given pseudospectral scheme and number of collocation points,
     returns a casadi function of values in said points that calculates a
     quadrature integration of the values or squares over a [-1, 1] tau domain.
@@ -337,7 +337,7 @@ def _get_cost_obj_quad_int_cas(scheme, N, order=2, squared=False):
 
     u_sym = cas.SX.sym("u", N)
     exp = 2 if squared else 1
-    weights = get_weights(N, scheme, order)
+    weights = get_weights(N, scheme, order, mode)
     cas_expr = cas.sum1(weights * u_sym**exp)
     cas_f = cas.Function(
         "cost_func",
@@ -818,16 +818,21 @@ class _Pseudospectral:
 
         dt = self.t_end - self.t_start
         N_col = self.n_coll
+        N_x = self.n_arr
         N_arr = arr.shape[0]
 
-        if N_arr != N_col:
+        if N_arr == N_col:
+            mode = "u"
+        elif N_arr == N_x:
+            mode = "x"
+        else:
             raise ValueError(
                 "Unrecognized shape of arr, not equal to number"
-                + " of collocation points"
+                + " of collocation points nor array x lenght"
             )
 
         f_u_cost = _get_cost_obj_quad_int_cas(
-            self.scheme, self.n_coll, self.order, squared
+            self.scheme, N_arr, self.order, squared, mode
         )
         cost = dt * cas.sum2(f_u_cost(arr))
 
@@ -1298,16 +1303,21 @@ class _BU_Pseudospectral:
 
         dt = self.t_end - self.t_start
         N_col = self.n_coll
+        N_x = self.n_arr
         N_arr = arr.shape[0]
 
-        if N_arr != N_col:
+        if N_arr == N_col:
+            mode = "u"
+        elif N_arr == N_x:
+            mode = "x"
+        else:
             raise ValueError(
                 "Unrecognized shape of arr, not equal to number"
-                + " of collocation points"
+                + " of collocation points nor array x lenght"
             )
 
         f_u_cost = _get_cost_obj_quad_int_cas(
-            self.scheme, self.n_coll, self.order, squared
+            self.scheme, N_arr, self.order, squared, mode
         )
         cost = dt * cas.sum2(f_u_cost(arr))
 
@@ -1645,16 +1655,21 @@ class _TD_Pseudospectral:
 
         dt = self.t_end - self.t_start
         N_col = self.n_coll
+        N_x = self.n_arr
         N_arr = arr.shape[0]
 
-        if N_arr != N_col:
+        if N_arr == N_col:
+            mode = "u"
+        elif N_arr == N_x:
+            mode = "x"
+        else:
             raise ValueError(
                 "Unrecognized shape of arr, not equal to number"
-                + " of collocation points"
+                + " of collocation points nor array x lenght"
             )
 
         f_u_cost = _get_cost_obj_quad_int_cas(
-            self.scheme, self.n_coll, self.order, squared
+            self.scheme, N_arr, self.order, squared, mode
         )
         cost = dt * cas.sum2(f_u_cost(arr))
 

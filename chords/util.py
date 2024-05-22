@@ -14,7 +14,14 @@ import numpy as np
 # from sympy import legendre_poly
 from functools import lru_cache
 from math import ceil, factorial
-from .pseudospectral import bary_poly, coll_points, bary_poly_2d
+from .pseudospectral import (
+    bary_poly,
+    coll_points,
+    node_points,
+    bary_poly_2d,
+    _gauss_like_schemes,
+    _gauss_inv_schemes,
+)
 from .numpy import combinefunctions, store_results
 
 # Uniform output style functions
@@ -432,6 +439,27 @@ def Lag_pol_2d(N, scheme, order=2):
 
 
 @lru_cache(maxsize=2000)
+def Lag_pol_2d_x(N, scheme, order=2):
+
+    if scheme in _gauss_like_schemes:
+        arr_points_tau = node_points(N - 1, scheme)
+        arr_points_tau = arr_points_tau + [
+            1.0,
+        ]
+    elif scheme in _gauss_inv_schemes:
+        arr_points_tau = node_points(N - 1, scheme)
+        arr_points_tau = [
+            -1.0,
+        ] + arr_points_tau
+    else:
+        arr_points_tau = node_points(N, scheme)
+
+    tau_arr = np.array(arr_points_tau, dtype="float64")
+
+    return bary_poly_2d(tau_arr, np.eye(N))
+
+
+@lru_cache(maxsize=2000)
 def Lag_integ_2d(N, scheme, integ_order, order=2):
     if integ_order == 0:
         return Lag_pol_2d(N, scheme, order)
@@ -443,7 +471,7 @@ def Lag_integ_2d(N, scheme, integ_order, order=2):
 
 @lru_cache(maxsize=2000)
 @store_results
-def get_weights(N, scheme, order=2):
+def get_weights(N, scheme, order=2, mode="u"):
     """
     Generate weights for quadrature integration. If an closed formula
     is known, it will be used. If not, weights will be calculated
@@ -458,6 +486,10 @@ def get_weights(N, scheme, order=2):
     order : int, optional
         if the scheme requires a differential order, like jacobi-gauss.
         The default is 2.
+    mode : str, optional, default 'u'
+        kind of points that make the Lagrange basis:
+            'u' : collocation points
+            'x' : array points
 
     Returns
     -------
@@ -465,9 +497,15 @@ def get_weights(N, scheme, order=2):
         weights.
 
     """
-    if scheme == "LG":
-        return leggauss(N)[1]
-    pol = Lag_pol_2d(N, scheme, order=2)
+    if mode == "u":
+        if scheme == "LG":
+            return leggauss(N)[1]
+        pol = Lag_pol_2d(N, scheme, order)
+    elif mode == "x":
+        pol = Lag_pol_2d_x(N, scheme)
+    else:
+        raise ValueError(f'Invalid mode: "{mode}", valid modes are "u" and "x".')
+
     N_gauss = ceil((N + 1) / 2)
 
     return gauss_integral_2d(pol, N_gauss, -1.0, 1.0)
