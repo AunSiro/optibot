@@ -26,7 +26,10 @@ from .opti import (
     _implemented_top_down_pseudospectral_schemes,
     get_q_and_ders_names,
 )
-from .pseudospectral import interpolations_pseudospectral
+from .pseudospectral import (
+    interpolations_pseudospectral,
+    interpolations_deriv_pseudospectral,
+)
 from .bu_pseudospectral import (
     interpolations_BU_pseudospectral,
     interpolations_deriv_BU_pseudospectral,
@@ -367,6 +370,7 @@ def interpolation(
             x_interp = "pol"
         qq = res["q_node"]
         vv = res["v_node"]
+        xx = res["x_node"]
         (
             q_arr,
             q_arr_d,
@@ -408,6 +412,19 @@ def interpolation(
             )
 
         interpolations = {"x": x_arr, "x_d": x_dot_arr, "u": u_arr}
+
+        for ii in range(2, problem_order + 1):
+            _arr = interpolations_deriv_pseudospectral(
+                xx,
+                scheme,
+                deriv_order=ii,
+                t0=t0,
+                t1=tf,
+                x_interp=x_interp,
+                params=params,
+                n_interp=n_interp,
+            )
+            interpolations["x" + "_d" * ii] = _arr
 
     elif mode == "bottom-up pseudospectral":
         if u_interp is None:
@@ -487,24 +504,26 @@ def interpolation(
         raise ValueError(f"Unrecognized mode {mode}")
 
     # distributing q and derivatives arrays
-    if mode == "pseudospectral":
-        if problem_order == 1:
-            interpolations["q"] = x_arr
-            interpolations["q_d"] = x_dot_arr
-            interpolations["v"] = x_dot_arr
-        elif problem_order == 2:
-            q_arr, v_arr = get_x_divisions(x_arr, problem_order)
-            q_arr_d, v_arr_d = get_x_divisions(x_dot_arr, problem_order)
-            interpolations["q"] = q_arr
-            interpolations["q_d"] = q_arr_d
-            interpolations["q_d_d"] = q_arr_d_d
-            interpolations["v"] = v_arr
-            interpolations["v_d"] = v_arr_d
-            interpolations["a"] = v_arr_d
-        else:
-            raise NotImplementedError(
-                "pseudospectral schemes not prepared for higher order interpolations"
-            )
+    # if mode == "pseudospectral":
+    #     if problem_order == 1:
+    #         interpolations["q"] = x_arr
+    #         interpolations["q_d"] = x_dot_arr
+    #         interpolations["v"] = x_dot_arr
+    #     elif problem_order == 2:
+    #         q_arr, v_arr = get_x_divisions(x_arr, problem_order)
+    #         q_arr_d, v_arr_d = get_x_divisions(x_dot_arr, problem_order)
+    #         interpolations["q"] = q_arr
+    #         interpolations["q_d"] = q_arr_d
+    #         interpolations["q_d_d"] = q_arr_d_d
+    #         interpolations["v"] = v_arr
+    #         interpolations["v_d"] = v_arr_d
+    #         interpolations["a"] = v_arr_d
+    #     else:
+    #         raise NotImplementedError(
+    #             "pseudospectral schemes not prepared for higher order interpolations"
+    #         )
+    if False:
+        pass
     else:
         for ii in range(problem_order + 1):
             _arr = interpolations["x" + "_d" * ii]

@@ -25,6 +25,8 @@ from .pseudospectral import (
     bary_poly_2d,
     extend_u_array,
     find_der_polyline,
+    tau_to_t_points,
+    tau_to_t_function,
 )
 from .util import gauss_rep_integral, poly_integral_2d, Lag_integ_2d
 from .piecewise import interp_2d, is2d, get_x_divisions, force2d
@@ -257,83 +259,6 @@ def BU_unit_Lag_pol(N, scheme, n, order=2, precission=16):
     y = zeros(N)
     y[n] = 1
     return bary_poly(x, y)
-
-
-def tau_to_t_points(points, t0, tf):
-    """
-    converts a point or series of points from tau in [-1,1] to t in [t0, tf]
-
-    Parameters
-    ----------
-    points : number, list, array or tuple
-        points in tau
-    t0 : float
-        initial t
-    tf : float
-        final t
-
-    Returns
-    -------
-    new_points : number, list, array or tuple
-        points in t
-
-    """
-    points_arr = array(points)
-    h = tf - t0
-    new_points = t0 + h * (points_arr + 1) / 2
-    if type(points) == list:
-        new_points = list(new_points)
-    elif type(points) == tuple:
-        new_points = tuple(new_points)
-    elif type(points) == float:
-        new_points = float(new_points)
-    return new_points
-
-
-def tau_to_t_function(f, t0, tf):
-    """
-    converts a function from f(tau), tau in [-1,1] to f(t), t in [t0, tf]
-
-    Parameters
-    ----------
-    f : function
-        function of tau: f(tau)
-    t0 : float
-        initial t
-    tf : float
-        final t
-
-    Returns
-    -------
-    new_f : function
-        function of t: f(t)
-
-    """
-    h = tf - t0
-
-    def new_F(t):
-        tau = 2 * (t - t0) / h - 1
-        return f(tau)
-
-    try:
-        old_docstring = str(f.__doc__)
-    except:
-        old_docstring = "function of tau"
-    try:
-        old_f_name = str(f.__name__)
-    except:
-        old_f_name = "Unnamed Function"
-
-    new_docstring = f"""
-    This is a time t based version of function {old_f_name}.
-    This expanded function is designed to operate with time t: F(t)
-    While the old function was designed for tau: F(tau)
-    Old function documentation:
-    """
-    new_docstring += old_docstring
-    new_F.__doc__ = new_docstring
-    new_F.__name__ = old_f_name + " of tau"
-    return new_F
 
 
 @lru_cache(maxsize=2000)

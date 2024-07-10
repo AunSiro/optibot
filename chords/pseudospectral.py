@@ -26,6 +26,7 @@ from numpy import (
     prod,
     float64,
 )
+from numpy.linalg import matrix_power
 from numpy import sum as npsum
 from numpy import max as npmax
 from numpy import min as npmin
@@ -326,6 +327,83 @@ def get_coll_indices_from_nodes(scheme):
             f"Scheme {scheme} not implemented yet, valid schemes are: {_implemented_schemes}"
         )
     return coll_index
+
+
+def tau_to_t_points(points, t0, tf):
+    """
+    converts a point or series of points from tau in [-1,1] to t in [t0, tf]
+
+    Parameters
+    ----------
+    points : number, list, array or tuple
+        points in tau
+    t0 : float
+        initial t
+    tf : float
+        final t
+
+    Returns
+    -------
+    new_points : number, list, array or tuple
+        points in t
+
+    """
+    points_arr = array(points)
+    h = tf - t0
+    new_points = t0 + h * (points_arr + 1) / 2
+    if type(points) == list:
+        new_points = list(new_points)
+    elif type(points) == tuple:
+        new_points = tuple(new_points)
+    elif type(points) == float:
+        new_points = float(new_points)
+    return new_points
+
+
+def tau_to_t_function(f, t0, tf):
+    """
+    converts a function from f(tau), tau in [-1,1] to f(t), t in [t0, tf]
+
+    Parameters
+    ----------
+    f : function
+        function of tau: f(tau)
+    t0 : float
+        initial t
+    tf : float
+        final t
+
+    Returns
+    -------
+    new_f : function
+        function of t: f(t)
+
+    """
+    h = tf - t0
+
+    def new_F(t):
+        tau = 2 * (t - t0) / h - 1
+        return f(tau)
+
+    try:
+        old_docstring = str(f.__doc__)
+    except:
+        old_docstring = "function of tau"
+    try:
+        old_f_name = str(f.__name__)
+    except:
+        old_f_name = "Unnamed Function"
+
+    new_docstring = f"""
+    This is a time t based version of function {old_f_name}.
+    This expanded function is designed to operate with time t: F(t)
+    While the old function was designed for tau: F(tau)
+    Old function documentation:
+    """
+    new_docstring += old_docstring
+    new_F.__doc__ = new_docstring
+    new_F.__name__ = old_f_name + " of tau"
+    return new_F
 
 
 # --- Symbolic Lagrange Polynomials ---
@@ -1104,7 +1182,7 @@ def get_pol_x(scheme, qq, vv, t0, t1):
     """
     qq = array(qq)
     N = qq.shape[0]
-    tau_x = array(node_points(N, scheme), dtype="float")
+    tau_x = array(node_points(N, scheme), dtype="float64")
     qq_d = 2 / (t1 - t0) * matrix_D_bary(N, scheme) @ qq
     vv_d = 2 / (t1 - t0) * matrix_D_bary(N, scheme) @ vv
     qq_d_d = 2 / (t1 - t0) * matrix_D_bary(N, scheme) @ qq_d
@@ -1459,16 +1537,13 @@ def interpolations_pseudospectral(
 
 
 def interpolations_deriv_pseudospectral(
-    q_constr,
     xx,
-    xx_dot,
     scheme,
     deriv_order,
     t0,
-    tf,
-    n_coll,
-    scheme_order,
+    t1,
     x_interp="pol",
+    params=None,
     n_interp=5000,
 ):
     """
@@ -1532,19 +1607,20 @@ def interpolations_deriv_pseudospectral(
     x_arr, x_dot_arr, u_arr : Numpy array
         equispaced values of interpolations.
     """
-    if scheme[:3] == "TD_":
-        scheme = scheme[3:]
+    if params is None:
+        params = []
 
-    N = q_constr.shape[0]
-    n_q = q_constr.shape[-1]
+    xx = array(xx)
+    N = xx.shape[0]
     n_x = xx.shape[-1]
-    problem_order = n_x // n_q
-    assert N == problem_order + n_coll
+    tau_arr = linspace(-1, 1, n_interp)
+    t_arr = linspace(t0, t1, n_interp)
+    tau_x = array(node_points(N, scheme), dtype="float64")
+    t_x = tau_to_t_points(tau_x, t0, t1)
+
+    # problem_order = n_x // n_q
+    # assert N == problem_order + n_coll
     # coll_points = tau_to_t_points(BU_coll_points(n_coll, scheme, order), t0, tf)
-    t_x = tau_to_t_points(
-        TD_construction_points(n_coll, scheme, order=scheme_order), t0, tf
-    )
-    CGL_points = tau_to_t_points(CGL(N), t0, tf)
 
     if x_interp == "Hermite":
         from scipy.interpolate import CubicHermiteSpline as hermite
@@ -1552,39 +1628,26 @@ def interpolations_deriv_pseudospectral(
     if scheme not in _implemented_schemes:
         NameError(f"Invalid scheme.\n valid options are {_implemented_schemes}")
 
-    t_arr = linspace(t0, tf, n_interp)
-
     if x_interp == "pol":
-        q_and_der_polys = Polynomial_interpolations_TD(
-            q_constr,
-            None,
-            t0,
-            tf,
-            n_coll,
-            scheme,
-            scheme_order,
-        )
-        D_nu = matrix_D_nu(N)
-
-        for jj in range(deriv_order - 1):
-            coefs = matrix_power(D_nu, jj + problem_order + 1) @ q_constr
-            q_and_der_polys.append(bary_poly_2d(CGL_points, coefs))
-
-        q_and_der_arrs = []
-        for ii in range(problem_order):
-            q_and_der_arrs.append(q_and_der_polys[ii + deriv_order](t_arr))
-        x_deriv_arr = concatenate(tuple(q_and_der_arrs), axis=1)
+        D = matrix_D_bary(N, scheme)
+        h = t1 - t0
+        xx_d = (2 / h) ** deriv_order * matrix_power(D, deriv_order) @ xx
+        pol_x = bary_poly_2d(tau_x, xx_d)
+        x_deriv_arr = pol_x(tau_arr)
 
     elif x_interp == "lin":
         if deriv_order == 0:
-            x_deriv_arr = interp_2d(t_arr, t_x, xx)
+            x_deriv_arr = interp_2d(tau_arr, tau_x, xx)
         elif deriv_order == 1:
-            x_deriv_arr = find_der_polyline(t_arr, t_x, xx)
+            x_deriv_arr = find_der_polyline(tau_arr, tau_x, xx)
         else:
-            x_deriv_arr = zeros_like(xx)
+            x_deriv_arr = zeros([n_interp, n_x])
 
     elif x_interp == "Hermite":
-        herm = hermite(t_x, xx, xx_dot)
+        D = matrix_D_bary(N, scheme)
+        h = t1 - t0
+        xx_d = (2 / h) ** deriv_order * matrix_power(D, deriv_order) @ xx
+        herm = hermite(t_x, xx, xx_d)
         for ii in range(deriv_order):
             herm = herm.derivative()
         x_deriv_arr = herm(t_arr)
