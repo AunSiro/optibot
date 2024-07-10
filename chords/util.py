@@ -283,7 +283,7 @@ def gen_fig_filename(
     problem_name,
     graph_name,
     schemes_printed,
-    save_format="eps",
+    save_format="pdf",
     N=None,
     q_counter=None,
 ):
@@ -309,10 +309,13 @@ def save_fig(
     problem_name,
     graph_name,
     schemes_printed,
-    save_format="eps",
+    save_format="pdf",
     N=None,
     q_counter=None,
 ):
+    from os.path import isdir
+    from os import makedirs
+
     filename = gen_fig_filename(
         problem_name,
         graph_name,
@@ -321,6 +324,9 @@ def save_fig(
         N,
         q_counter,
     )
+    folder_name = problem_name + "_figs"
+    if not isdir(folder_name):
+        makedirs(folder_name)
     plt.savefig(filename, format=save_format)
 
 
