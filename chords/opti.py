@@ -2260,11 +2260,16 @@ class _Equispaced:
         """
 
         dt = self.t_end - self.t_start
+        if squared:
+            arr = arr**2
+
         if arr_c is None:
             cost = dt * cas.sum2(
                 (cas.sum1(arr[:, :]) + cas.sum1(arr[1:-1, :])) / self.N
             )
         else:
+            if squared:
+                arr_c = arr_c**2
             cost = dt * cas.sum2(
                 (
                     4 * cas.sum1(arr_c[:, :])
