@@ -384,6 +384,172 @@ def reduce_F(F, mode="numpy", order=2):
     return G
 
 
+def increase_order_implicit_func(
+    F, n_q, new_order, old_order=2, mode="numpy", state_mode="x", lambdas_in_f=True
+):
+    """
+    Given an implicit function F for a dynamic system of a given order,
+    returns the equivalent function for a higher order
+
+    Parameters
+    ----------
+    F : Function
+        function F(x, u, params) such that x' = F(x, u, params)
+    n_q: int
+        number of q coordinates in the system
+    new_order : int
+        differential order of the new function F
+    old_order : int, default 2
+        differential order of the given F
+    mode : str: 'numpy' o 'casadi', optional
+        Wether the function is a numpy or a casadi function.
+        The default is "numpy".
+    state_mode : str: 'x' or 'q', default 'x'
+        use 'x' for functions of the form F(x, x', u, params)
+        use 'q' for functions of the form F(q, q', q'', u, params)
+    lambdas_in_f : bool, default True
+        use True when the function F contains a lambda argument,
+        False otherwise
+
+    Returns
+    -------
+    F2 : Function
+        Function equivalent to F but adequate to use with higher
+        order methods
+
+    Examples
+    --------
+
+    example 1:
+        given F1(q, q', q'', u, params),
+                old_order = 2
+                new_order = 4:
+        will return F2(q, q', q'', q''', q'''', u, params)
+            such that F2(q, q', q'', *, *, u, params) will be
+            equal to F1(q, q', q'', u, params)
+
+    example 2:
+        given F1(x, x', u, lambdas, params),
+        such that the result is:
+
+            q' - v
+            g(q, q', q'', u, lambdas, params)
+
+            given that x = (q, v), x' = (q', v')
+
+        with parameters:
+            old_order = 2
+            new_order = 4
+        will return F2(x, x', u, lambdas, params) such that
+        the result will consist of:
+
+            q' - v
+            v' - a
+            a' - j
+            g(q, q', q'', u, lambdas, params)
+
+            given that x = (q, v, a, j), x' = (q', v', a', j')
+
+    """
+
+    try:
+        old_docstring = str(F.__doc__)
+    except:
+        if state_mode == "x":
+            old_docstring = """function of (x, x', u, params)
+            A function of a dynamic sistem, so that
+            F(x, x', u, params) = 0 """
+        elif state_mode == "q":
+            old_docstring = """function of (x, u, params)
+            A function of a dynamic sistem, so that
+                x' = F(x, u, params)"""
+
+    try:
+        old_f_name = str(F.__name__)
+    except:
+        old_f_name = "Unnamed Function"
+
+    if mode == "casadi":
+        from casadi import horzcat
+
+    if state_mode == "q":
+
+        def newF(*args):
+            params = args[-1]
+            if lambdas_in_f:
+                q_and_der = args[:-3]
+            else:
+                q_and_der = args[:-2]
+            assert len(q_and_der) == new_order + 1
+            q_and_der_old = q_and_der[: old_order + 1]
+            if lambdas_in_f:
+                lambdas = args[-2]
+                u = args[-3]
+                other_vars = [u, lambdas, params]
+            else:
+                u = args[-2]
+                other_vars = [u, params]
+            old_args = q_and_der_old + other_vars
+            return F(*old_args)
+
+    elif state_mode == "x":
+
+        def new_F(*args):
+            if lambdas_in_f:
+                x_new, x_d_new, u, lambdas, params = args
+            else:
+                x_new, x_d_new, u, params = args
+
+            assert x_new.shape == x_d_new.shape
+            assert x_new.shape[-1] == new_order * n_q
+
+            q_and_der = get_x_divisions(x_new, new_order)
+            q_d_and_der = get_x_divisions(x_d_new, new_order)
+
+            if mode == "numpy":
+                axnum = len(x_new.shape) - 1
+                x_old = concatenate(q_and_der[:old_order], axnum)
+                x_d_old = concatenate(q_d_and_der[:old_order], axnum)
+            elif mode == "casadi":
+                x_old = horzcat(*q_and_der[:old_order])
+                x_d_old = horzcat(*q_d_and_der[:old_order])
+            else:
+                raise NameError(f"Unrecognized mode: {mode}")
+
+            if lambdas_in_f:
+                old_args = x_old, x_d_old, u, lambdas, params
+            else:
+                old_args = x_old, x_d_old, u, params
+
+            old_result = F(*old_args)
+            old_result_div = get_x_divisions(old_result, old_order)
+            intermediate_vals = [
+                q_and_der[ii] - q_d_and_der[ii - 1]
+                for ii in range(old_order, new_order)
+            ]
+            new_result_div = (
+                old_result_div[:-1] + intermediate_vals + old_result_div[-1:]
+            )
+            if mode == "numpy":
+                new_result = concatenate(new_result_div, axnum)
+            elif mode == "casadi":
+                new_result = horzcat(*new_result_div)
+            return new_result
+
+    else:
+        raise NameError(f"Unrecognized state_mode: {state_mode}")
+
+    new_docstring = f"""
+    This is a higher order version of function {old_f_name}.
+    This function aims to express that function as a particular
+    case of an order {new_order} implicit function.
+    Old function documentation:
+    """
+    new_docstring += old_docstring
+    new_F.__doc__ = new_docstring
+    return new_F
+
+
 # --- Integration Steps ---
 
 
