@@ -2390,7 +2390,7 @@ class _multi_pseudospectral:
         
         # ---- U opti setup ----
         
-        u_like_x_opti = opti.variable(N, order * self.n_u)
+        u_like_x_opti = opti.variable(N, order * n_u)
         
         u_knot_opti_list = []
         u_coll_opti_list = []
@@ -2421,6 +2421,7 @@ class _multi_pseudospectral:
         t_coll_list = []
         t_coll_arr = []
         t_arr = [t_start,]
+        t_coll_since_knot_list = []
         for seg_ii in range(n_segments):
             _col_tau = coll_points(point_structure[seg_ii], scheme, precission, order)
             _col_t = tau_to_t_points(
@@ -2434,6 +2435,12 @@ class _multi_pseudospectral:
             t_coll_arr += _col_t
             t_arr += _col_t
             t_arr.append(t_knots_and_extremes_arr[seg_ii+1])
+            _col_t_since_knot = tau_to_t_points(
+                _col_tau,
+                0,
+                h_arr[seg_ii]
+                )
+            t_coll_since_knot_list.append(array(_col_t_since_knot, dtype = 'float64'))
         
         t_coll_arr = array(t_coll_arr, dtype = 'float64')
         tau_coll_arr = array(tau_coll_arr, dtype = 'float64')
@@ -2472,6 +2479,7 @@ class _multi_pseudospectral:
             "u_knot" : u_knot_opti_list,
             "t_col" : t_coll_list,
             "tau_col" : tau_coll_list,
+            "t_col_since_knot": t_coll_since_knot_list,
         }
 
         self.opti_points = {
