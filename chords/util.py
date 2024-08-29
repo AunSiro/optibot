@@ -515,3 +515,13 @@ def get_weights(N, scheme, order=2, mode="u"):
     N_gauss = ceil((N + 1) / 2)
 
     return gauss_integral_2d(pol, N_gauss, -1.0, 1.0)
+
+# ----------------- Miscelanea -----------------------
+
+def is_integer(x):
+    try:
+        result = (int(x) == x)
+        return result
+    except TypeError:
+        return False
+    
