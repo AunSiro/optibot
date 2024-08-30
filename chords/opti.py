@@ -52,6 +52,7 @@ from .pseudospectral import (
     _lobato_like_schemes,
     _other_schemes,
     tau_to_t_points,
+    LGL,
 )
 from .bu_pseudospectral import (
     BU_coll_points,
@@ -2473,10 +2474,13 @@ class _multi_pseudospectral:
         self.opti_lists = {
             "x_col" : x_coll_opti_list,
             "x_knot" : x_knot_opti_list,
-            "x_dot_col" : x_dot_coll_opti_list,
-            "x_dot_knot" : x_dot_knot_opti_list,
+            "x_knot_ext" : [x_opti[0, :],] + x_knot_opti_list + [x_opti[-1, :],],
+            "x_d_col" : x_dot_coll_opti_list,
+            "x_d_knot" : x_dot_knot_opti_list,
+            "x_d_knot_ext" : [x_dot_opti[0, :],] + x_dot_knot_opti_list + [x_dot_opti[-1, :],],
             "u_col" : u_coll_opti_list,
             "u_knot" : u_knot_opti_list,
+            "u_knot_ext" : [u_like_x_opti[0, :],] + u_knot_opti_list + [u_like_x_opti[-1, :],],
             "t_col" : t_coll_list,
             "tau_col" : tau_coll_list,
             "t_col_since_knot": t_coll_since_knot_list,
@@ -2520,7 +2524,7 @@ class _multi_pseudospectral:
         for seg_ii in range(n_segments):
             _x_coll_segment = x_coll_opti_list[seg_ii]
             _x_dot_coll_segment = x_dot_coll_opti_list[seg_ii]
-            for _ii in range(order):
+            for _ii in range(order+1):
                 _name = q_and_ders_names[_ii]
                 _key_name = _name + '_col'
                 self.opti_lists[_key_name].append(
@@ -2535,7 +2539,7 @@ class _multi_pseudospectral:
         for seg_ii in range(n_segments-1):
             _x_knot_segment = x_knot_opti_list[seg_ii]
             _x_dot_knot_segment = x_dot_knot_opti_list[seg_ii]
-            for _ii in range(order):
+            for _ii in range(order+1):
                 _name = q_and_ders_names[_ii]
                 _key_name = _name + '_knot'
                 self.opti_lists[_key_name].append(
@@ -2543,9 +2547,32 @@ class _multi_pseudospectral:
                     )
             _name = q_and_ders_names[-1]
             _key_name = _name + '_knot'
-            self.opti_lists[_key_name].append(
-                _x_dot_knot_segment[:, -n_q:]
-                )
+            _arr = _x_dot_knot_segment[:, -n_q:]
+            self.opti_lists[_key_name].append(_arr)
+            
+        for _ii in range(order+1):
+            _name = q_and_ders_names[_ii]
+            _key_name = _name + '_knot'
+            _list = self.opti_lists[_key_name]
+            _start = self.opti_points[_name + "_s"]
+            _end = self.opti_points[_name + "_e"]
+            self.opti_lists[_key_name + '_ext'] = [_start,] + _list + [_end,]
+        
+        if self.scheme_mode == "ph top-down pseudospectral":
+            q_constr_list = []
+            t_constr_list = []
+            for seg_ii in range(n_segments):
+                _n_coll = point_structure[seg_ii]
+                _q_constr_opti = opti.variable(_n_coll + order, n_q)
+                _LGL_points = tau_to_t_points(
+                    LGL(_n_coll + order), 
+                    t_knots_and_extremes_arr[seg_ii],
+                    t_knots_and_extremes_arr[seg_ii+1]
+                    )
+                q_constr_list.append(_q_constr_opti)
+                t_constr_list.append(_LGL_points)
+            self.opti_lists['q_constr'] = q_constr_list
+            self.opti_lists['t_constr'] = t_constr_list
 
     def quad_cost(self, arr, arr_c=None, squared=False):
         """
@@ -2693,7 +2720,7 @@ class _multi_pseudospectral:
         self.cost = cost
         self.opti.minimize(cost)
 
-    def apply_scheme(self):
+    def apply_scheme(self, ): #allow_u_jumps_at_knots = False?
         """
         Applies the restrictions corresponding to the selected scheme to
         the opti variables.
@@ -2711,105 +2738,101 @@ class _multi_pseudospectral:
         None.
 
         """
-        from .casadi import accelrestriction2casadi
-        from .piecewise import (
-            # euler_accel_restr,
-            trapz_accel_restr,
-            trapz_mod_accel_restr,
-            hs_mod_accel_restr,
-            hs_mod_half_x,
-            hs_accel_restr,
-            hs_half_x,
-            hsj_accel_restr,
-            hsj_half_x,
-            generate_hs_m_funcs,
-            generate_trapz_m_func,
-        )
-
+        
         scheme = self.scheme
+        scheme_mode = self.scheme_mode
         try:
-            N = self.N
+            q_and_ders_names = self.q_and_ders_names
+            opti_points = self.opti_points
+            opti_arrs = self.opti_arrs
+            opti_lists = self.opti_lists
+            order = self.order            
+            params = self.params
+            n_segments = self.n_segments
+            point_structure = self.point_structure
+            opti = self.opti
+            dynam_f_x = self.dyn_f_restr
+            h_arr = self.h_arr
         except AttributeError:
             raise RuntimeError(
                 "opti must be set up before applying constraints, use opti_setup()"
             )
-        q_and_ders_names = self.q_and_ders_names
-        T = self.t_end - self.t_start
-        dynam_f_x = self.dyn_f_restr
-        # dynam_g_q = self.dyn_g_restr
-        x_opti = self.opti_arrs["x"]
-        x_dot_opti = self.opti_arrs["x_d"]
-        # q_opti = self.opti_arrs["q"]
-        # v_opti = self.opti_arrs["v"]
-        highest_q_d_opti = self.opti_arrs[q_and_ders_names[-1]]
-        u_opti = self.opti_arrs["u"]
-        lam_opti = self.opti_arrs["lam"]
-        params = self.params
-        if "hs" in scheme:
-            x_c_opti = self.opti_arrs["x_c"]
-            x_c_dot_opti = self.opti_arrs["x_d_c"]
-            u_c_opti = self.opti_arrs["u_c"]
-            # a_c_opti = self.opti_arrs["a_c"]
-            highest_q_d_c_opti = self.opti_arrs[q_and_ders_names[-1] + "_c"]
-            lam_c_opti = self.opti_arrs["lam_c"]
+        
+        x_col_list = opti_lists['x_col']
+        x_knot_list = opti_lists['x_knot']
+        x_dot_col_list = opti_lists['x_d_col']
+        x_dot_knot_list = opti_lists['x_d_knot']
+        u_col_list = opti_lists['u_col']
+        u_knot_list = opti_lists['u_knot']
+        t_col_list = opti_lists['t_col']
+        t_col_since_knot_list = opti_lists['t_col_since_knot']
+        tau_col_list = opti_lists['tau_col']
+        t_knot_arr = opti_arrs['t_knot']
+        
+        x_s = opti_points['x_s']
+        x_e = opti_points['x_e']
+        x_d_s = opti_points['x_d_s']
+        x_d_e = opti_points['x_d_e']
+        u_s = opti_points['u_s']
+        u_e = opti_points['u_e']
+        t_s = self.t_start
+        t_e = self.t_end
+        
+        
+        lam_opti = opti_arrs["lam"]
+        
+        # ----- Scheme Constraints ----
+        
+        if scheme_mode == "ph top-down pseudospectral":
+            
+            q_constr_list = opti_lists['q_constr']
+            coll_index = get_coll_indices(scheme)
+            
+            for seg_ii in range(n_segments):
+                
+                _n_coll = point_structure[seg_ii]
+                q_constr = q_constr_list[seg_ii]
+                h = h_arr[seg_ii]
+                D_nu = matrix_D_nu(order + _n_coll)
+                L = matrix_L(_n_coll, scheme, order, self.precission)
+                
+                for ii in range(order + 1):
+                    _name = q_and_ders_names[ii]
+                    deriv_matrix = (2 / h) ** ii * L @ matrix_power(D_nu, ii)
+                    _res_mat = deriv_matrix @ q_constr
+                    _res_col = _res_mat[coll_index,:]
+                    _res_start = _res_mat[0,:]
+                    _res_end = _res_mat[-1,:]
+                    
+                    _arr_col = opti_lists[_name +'_col'][seg_ii]
+                    _arr_start = opti_lists[_name +'_knot_ext'][seg_ii]
+                    _arr_end  = opti_lists[_name +'_knot_ext'][seg_ii+1]
+                    
+                    opti.subject_to(_arr_col == _res_col)
+                    opti.subject_to(_arr_start == _res_start)
+                    
+        # ----- Knotting intervals together -----
+            
+                    if ii <= order or seg_ii == n_segments:
+                        opti.subject_to(_arr_end == _res_end)
+                    
 
-            if "j" in scheme:
-                half_x = hsj_half_x
-            elif "hsn" in scheme:
-                half_x = generate_hs_m_funcs(self.order)[0]
-            elif "mod" in scheme:
-                half_x = hs_mod_half_x
-            else:
-                half_x = hs_half_x
+        # ----- Dynamics Constraints ----
 
-        # Dynamics Constraints:
-        for ii in range(N + 1):
+        indices = [ii for ii in range(n_arr)][coll_index]
+        for ii, jj in enumerate(indices):
+            # ii : collocation point counter
+            # jj : index in array of x
             self.opti.subject_to(
                 dynam_f_x(
-                    x_opti[ii, :],
-                    x_dot_opti[ii, :],
+                    x_opti[jj, :],
+                    x_dot_opti[jj, :],
                     u_opti[ii, :],
                     lam_opti[ii, :],
                     params,
                 )
                 == 0
             )
-        if "hs" in scheme:
-            for ii in range(N):
-                self.opti.subject_to(
-                    x_c_opti[ii, :]
-                    == half_x(
-                        x_opti[ii, :],
-                        x_opti[ii + 1, :],
-                        highest_q_d_opti[ii, :],
-                        highest_q_d_opti[ii + 1, :],
-                        T / N,
-                    )
-                )
-                self.opti.subject_to(
-                    dynam_f_x(
-                        x_c_opti[ii, :],
-                        x_c_dot_opti[ii, :],
-                        u_c_opti[ii, :],
-                        lam_c_opti[ii, :],
-                        params,
-                    )
-                    == 0
-                )
-            if "parab" not in scheme:
-                if "j" in scheme:
-                    for ii in range(N):
-                        self.opti.subject_to(
-                            u_c_opti[ii, :]
-                            == 0.6 * u_opti[ii, :] + 0.4 * u_opti[ii + 1, :]
-                        )
-                else:
-                    for ii in range(N):
-                        self.opti.subject_to(
-                            u_c_opti[ii, :] == (u_opti[ii, :] + u_opti[ii + 1, :]) / 2
-                        )
-
-        # Scheme Constraints
         
         
         if scheme in _radau_like_schemes + _lobato_like_schemes:
@@ -2831,53 +2854,7 @@ class _multi_pseudospectral:
             u_like_x_opti = cas.vertcat(u_like_x_opti, self.opti_points["u_e"])
             
             
-        restr_schemes = {
-            #'euler': euler_accel_restr, #comprobar compatibilidad
-            "trapz": trapz_accel_restr,
-            "trapz_mod": trapz_mod_accel_restr,
-            "trapz_n": generate_trapz_m_func(self.order),
-            "hs": hs_accel_restr,
-            "hs_mod": hs_mod_accel_restr,
-            "hs_parab": hs_accel_restr,
-            "hs_mod_parab": hs_mod_accel_restr,
-            "hsj": hsj_accel_restr,
-            "hsj_parab": hsj_accel_restr,
-            "hsj_parab_mod": hsj_accel_restr,
-            "hsn": generate_hs_m_funcs(self.order)[1],
-            "hsn_parab": generate_hs_m_funcs(self.order)[1],
-        }
-        n_q = self.n_q
-        f_restr = restr_schemes[scheme]
-        if "hs" in scheme:
-            cas_accel_restr = accelrestriction2casadi(
-                f_restr, n_q, n_q, order=self.order
-            )
-            for ii in range(N):
-                self.opti.subject_to(
-                    cas_accel_restr(
-                        x_opti[ii, :],
-                        x_opti[ii + 1, :],
-                        highest_q_d_opti[ii, :],
-                        highest_q_d_opti[ii + 1, :],
-                        T / N,
-                        highest_q_d_c_opti[ii, :],
-                    )
-                    == 0
-                )
-        else:
-            cas_accel_restr = accelrestriction2casadi(f_restr, n_q, order=self.order)
-            for ii in range(N):
-                self.opti.subject_to(
-                    cas_accel_restr(
-                        x_opti[ii, :],
-                        x_opti[ii + 1, :],
-                        highest_q_d_opti[ii, :],
-                        highest_q_d_opti[ii + 1, :],
-                        T / N,
-                        [],
-                    )
-                    == 0
-                )
+       
                 
 # class _Custom:
 #     def _check_structure_consistency(
