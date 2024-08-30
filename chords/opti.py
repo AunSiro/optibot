@@ -2780,13 +2780,11 @@ class _multi_pseudospectral:
         
         
         lam_opti = opti_arrs["lam"]
-        
-        # ----- Scheme Constraints ----
+        coll_index = get_coll_indices(scheme)
         
         if scheme_mode == "ph top-down pseudospectral":
             
             q_constr_list = opti_lists['q_constr']
-            coll_index = get_coll_indices(scheme)
             
             for seg_ii in range(n_segments):
                 
@@ -2808,15 +2806,85 @@ class _multi_pseudospectral:
                     _arr_start = opti_lists[_name +'_knot_ext'][seg_ii]
                     _arr_end  = opti_lists[_name +'_knot_ext'][seg_ii+1]
                     
+                    # ----- Scheme Constraints ----
+                    
                     opti.subject_to(_arr_col == _res_col)
                     opti.subject_to(_arr_start == _res_start)
                     
-        # ----- Knotting intervals together -----
-            
+                    # ----- Knotting intervals together -----
+                    
                     if ii <= order or seg_ii == n_segments:
                         opti.subject_to(_arr_end == _res_end)
                     
-
+        elif  scheme_mode == "ph bottom-up pseudospectral":
+            h_q_d_name = q_and_ders_names[-1]
+            for seg_ii in range(n_segments): 
+                
+                _n_coll = point_structure[seg_ii]
+                
+                highest_q_d_col = opti_lists[h_q_d_name + '_col'][seg_ii]
+                highest_q_d_start = opti_lists[h_q_d_name +'_knot_ext'][seg_ii]
+                highest_q_d_end  = opti_lists[h_q_d_name +'_knot_ext'][seg_ii+1]
+                
+                q_and_ders_0 = []
+                for _name in q_and_ders_names[:-1]:
+                    _arr_start = opti_lists[_name +'_knot_ext'][seg_ii]
+                    q_and_ders_0.append(_arr_start)
+                polynomial_data = cas.vertcat(*q_and_ders_0, highest_q_d_col)
+                
+                # ----- Extremes of highest derivative Constraints -----
+                
+                if scheme in _gauss_like_schemes + _radau_inv_schemes:
+                    start_mat = Extreme_Matrix(
+                        _n_coll, scheme, "start", scheme_order=order, precission=self.precission
+                    )
+                    _res_h_q_d_start = start_mat @ highest_q_d_col
+                elif scheme in _lobato_like_schemes + _radau_like_schemes:
+                    _res_h_q_d_start =  highest_q_d_col [0,:]
+                else:
+                    raise ValueError(f'Unrecognized scheme {scheme}')
+                    
+                self.opti.subject_to(highest_q_d_start == _res_h_q_d_start)
+                
+                if seg_ii == n_segments:
+                    if scheme in _gauss_like_schemes + _radau_like_schemes:
+                        end_mat = Extreme_Matrix(
+                            _n_coll, scheme, "end", scheme_order=order, precission=self.precission
+                        )
+                        _res_h_q_d_end = end_mat @ highest_q_d_col
+                    elif scheme in _lobato_like_schemes + _radau_inv_schemes:
+                        _res_h_q_d_end =  highest_q_d_col [-1,:]
+                    else:
+                        raise ValueError(f'Unrecognized scheme {scheme}')
+                        
+                    self.opti.subject_to(highest_q_d_end == _res_h_q_d_end)
+                
+                # ----- Scheme Constraints ----
+                
+                for ii in range(order):
+                    
+                    _arr_col = opti_lists[_name +'_col'][seg_ii]
+                    _arr_start = opti_lists[_name +'_knot_ext'][seg_ii]
+                    _arr_end  = opti_lists[_name +'_knot_ext'][seg_ii+1]
+                    
+                    I_mat = Integration_Matrix(
+                        _n_coll, scheme, ii, h, scheme_order=order, precission=self.precission
+                    )
+                    _res_mat =  I_mat @ polynomial_data
+                    _res_mat = cas.vertcat(_arr_start, _res_mat)
+                    _res_col = _res_mat[coll_index,:]
+                    _res_end = _res_mat[-1,:]
+                    
+                    # Careful of not including the starting point!
+                    
+                    # ----- Scheme Constraints ----
+                    
+                    opti.subject_to(_arr_col == _res_col)
+                    
+                    # ----- Knotting intervals together -----
+                    
+                    opti.subject_to(_arr_end == _res_end)
+                    
         # ----- Dynamics Constraints ----
 
         indices = [ii for ii in range(n_arr)][coll_index]
