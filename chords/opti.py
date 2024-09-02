@@ -459,7 +459,24 @@ class _Opti_Problem:
             self.results["N"] = self.N
             self.results["scheme"] = self.scheme
         else:
-            self.results["n_coll"] = self.n_coll
+            if self.scheme_mode in [
+                    "bottom-up pseudospectral",
+                    "top-down pseudospectral",
+                    "pseudospectral",
+                    ]:
+                self.results["n_coll"] = self.n_coll
+                
+            elif self.scheme_mode[:3] == 'ph ':
+                self.results['h_arr'] = self.h_arr
+                self.results["point_structure"] = self.point_structure
+                self.results["n_segments"] = self.n_segments
+                for key in self.opti_lists.keys():
+                    opti_list = self.opti_lists[key]
+                    num_list = []
+                    for arr_item in opti_list:
+                        num_list.append(self.sol.value(arr_item))
+                    self.results[key+'_list'] = num_list
+                
             if self.scheme_mode == "bottom-up pseudospectral":
                 self.results["scheme"] = "BU_" + self.scheme
             elif self.scheme_mode == "top-down pseudospectral":
@@ -2365,6 +2382,7 @@ class _multi_pseudospectral:
             x_dot_coll_opti_list.append(x_dot_opti[ii_inf:ii_sup,:])
             x_knot_opti_list.append(x_opti[ii_sup,:])
             x_dot_knot_opti_list.append(x_dot_opti[ii_sup,:])
+            ii_inf = ii_sup+1
             
         #Last knot is not a knot but the end extreme:
         x_knot_opti_list.pop(-1)
@@ -2385,6 +2403,7 @@ class _multi_pseudospectral:
             ii_sup = ii_inf + point_structure[seg_ii]
             u_coll_opti_list.append(u_like_x_opti[ii_inf:ii_sup,:])
             u_knot_opti_list.append(u_like_x_opti[ii_sup,:])
+            ii_inf = ii_sup+1
             
         #Last knot is not a knot but the end extreme:
         u_knot_opti_list.pop(-1)
@@ -2548,11 +2567,11 @@ class _multi_pseudospectral:
             for seg_ii in range(n_segments):
                 _n_coll = point_structure[seg_ii]
                 _q_constr_opti = opti.variable(_n_coll + order, n_q)
-                _LGL_points = tau_to_t_points(
+                _LGL_points = array(tau_to_t_points(
                     LGL(_n_coll + order), 
                     t_knots_and_extremes_arr[seg_ii],
                     t_knots_and_extremes_arr[seg_ii+1]
-                    )
+                    ), dtype = 'float64')
                 q_constr_list.append(_q_constr_opti)
                 t_constr_list.append(_LGL_points)
             self.opti_lists['q_constr'] = q_constr_list
@@ -2617,12 +2636,12 @@ class _multi_pseudospectral:
 
         """
 
-        dt = self.t_end - self.t_start
-        N_col = self.n_coll
+        
+        n_coll_total = self.n_coll_total
         N_x = self.n_arr
         N_arr = arr.shape[0]
 
-        if N_arr == N_col:
+        if N_arr == n_coll_total:
             mode = "u"
         elif N_arr == N_x:
             mode = "x"
@@ -2632,10 +2651,40 @@ class _multi_pseudospectral:
                 + " of collocation points nor array x lenght"
             )
 
-        f_u_cost = _get_cost_obj_quad_int_cas(
-            self.scheme, N_arr, self.order, squared, mode
-        )
-        cost = dt * cas.sum2(f_u_cost(arr))
+
+        h_arr = self.h_arr
+        n_segments = self.n_segments
+        scheme = self.scheme
+        point_structure = self.point_structure
+        
+        cost = 0
+        
+        u_coll = []
+        
+        ii_inf = 0
+        
+        if mode == 'u':
+            d1 = 0 
+            d2 = 0 
+        elif mode == 'x':
+            d1 = 2
+            d2 = -1 
+        else:
+            raise ValueError
+            
+        for seg_ii in range(n_segments):
+            ii_sup = ii_inf + point_structure[seg_ii] + d1
+            u_coll.append(arr[ii_inf:ii_sup,:])
+            ii_inf = ii_sup + d2
+
+        for seg_ii in range(n_segments):
+            _n_coll = point_structure[seg_ii]
+            f_u_cost = _get_cost_obj_quad_int_cas(
+                scheme,
+                _n_coll,
+                squared,
+                mode)
+            cost += h_arr[seg_ii] * cas.sum2(f_u_cost(u_coll[seg_ii]))
 
         self.cost = cost
         self.opti.minimize(cost)
