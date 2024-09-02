@@ -53,6 +53,7 @@ from .pseudospectral import (
     _other_schemes,
     tau_to_t_points,
     LGL,
+    n_col_to_n_nodes,
 )
 from .bu_pseudospectral import (
     BU_coll_points,
@@ -624,27 +625,7 @@ class _Pseudospectral:
         opti.solver("ipopt", p_opts, s_opts)
         self.opti = opti
 
-        if scheme in _gauss_like_schemes + _gauss_inv_schemes:
-            n_nodes = n_coll + 1
-        elif scheme in _radau_inv_schemes + _radau_like_schemes:
-            n_nodes = n_coll + 1
-        elif scheme in _gauss_2_schemes:
-            n_nodes = n_coll + 2
-        elif scheme in _lobato_like_schemes:
-            n_nodes = n_coll
-        elif scheme in _other_schemes:
-            if scheme == "D2":
-                n_nodes = n_coll
-            else:
-                raise NotImplementedError(
-                    f"unrecognized scheme {scheme}. "
-                    + "Implementede schemes are { _implemented_pseudospectral_schemes}"
-                )
-        else:
-            raise NotImplementedError(
-                f"unrecognized scheme {scheme}. "
-                + "Implementede schemes are { _implemented_pseudospectral_schemes}"
-            )
+        n_nodes = n_col_to_n_nodes(scheme, n_coll)
 
         collocation_points_tau = coll_points(n_coll, scheme, precission)
         node_points_tau = node_points(n_nodes, scheme, precission)
@@ -2450,7 +2431,7 @@ class _multi_pseudospectral:
         
         # ---- lambdas ----
         
-        lam_opti = opti.variable(N, self.n_lambdas)
+        lam_opti = opti.variable(n_coll_total, self.n_lambdas)
 
 
 
@@ -2749,6 +2730,8 @@ class _multi_pseudospectral:
             order = self.order            
             params = self.params
             n_segments = self.n_segments
+            n_q = self.n_q
+            n_coll_total = self.n_coll_total
             point_structure = self.point_structure
             opti = self.opti
             dynam_f_x = self.dyn_f_restr
@@ -2758,28 +2741,6 @@ class _multi_pseudospectral:
                 "opti must be set up before applying constraints, use opti_setup()"
             )
         
-        x_col_list = opti_lists['x_col']
-        x_knot_list = opti_lists['x_knot']
-        x_dot_col_list = opti_lists['x_d_col']
-        x_dot_knot_list = opti_lists['x_d_knot']
-        u_col_list = opti_lists['u_col']
-        u_knot_list = opti_lists['u_knot']
-        t_col_list = opti_lists['t_col']
-        t_col_since_knot_list = opti_lists['t_col_since_knot']
-        tau_col_list = opti_lists['tau_col']
-        t_knot_arr = opti_arrs['t_knot']
-        
-        x_s = opti_points['x_s']
-        x_e = opti_points['x_e']
-        x_d_s = opti_points['x_d_s']
-        x_d_e = opti_points['x_d_e']
-        u_s = opti_points['u_s']
-        u_e = opti_points['u_e']
-        t_s = self.t_start
-        t_e = self.t_end
-        
-        
-        lam_opti = opti_arrs["lam"]
         coll_index = get_coll_indices(scheme)
         
         if scheme_mode == "ph top-down pseudospectral":
@@ -2821,6 +2782,7 @@ class _multi_pseudospectral:
             for seg_ii in range(n_segments): 
                 
                 _n_coll = point_structure[seg_ii]
+                h = h_arr[seg_ii]
                 
                 highest_q_d_col = opti_lists[h_q_d_name + '_col'][seg_ii]
                 highest_q_d_start = opti_lists[h_q_d_name +'_knot_ext'][seg_ii]
@@ -2884,42 +2846,113 @@ class _multi_pseudospectral:
                     # ----- Knotting intervals together -----
                     
                     opti.subject_to(_arr_end == _res_end)
+                
+        elif  scheme_mode == "ph pseudospectral":
+            h_q_d_name = q_and_ders_names[-1]
+            for seg_ii in range(n_segments): 
+                
+                _n_coll = point_structure[seg_ii]
+                n_nodes = n_col_to_n_nodes(scheme, _n_coll)
+                
+                h = h_arr[seg_ii]
+                D_mat = array(matrix_D_bary(
+                    n_nodes,
+                    scheme,
+                    self.precission
+                    ), dtype="float64")
+                
+                # --- Scheme constraints ---
+                _x_col = opti_lists['x_col'][seg_ii]
+                _x_d_col = opti_lists['x_d_col'][seg_ii]
+                _x_start = opti_lists['x_knot_ext'][seg_ii]
+                _x_end  = opti_lists['x_knot_ext'][seg_ii+1]
+                _x_d_start = opti_lists['x_d_knot_ext'][seg_ii]
+                _x_d_end  = opti_lists['x_d_knot_ext'][seg_ii+1]
+                
+                _x_node = _x_col
+                _x_d_node = _x_d_col
+                
+                if scheme not in _gauss_inv_schemes:
+                    _x_node = cas.vertcat(_x_start, _x_node)
+                    _x_d_node = cas.vertcat(_x_d_start, _x_d_node)
+                if scheme not in _gauss_like_schemes:
+                    _x_node = cas.vertcat(_x_node, _x_end)
+                    _x_d_node = cas.vertcat(_x_d_node, _x_d_end)
+            
+                _x_d_calc = 2 / h * D_mat @ _x_node
+                opti.subject_to(_x_d_node == _x_d_calc)
+                
+                # On 2nd order schemes, impose d(x) = x_d on knot points,
+                # as they are node points but not collocation points
+
+                if scheme in _gauss_2_schemes:
+                    opti.subject_to(_x_start [:, n_q:] == _x_d_start[:, :-n_q])
+                    if seg_ii == n_segments:
+                        opti.subject_to(_x_end [:, n_q:] == _x_d_end[:, :-n_q])
+            
+                # --- Scheme not-node end values constraints ---
+                
+                if scheme in _gauss_inv_schemes:
+                    f_start = get_bary_extreme_f_cas(
+                        scheme, n_nodes, mode="x", point="start", order=self.order
+                    )
+                    opti.subject_to(_x_start == f_start(_x_node))
+                    opti.subject_to(_x_d_start[:, -n_q:] == f_start(_x_d_node[:, -n_q:]))
+
+                if scheme in _gauss_like_schemes:
+                    f_end = get_bary_extreme_f_cas(
+                        scheme, n_nodes, mode="x", point="end", order=self.order
+                    )
+                    opti.subject_to(_x_end == f_end(_x_node))
+                    opti.subject_to(_x_d_end[:, -n_q:] == f_end(_x_d_node[:, -n_q:]))
+        else:
+            raise ValueError(f'Unrecognized scheme mode {scheme_mode}')
                     
         # ----- Dynamics Constraints ----
-
-        indices = [ii for ii in range(n_arr)][coll_index]
-        for ii, jj in enumerate(indices):
-            # ii : collocation point counter
-            # jj : index in array of x
+        
+        x_col_arr = opti_arrs['x_like_u']
+        x_d_col_arr = opti_arrs['x_d_like_u']
+        u_arr =  opti_arrs['u']
+        lambda_arr = opti_arrs['lambda']
+        
+        for ii in range(n_coll_total):
             self.opti.subject_to(
                 dynam_f_x(
-                    x_opti[jj, :],
-                    x_dot_opti[jj, :],
-                    u_opti[ii, :],
-                    lam_opti[ii, :],
+                    x_col_arr[ii, :],
+                    x_d_col_arr[ii, :],
+                    u_arr[ii, :],
+                    lambda_arr[ii, :],
                     params,
                 )
                 == 0
             )
         
+        # ----- Values of u in knot points and extremes ----
         
-        if scheme in _radau_like_schemes + _lobato_like_schemes:
-            self.opti_points["u_s"] = u_opti[0, :]
-        else:
-            start_f = get_bary_extreme_f_cas(
-                scheme, n_coll, mode="u", point="start", order=order
-            )
-            self.opti_points["u_s"] = start_f(u_opti)
-            u_like_x_opti = cas.vertcat(self.opti_points["u_s"], u_like_x_opti)
+        u_k_s = opti_lists['u_knot_ext']
+        u_e = opti_points['u_e']
+        
+        for seg_ii in range(n_segments):
+            u_s = u_k_s[seg_ii]
+            u_col = opti_lists['u_col'][seg_ii]
+            _n_coll = point_structure[seg_ii]
+            if scheme in _radau_like_schemes + _lobato_like_schemes:
+                opti.subject_to(u_s == u_col[0, :]) 
+            else:
+                start_f = get_bary_extreme_f_cas(
+                    scheme, _n_coll, mode="u", point="start", order=order
+                )
+                opti.subject_to(u_s == start_f(u_col))
 
+        # note that we reuse _n_coll and u_col from last loop iteration
+        
         if scheme in _radau_inv_schemes + _lobato_like_schemes:
-            self.opti_points["u_e"] = u_opti[-1, :]
+            opti.subject_to(u_s == u_col[-1, :])
         else:
             end_f = get_bary_extreme_f_cas(
-                scheme, n_coll, mode="u", point="end", order=order
+                scheme, _n_coll, mode="u", point="end", order=order
             )
-            self.opti_points["u_e"] = end_f(u_opti)
-            u_like_x_opti = cas.vertcat(u_like_x_opti, self.opti_points["u_e"])
+            opti.subject_to(u_e == end_f(u_col))
             
             
        
