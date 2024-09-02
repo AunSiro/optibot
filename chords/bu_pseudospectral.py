@@ -27,6 +27,7 @@ from .pseudospectral import (
     find_der_polyline,
     tau_to_t_points,
     tau_to_t_function,
+    get_coll_indices,
 )
 from .util import gauss_rep_integral, poly_integral_2d, Lag_integ_2d
 from .piecewise import interp_2d, is2d, get_x_divisions, force2d
@@ -184,47 +185,6 @@ def BU_construction_points(N, scheme, order=2, precission=16):
         raise ValueError(
             f"Unsupported scheme {scheme}, valid schemes are: {_implemented_schemes}"
         )
-
-
-def get_coll_indices(scheme):
-    """
-    returns a slice that can be used to separate collocation points from
-    an array that includes first and last point
-
-    Parameters
-    ----------
-    scheme : str
-        the scheme used.
-
-    Raises
-    ------
-    NotImplementedError
-        When the scheme is not recognized.
-
-    Returns
-    -------
-    coll_index : slice
-        slice to be used as index in the array to extract the collocation points.
-
-    """
-    if scheme in _gauss_like_schemes:
-        coll_index = slice(1, -1)
-    elif scheme in _radau_like_schemes:
-        coll_index = slice(None, -1)
-    elif scheme in _radau_inv_schemes:
-        coll_index = slice(1, None)
-    elif scheme in _lobato_like_schemes:
-        coll_index = slice(None, None)
-    elif scheme in _other_schemes:
-        if scheme in []:
-            pass
-        else:
-            raise NotImplementedError(
-                f"scheme {scheme} in category 'others' is not yet implemented"
-            )
-    else:
-        raise NotImplementedError(f"Scheme {scheme} not implemented yet")
-    return coll_index
 
 
 @lru_cache(maxsize=2000)

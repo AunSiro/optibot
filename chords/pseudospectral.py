@@ -354,6 +354,49 @@ def get_coll_indices_from_nodes(scheme):
     return coll_index
 
 
+def get_coll_indices(scheme):
+    """
+    returns a slice that can be used to separate collocation points from
+    an array that includes first and last point
+
+    Parameters
+    ----------
+    scheme : str
+        the scheme used.
+
+    Raises
+    ------
+    NotImplementedError
+        When the scheme is not recognized.
+
+    Returns
+    -------
+    coll_index : slice
+        slice to be used as index in the array to extract the collocation points.
+
+    """
+    if scheme in (_gauss_like_schemes + _gauss_inv_schemes + _gauss_2_schemes):
+        coll_index = slice(1, -1)
+    elif scheme in _radau_like_schemes:
+        coll_index = slice(None, -1)
+    elif scheme in _radau_inv_schemes:
+        coll_index = slice(1, None)
+    elif scheme in _lobato_like_schemes:
+        coll_index = slice(None, None)
+    elif scheme in _other_schemes:
+        if scheme in [
+                "D2",
+            ]:
+            coll_index = slice(None, None)
+        else:
+            raise NotImplementedError(
+                f"scheme {scheme} in category 'others' is not yet implemented"
+            )
+    else:
+        raise NotImplementedError(f"Scheme {scheme} not implemented yet")
+    return coll_index
+
+
 def tau_to_t_points(points, t0, tf):
     """
     converts a point or series of points from tau in [-1,1] to t in [t0, tf]

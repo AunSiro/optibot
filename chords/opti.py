@@ -54,13 +54,13 @@ from .pseudospectral import (
     tau_to_t_points,
     LGL,
     n_col_to_n_nodes,
+    get_coll_indices,
 )
 from .bu_pseudospectral import (
     BU_coll_points,
     BU_construction_points,
     Integration_Matrix,
     Extreme_Matrix,
-    get_coll_indices,
 )
 from .bu_pseudospectral import (
     _implemented_schemes as _implemented_bottom_up_pseudospectral_schemes,
@@ -2328,6 +2328,7 @@ class _multi_pseudospectral:
         N = n_coll_total + n_segments + 1
         self.N = N
         self.n_coll_total = n_coll_total
+        self.precission = precission
         
         opti = cas.Opti()
         if p_opts is None:
@@ -2505,7 +2506,7 @@ class _multi_pseudospectral:
         for seg_ii in range(n_segments):
             _x_coll_segment = x_coll_opti_list[seg_ii]
             _x_dot_coll_segment = x_dot_coll_opti_list[seg_ii]
-            for _ii in range(order+1):
+            for _ii in range(order):
                 _name = q_and_ders_names[_ii]
                 _key_name = _name + '_col'
                 self.opti_lists[_key_name].append(
@@ -2520,7 +2521,7 @@ class _multi_pseudospectral:
         for seg_ii in range(n_segments-1):
             _x_knot_segment = x_knot_opti_list[seg_ii]
             _x_dot_knot_segment = x_dot_knot_opti_list[seg_ii]
-            for _ii in range(order+1):
+            for _ii in range(order):
                 _name = q_and_ders_names[_ii]
                 _key_name = _name + '_knot'
                 self.opti_lists[_key_name].append(
@@ -2872,10 +2873,10 @@ class _multi_pseudospectral:
                 _x_node = _x_col
                 _x_d_node = _x_d_col
                 
-                if scheme not in _gauss_inv_schemes:
+                if scheme in (_gauss_like_schemes + _radau_inv_schemes + _gauss_2_schemes):
                     _x_node = cas.vertcat(_x_start, _x_node)
                     _x_d_node = cas.vertcat(_x_d_start, _x_d_node)
-                if scheme not in _gauss_like_schemes:
+                if scheme in (_gauss_inv_schemes + _radau_like_schemes + _gauss_2_schemes):
                     _x_node = cas.vertcat(_x_node, _x_end)
                     _x_d_node = cas.vertcat(_x_d_node, _x_d_end)
             
@@ -2884,6 +2885,7 @@ class _multi_pseudospectral:
                 
                 # On 2nd order schemes, impose d(x) = x_d on knot points,
                 # as they are node points but not collocation points
+                # and derivatives are linked as f(t) and not only in col points
 
                 if scheme in _gauss_2_schemes:
                     opti.subject_to(_x_start [:, n_q:] == _x_d_start[:, :-n_q])
@@ -2913,7 +2915,7 @@ class _multi_pseudospectral:
         x_col_arr = opti_arrs['x_like_u']
         x_d_col_arr = opti_arrs['x_d_like_u']
         u_arr =  opti_arrs['u']
-        lambda_arr = opti_arrs['lambda']
+        lambda_arr = opti_arrs['lam']
         
         for ii in range(n_coll_total):
             self.opti.subject_to(
