@@ -284,6 +284,31 @@ def node_points(N, scheme, precission=16):
         )
 
 
+def n_col_to_n_nodes(scheme, n_coll):
+    if scheme in _gauss_like_schemes + _gauss_inv_schemes:
+        n_nodes = n_coll + 1
+    elif scheme in _radau_inv_schemes + _radau_like_schemes:
+        n_nodes = n_coll + 1
+    elif scheme in _gauss_2_schemes:
+        n_nodes = n_coll + 2
+    elif scheme in _lobato_like_schemes:
+        n_nodes = n_coll
+    elif scheme in _other_schemes:
+        if scheme == "D2":
+            n_nodes = n_coll
+        else:
+            raise NotImplementedError(
+                f"unrecognized scheme {scheme}. "
+                + "Implementede schemes are { _implemented_pseudospectral_schemes}"
+            )
+    else:
+        raise NotImplementedError(
+            f"unrecognized scheme {scheme}. "
+            + "Implementede schemes are { _implemented_pseudospectral_schemes}"
+        )
+    return n_nodes
+
+
 def get_coll_indices_from_nodes(scheme):
     """
     returns a slice that can be used to separate collocation points from
