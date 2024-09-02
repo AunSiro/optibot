@@ -337,6 +337,8 @@ def _get_cost_obj_quad_int_cas(scheme, N, order=2, squared=False, mode="u"):
     """
     if scheme[:3] == "BU_":
         scheme = scheme[3:]
+    if scheme[:3] == "TD_":
+        scheme = scheme[3:]
 
     u_sym = cas.SX.sym("u", N)
     exp = 2 if squared else 1
@@ -2325,8 +2327,8 @@ class _multi_pseudospectral:
         n_segments = self.n_segments
         n_coll_total = np_sum(point_structure)
         #Total Number of points:
-        N = n_coll_total + n_segments + 1
-        self.N = N
+        n_arr = n_coll_total + n_segments + 1
+        self.n_arr = n_arr
         self.n_coll_total = n_coll_total
         self.precission = precission
         
@@ -2348,8 +2350,8 @@ class _multi_pseudospectral:
 
         # ---- X opti setup ----
         
-        x_opti = opti.variable(N, order * self.n_q)
-        x_dot_opti = opti.variable(N, order * self.n_q)
+        x_opti = opti.variable(n_arr, order * self.n_q)
+        x_dot_opti = opti.variable(n_arr, order * self.n_q)
         
         x_knot_opti_list = []
         x_coll_opti_list = []
@@ -2373,7 +2375,7 @@ class _multi_pseudospectral:
         
         # ---- U opti setup ----
         
-        u_like_x_opti = opti.variable(N, order * n_u)
+        u_like_x_opti = opti.variable(n_arr, n_u)
         
         u_knot_opti_list = []
         u_coll_opti_list = []
@@ -2556,7 +2558,47 @@ class _multi_pseudospectral:
             self.opti_lists['q_constr'] = q_constr_list
             self.opti_lists['t_constr'] = t_constr_list
 
-    def quad_cost(self, arr, arr_c=None, squared=False):
+    def u_sq_cost(self):
+        """
+        Calculates a trapezoidal integration of u squared and sets it
+        as the optimization cost to minimize
+
+        Requires the functions dynamic_setup() and opti_setup(), in that order,
+        to have been run prior.
+
+        Raises
+        ------
+        RuntimeError
+            If opti_setup() or dynamic_setup() have not ben run previously
+
+        Returns
+        -------
+        None.
+
+        """
+        try:
+            U_col = self.opti_lists["u_col"]
+        except AttributeError:
+            raise RuntimeError(
+                "opti must be set up before defining cost, use opti_setup()"
+            )
+
+        h_arr = self.h_arr
+        n_segments = self.n_segments
+        scheme = self.scheme
+        point_structure = self.point_structure
+        
+        cost = 0
+
+        for seg_ii in range(n_segments):
+            _n_coll = point_structure[seg_ii]
+            f_u_cost = _get_cost_obj_quad_int_cas(scheme, _n_coll, squared=True)
+            cost += h_arr[seg_ii] * cas.sum2(f_u_cost(U_col[seg_ii]))
+
+        self.cost = cost
+        self.opti.minimize(cost)
+
+    def quad_cost(self, arr, squared=False):
         """
         Calculates a quadrature integration of an array and sets it
         as the optimization cost to minimize
@@ -2576,31 +2618,31 @@ class _multi_pseudospectral:
         """
 
         dt = self.t_end - self.t_start
-        if squared:
-            arr = arr**2
+        N_col = self.n_coll
+        N_x = self.n_arr
+        N_arr = arr.shape[0]
 
-        if arr_c is None:
-            cost = dt * cas.sum2(
-                (cas.sum1(arr[:, :]) + cas.sum1(arr[1:-1, :])) / self.N
-            )
+        if N_arr == N_col:
+            mode = "u"
+        elif N_arr == N_x:
+            mode = "x"
         else:
-            if squared:
-                arr_c = arr_c**2
-            cost = dt * cas.sum2(
-                (
-                    4 * cas.sum1(arr_c[:, :])
-                    + cas.sum1(arr[:, :])
-                    + cas.sum1(arr[1:-1, :])
-                )
-                / (3 * self.N)
+            raise ValueError(
+                "Unrecognized shape of arr, not equal to number"
+                + " of collocation points nor array x lenght"
             )
+
+        f_u_cost = _get_cost_obj_quad_int_cas(
+            self.scheme, N_arr, self.order, squared, mode
+        )
+        cost = dt * cas.sum2(f_u_cost(arr))
 
         self.cost = cost
         self.opti.minimize(cost)
 
-    def sq_cost(self, arr, arr_c=None):
+    def trapz_cost(self, arr, squared=False):
         """
-        Calculates a quadrature integration of an array squared and sets it
+        Calculates a trapezoidal integration of an array and sets it
         as the optimization cost to minimize
 
         Requires the functions dynamic_setup() and opti_setup(), in that order,
@@ -2618,87 +2660,25 @@ class _multi_pseudospectral:
         """
 
         dt = self.t_end - self.t_start
-        arr_sq = arr**2
-        if arr_c is None:
-            cost = dt * cas.sum2(
-                (cas.sum1(arr_sq[:, :]) + cas.sum1(arr_sq[1:-1, :])) / self.N
-            )
+        N = self.n_arr
+        N_col = self.n_coll
+        N_arr = arr.shape[0]
+
+        if N_arr == N_col:
+            mode = "u"
+        elif N_arr == N:
+            mode = "x"
         else:
-            arr_c_sq = arr_c**2
-            cost = dt * cas.sum2(
-                (
-                    4 * cas.sum1(arr_c_sq[:, :])
-                    + cas.sum1(arr_sq[:, :])
-                    + cas.sum1(arr_sq[1:-1, :])
-                )
-                / (3 * self.N)
+            raise ValueError(
+                "Unrecognized shape of arr, not equal to number"
+                + " of node nor collocation points"
             )
 
-        self.cost = cost
-        self.opti.minimize(cost)
+        f_u_cost = _get_cost_obj_trap_int_cas(
+            self.scheme, self.n_coll, self.order, mode, squared
+        )
+        cost = dt * cas.sum2(f_u_cost(arr))
 
-    def u_sq_cost(self):
-        """
-        Calculates a quadrature integration of u squared and sets it
-        as the optimization cost to minimize
-
-        Requires the functions dynamic_setup() and opti_setup(), in that order,
-        to have been run prior.
-
-        Raises
-        ------
-        RuntimeError
-            If opti_setup() or dynamic_setup() have not ben run previously
-
-        Returns
-        -------
-        None.
-
-        """
-        try:
-            U = self.opti_arrs["u"]
-        except AttributeError:
-            raise RuntimeError(
-                "opti must be set up before defining cost, use opti_setup()"
-            )
-
-        dt = self.t_end - self.t_start
-        U_sq = U**2
-
-        if "parab" in self.scheme:
-            U_c = self.opti_arrs["u_c"]
-            if self.scheme == "hsj_parab_mod":
-                U_c = self.opti_arrs["u_j"]
-                U_j = self.opti_arrs["u_c"]  # OJO EN arrs están guardados al revés!
-                # self.opti.subject_to(U_c == (25*U_j + 2*U[1:, :] - 3*U[:-1, :])/24)
-                self.opti.subject_to(
-                    U_j == (24 * U_c - 2 * U[1:, :] + 3 * U[:-1, :]) / 25
-                )
-
-            U_c_sq = U_c**2
-
-            if "j" in self.scheme and self.scheme != "hsj_parab_mod":
-                cost = dt * cas.sum2(
-                    (
-                        25 * cas.sum1(U_c_sq[:, :])
-                        + 3 * cas.sum1(U_sq[:-1, :])
-                        + 8 * cas.sum1(U_sq[1:, :])
-                    )
-                    / (18 * self.N)
-                )
-            else:
-                cost = dt * cas.sum2(
-                    (
-                        4 * cas.sum1(U_c_sq[:, :])
-                        + cas.sum1(U_sq[:, :])
-                        + cas.sum1(U_sq[1:-1, :])
-                    )
-                    / (3 * self.N)
-                )
-        else:
-            cost = dt * cas.sum2(
-                (cas.sum1(U_sq[:, :]) + cas.sum1(U_sq[1:-1, :])) / self.N
-            )
         self.cost = cost
         self.opti.minimize(cost)
 
@@ -3681,10 +3661,10 @@ class _Zero_init:
         """
         q_opti, v_opti, a_opti = self._ini_guess_start()
         self.opti.set_initial(q_opti, 0)
-        if self.scheme not in ["LG2", "D2", "LGLm", "JG"]:
-            self.opti.set_initial(v_opti, 0)
-            if self.scheme_mode == "equispaced":
-                self.opti.set_initial(a_opti, 0)
+        #if self.scheme not in ["LG2", "D2", "LGLm", "JG"]:
+        self.opti.set_initial(v_opti, 0)
+        if self.scheme_mode == "equispaced":
+            self.opti.set_initial(a_opti, 0)
 
 
 class _Lin_init:
@@ -3717,6 +3697,9 @@ class _Lin_init:
             "bottom-up pseudospectral",
             "top-down pseudospectral",
             "pseudospectral",
+            "ph bottom-up pseudospectral",
+            "ph top-down pseudospectral",
+            "ph pseudospectral",
         ]:
             N = self.n_arr  # Number of points in X
         else:
@@ -3732,16 +3715,16 @@ class _Lin_init:
         )
         q_dot_guess = (q_e - q_s) * ones([N, 1]) / T
         self.opti.set_initial(q_opti, q_guess)
-        if self.scheme not in ["LG2", "D2", "LGLm", "JG"]:
-            self.opti.set_initial(v_opti, q_dot_guess)
-            if self.order > 1 and self.scheme_mode == "equispaced":
-                self.opti.set_initial(a_opti, 0)
-                if "hs" in self.scheme:
-                    self.opti.set_initial(
-                        self.opti_arrs["q_c"], (q_guess[:-1, :] + q_guess[1:, :]) / 2
-                    )
-                    self.opti.set_initial(self.opti_arrs["v_c"], q_dot_guess[1:, :])
-                    self.opti.set_initial(self.opti_arrs["a_c"], 0)
+        #if self.scheme not in ["LG2", "D2", "LGLm", "JG"]:
+        self.opti.set_initial(v_opti, q_dot_guess)
+        if self.order > 1 and self.scheme_mode == "equispaced":
+            self.opti.set_initial(a_opti, 0)
+            if "hs" in self.scheme:
+                self.opti.set_initial(
+                    self.opti_arrs["q_c"], (q_guess[:-1, :] + q_guess[1:, :]) / 2
+                )
+                self.opti.set_initial(self.opti_arrs["v_c"], q_dot_guess[1:, :])
+                self.opti.set_initial(self.opti_arrs["a_c"], 0)
 
 
 class _Custom_init:
@@ -3772,23 +3755,23 @@ class _Custom_init:
         u_opti = self.opti_arrs["u"]
         self.opti.set_initial(q_opti, q_guess)
         self.opti.set_initial(u_opti, u_guess)
-        if self.scheme not in ["LG2", "D2", "LGLm", "JG"]:
-            self.opti.set_initial(v_opti, v_guess)
-            if self.scheme_mode == "equispaced":
-                self.opti.set_initial(a_opti, 0)
-                if "hs" in self.scheme:
-                    self.opti.set_initial(
-                        self.opti_arrs["q_c"], (q_guess[:-1, :] + q_guess[1:, :]) / 2
-                    )
-                    self.opti.set_initial(
-                        self.opti_arrs["v_c"], (v_guess[:-1, :] + v_guess[1:, :]) / 2
-                    )
-                    self.opti.set_initial(
-                        self.opti_arrs["a_c"], (a_guess[:-1, :] + a_guess[1:, :]) / 2
-                    )
-                    self.opti.set_initial(
-                        self.opti_arrs["u_c"], (u_guess[:-1, :] + u_guess[1:, :]) / 2
-                    )
+        #if self.scheme not in ["LG2", "D2", "LGLm", "JG"]:
+        self.opti.set_initial(v_opti, v_guess)
+        if self.scheme_mode == "equispaced":
+            self.opti.set_initial(a_opti, 0)
+            if "hs" in self.scheme:
+                self.opti.set_initial(
+                    self.opti_arrs["q_c"], (q_guess[:-1, :] + q_guess[1:, :]) / 2
+                )
+                self.opti.set_initial(
+                    self.opti_arrs["v_c"], (v_guess[:-1, :] + v_guess[1:, :]) / 2
+                )
+                self.opti.set_initial(
+                    self.opti_arrs["a_c"], (a_guess[:-1, :] + a_guess[1:, :]) / 2
+                )
+                self.opti.set_initial(
+                    self.opti_arrs["u_c"], (u_guess[:-1, :] + u_guess[1:, :]) / 2
+                )
 
 
 def Opti_Problem(
