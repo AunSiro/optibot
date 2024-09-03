@@ -2927,11 +2927,11 @@ class _multi_pseudospectral:
                 
                 if scheme in (_lobato_like_schemes + _radau_like_schemes):
                     opti.subject_to(_x_start == _x_node[0, :])
-                    opti.subject_to(_x_d_start == _x_d_node[0, :])
+                    #opti.subject_to(_x_d_start == _x_d_node[0, :])
                 
                 if scheme in (_lobato_like_schemes + _radau_inv_schemes):
                     opti.subject_to(_x_end == _x_node[-1, :])
-                    opti.subject_to(_x_d_end == _x_d_node[-1, :])
+                    #opti.subject_to(_x_d_end == _x_d_node[-1, :])
             
                 # --- Scheme not-node end values constraints ---
                 
@@ -2990,7 +2990,7 @@ class _multi_pseudospectral:
         # note that we reuse _n_coll and u_col from last loop iteration
         
         if scheme in _radau_inv_schemes + _lobato_like_schemes:
-            opti.subject_to(u_s == u_col[-1, :])
+            opti.subject_to(u_e == u_col[-1, :])
         else:
             end_f = get_bary_extreme_f_cas(
                 scheme, _n_coll, mode="u", point="end", order=order
