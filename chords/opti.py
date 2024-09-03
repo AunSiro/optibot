@@ -470,6 +470,7 @@ class _Opti_Problem:
                 self.results['h_arr'] = self.h_arr
                 self.results["point_structure"] = self.point_structure
                 self.results["n_segments"] = self.n_segments
+                self.results["n_coll_total"] = self.n_coll_total
                 for key in self.opti_lists.keys():
                     opti_list = self.opti_lists[key]
                     num_list = []
@@ -2854,6 +2855,7 @@ class _multi_pseudospectral:
                 # ----- Scheme Constraints ----
                 
                 for ii in range(order):
+                    _name = q_and_ders_names[ii]
                     
                     _arr_col = opti_lists[_name +'_col'][seg_ii]
                     _arr_start = opti_lists[_name +'_knot_ext'][seg_ii]
