@@ -33,6 +33,7 @@ The class will inherit:
 
 from .symbolic import find_arguments
 from .casadi import sympy2casadi, rhs_to_casadi_function
+from .piecewise import interp_2d
 from .pseudospectral import (
     node_points,
     coll_points,
@@ -69,7 +70,10 @@ from .td_pseudospectral import TD_construction_points, matrix_D_nu, matrix_L
 from .util import get_weights, is_integer
 
 import casadi as cas
-from numpy import array, linspace, expand_dims, ones, ndarray, alltrue, zeros
+from numpy import (
+    array, linspace, expand_dims, ones, ndarray, alltrue, zeros, interp, 
+    concatenate, gradient
+    )
 from numpy.linalg import matrix_power
 from numpy import sum as np_sum
 from sympy import symbols
@@ -3767,17 +3771,30 @@ class _Lin_init:
             raise NotImplementedError(
                 f"Linear init not implemented for scheme mode {self.scheme_mode}"
             )
-        T = self.t_end - self.t_start
+        h = self.t_end - self.t_start
         q_s = array(q_s, dtype="float64")
         q_e = array(q_e, dtype="float64")
-        s_arr = linspace(0, 1, N)
-        q_guess = expand_dims(q_s, 0) + expand_dims(s_arr, 1) * expand_dims(
-            (q_e - q_s), 0
-        )
-        q_dot_guess = (q_e - q_s) * ones([N, 1]) / T
+        t_arr = self.opti_arrs["t"]
+        q_guess = interp_2d(
+            array(t_arr, dtype = 'float64'),
+            array((self.t_start,self.t_end), dtype = 'float64'),
+            concatenate((expand_dims(q_s, 0),expand_dims(q_e, 0)))
+            )
+        q_dot_guess = (q_e - q_s) * ones([N, 1]) / h
         self.opti.set_initial(q_opti, q_guess)
         #if self.scheme not in ["LG2", "D2", "LGLm", "JG"]:
         self.opti.set_initial(v_opti, q_dot_guess)
+        
+        if self.scheme_mode == "top-down pseudospectral":
+            q_constr_opti = self.opti_arrs["q_constr"]
+            n_constr = q_constr_opti.shape[0]
+            s_constr_arr = array(tau_to_t_points(LGL(n_constr), self.t_start, self.t_end), dtype = 'float64')
+            q_constr_guess = interp_2d(
+                s_constr_arr,
+                array((self.t_start,self.t_end), dtype = 'float64'),
+                concatenate((expand_dims(q_s, 0),expand_dims(q_e, 0)))
+            )
+            self.opti.set_initial(q_constr_opti, q_constr_guess)
         if self.order > 1 and self.scheme_mode == "equispaced":
             self.opti.set_initial(a_opti, 0)
             if "hs" in self.scheme:
@@ -3786,6 +3803,107 @@ class _Lin_init:
                 )
                 self.opti.set_initial(self.opti_arrs["v_c"], q_dot_guess[1:, :])
                 self.opti.set_initial(self.opti_arrs["a_c"], 0)
+
+
+class _Waypoints_init:
+    def initial_guess(self, q_points, t_points = None):
+        """
+        Sets initial guess values for q, v and a.
+        q is a lineal interpolation between q_s and q_e
+        v is a uniform value = (q_e - q_s)/T
+        a is zero
+
+        If scheme is an Hermite Simpson variation, inizialization is also
+        applied to central point values.
+
+        Parameters
+        ----------
+        q_s : list, array, or float if problem is 1-d
+            Starting point.
+        q_e : list, array, or float if problem is 1-d
+            Ending point.
+
+        Returns
+        -------
+        None.
+
+        """
+        q_opti, v_opti, a_opti = self._ini_guess_start()
+        x_opti = self.opti_arrs['x']
+        x_dot_opti = self.opti_arrs['x_d']
+        
+        if self.scheme_mode == "equispaced":
+            N = self.N + 1  # Number of segments
+        elif self.scheme_mode in [
+            "bottom-up pseudospectral",
+            "top-down pseudospectral",
+            "pseudospectral",
+            "ph bottom-up pseudospectral",
+            "ph top-down pseudospectral",
+            "ph pseudospectral",
+        ]:
+            N = self.n_arr  # Number of points in X
+        else:
+            raise NotImplementedError(
+                f"Linear init not implemented for scheme mode {self.scheme_mode}"
+            )
+            
+        if t_points is None:
+            t_points = linspace(self.t_start, self.t_end, N)
+            
+        t_arr = self.opti_arrs["t"]
+        q_guess = interp_2d(
+            array(t_arr, dtype = 'float64'),
+            t_points,
+            q_points
+            )
+        q_dot_points = gradient(q_points, t_points, axis = 0)
+        q_dot_guess = interp_2d(
+            array(t_arr, dtype = 'float64'),
+            t_points,
+            q_dot_points
+            )
+        q_and_ders_guess = [q_guess, q_dot_guess]
+        
+        for ii in range(2, self.order+1):
+            q_dot_points = gradient(q_dot_points, t_points, axis = 0)
+            q_dot_guess = interp_2d(
+                array(t_arr, dtype = 'float64'),
+                t_points,
+                q_dot_points
+                )
+            q_and_ders_guess.append(q_dot_guess)
+        
+        if self.order == 1:
+            x_guess = q_guess
+            x_dot_guess = q_dot_guess
+        else:
+            x_guess = concatenate(q_and_ders_guess[:-1], axis = 1)
+            x_dot_guess = concatenate(q_and_ders_guess[1:], axis = 1)
+        
+        self.opti.set_initial(x_opti, x_guess)
+        #if self.scheme not in ["LG2", "D2", "LGLm", "JG"]:
+        self.opti.set_initial(x_dot_opti, x_dot_guess)
+        
+        if self.scheme_mode == "top-down pseudospectral":
+            q_constr_opti = self.opti_arrs["q_constr"]
+            n_constr = q_constr_opti.shape[0]
+            s_constr_arr = array(tau_to_t_points(LGL(n_constr), self.t_start, self.t_end), dtype = 'float64')
+            q_constr_guess = interp_2d(
+                s_constr_arr,
+                t_points,
+                q_points
+            )
+            self.opti.set_initial(q_constr_opti, q_constr_guess)
+            
+        if self.scheme_mode == "equispaced":
+            if "hs" in self.scheme:
+                self.opti.set_initial(
+                    self.opti_arrs["x_c"], (x_guess[:-1, :] + x_guess[1:, :]) / 2
+                )
+                self.opti.set_initial(
+                    self.opti_arrs["x_d_c"], (x_dot_guess[:-1, :] + x_dot_guess[1:, :]) / 2
+                )
 
 
 class _Custom_init:
@@ -3833,6 +3951,16 @@ class _Custom_init:
                 self.opti.set_initial(
                     self.opti_arrs["u_c"], (u_guess[:-1, :] + u_guess[1:, :]) / 2
                 )
+        if self.scheme_mode == "top-down pseudospectral":
+            q_constr_opti = self.opti_arrs["q_constr"]
+            n_constr = q_constr_opti.shape[0]
+            s_constr_arr = array(tau_to_t_points(LGL(n_constr), self.t_start, self.t_end), dtype = 'float64')
+            q_constr_guess = interp_2d(
+                s_constr_arr,
+                self.opti_arrs['t'],
+                q_guess
+            )
+            self.opti.set_initial(q_constr_opti, q_constr_guess)
 
 
 def Opti_Problem(
@@ -3978,6 +4106,8 @@ def Opti_Problem(
         inherit.append(_Zero_init)
     elif ini_guess == "lin":
         inherit.append(_Lin_init)
+    elif ini_guess == "waypoints":
+        inherit.append(_Waypoints_init)
     elif ini_guess == "custom":
         inherit.append(_Custom_init)
     else:
