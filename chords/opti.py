@@ -3806,7 +3806,7 @@ class _Lin_init:
 
 
 class _Waypoints_init:
-    def initial_guess(self, q_points, t_points = None):
+    def initial_guess(self, q_points, t_points = None, u_points = None):
         """
         Sets initial guess values for q, v and a.
         q is a lineal interpolation between q_s and q_e
@@ -3896,14 +3896,36 @@ class _Waypoints_init:
             )
             self.opti.set_initial(q_constr_opti, q_constr_guess)
             
-        if self.scheme_mode == "equispaced":
-            if "hs" in self.scheme:
-                self.opti.set_initial(
-                    self.opti_arrs["x_c"], (x_guess[:-1, :] + x_guess[1:, :]) / 2
-                )
-                self.opti.set_initial(
-                    self.opti_arrs["x_d_c"], (x_dot_guess[:-1, :] + x_dot_guess[1:, :]) / 2
-                )
+        if self.scheme_mode == "equispaced" and "hs" in self.scheme:
+            self.opti.set_initial(
+                self.opti_arrs["x_c"], (x_guess[:-1, :] + x_guess[1:, :]) / 2
+            )
+            self.opti.set_initial(
+                self.opti_arrs["x_d_c"], (x_dot_guess[:-1, :] + x_dot_guess[1:, :]) / 2
+            )
+                
+        if u_points is not None:
+            if self.scheme_mode[:3] == 'ph ':
+                u_opti = self.opti_arrs["u_like_x"]
+                u_guess = interp_2d(
+                    array(t_arr, dtype = 'float64'),
+                    t_points,
+                    u_points
+                    )
+                self.opti.set_initial(u_opti, u_guess)
+            else:
+                u_opti = self.opti_arrs["u"]
+                t_col_arr = self.opti_arrs["t_col"]
+                u_guess = interp_2d(
+                    array(t_col_arr, dtype = 'float64'),
+                    t_points,
+                    u_points
+                    )
+                self.opti.set_initial(u_opti, u_guess)
+                if self.scheme_mode == "equispaced" and "hs" in self.scheme:
+                    self.opti.set_initial(
+                        self.opti_arrs["u_c"], (u_guess[:-1, :] + u_guess[1:, :]) / 2
+                    )
 
 
 class _Custom_init:
