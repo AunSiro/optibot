@@ -71,9 +71,17 @@ from .util import get_weights, is_integer
 
 import casadi as cas
 from numpy import (
-    array, linspace, expand_dims, ones, ndarray, alltrue, zeros, interp, 
-    concatenate, gradient
-    )
+    array,
+    linspace,
+    expand_dims,
+    ones,
+    ndarray,
+    alltrue,
+    zeros,
+    interp,
+    concatenate,
+    gradient,
+)
 from numpy.linalg import matrix_power
 from numpy import sum as np_sum
 from sympy import symbols
@@ -397,12 +405,12 @@ class _Opti_Problem:
         verbose=False,
         silent=True,
     ):
-        if scheme[:3] == 'ph_':
+        if scheme[:3] == "ph_":
             ph_scheme = True
             scheme = scheme[3:]
         else:
             ph_scheme = False
-            
+
         if scheme in _implemented_equispaced_schemes:
             self.scheme_mode = "equispaced"
         elif scheme in _implemented_pseudospectral_schemes:
@@ -418,8 +426,8 @@ class _Opti_Problem:
                 f"scheme {scheme} not implemented. Valid methods are {_all_implemented_schemes}."
             )
         if ph_scheme:
-            self.scheme_mode = 'ph ' + self.scheme_mode
-            
+            self.scheme_mode = "ph " + self.scheme_mode
+
         self.LM = LM
         self.params = params
         self.scheme = scheme
@@ -464,14 +472,14 @@ class _Opti_Problem:
             self.results["scheme"] = self.scheme
         else:
             if self.scheme_mode in [
-                    "bottom-up pseudospectral",
-                    "top-down pseudospectral",
-                    "pseudospectral",
-                    ]:
+                "bottom-up pseudospectral",
+                "top-down pseudospectral",
+                "pseudospectral",
+            ]:
                 self.results["n_coll"] = self.n_coll
-                
-            elif self.scheme_mode[:3] == 'ph ':
-                self.results['h_arr'] = self.h_arr
+
+            elif self.scheme_mode[:3] == "ph ":
+                self.results["h_arr"] = self.h_arr
                 self.results["point_structure"] = self.point_structure
                 self.results["n_segments"] = self.n_segments
                 self.results["n_coll_total"] = self.n_coll_total
@@ -480,8 +488,8 @@ class _Opti_Problem:
                     num_list = []
                     for arr_item in opti_list:
                         num_list.append(self.sol.value(arr_item))
-                    self.results[key+'_list'] = num_list
-                
+                    self.results[key + "_list"] = num_list
+
             if self.scheme_mode == "bottom-up pseudospectral":
                 self.results["scheme"] = "BU_" + self.scheme
             elif self.scheme_mode == "top-down pseudospectral":
@@ -2265,17 +2273,15 @@ class _Equispaced:
                 )
 
 
-
-
-
 class _multi_pseudospectral:
     def _check_structure_consistency(
-        self, t_knots_arr, point_structure,
+        self,
+        t_knots_arr,
+        point_structure,
     ):
         """Initial structural checks to ensure compatibilty of given data"""
 
-        #n_q = self.n_q
-        
+        # n_q = self.n_q
 
         # t_knot_arr checks
         t_knots_arr = array(t_knots_arr, dtype="float64")
@@ -2290,23 +2296,23 @@ class _multi_pseudospectral:
 
         # point_structures checks
         for element in point_structure:
-            assert is_integer(element), f'{element} in point_structure should be int'
+            assert is_integer(element), f"{element} in point_structure should be int"
         point_structure = array(point_structure, dtype="int")
         assert len(point_structure.shape) == 1
         assert point_structure.shape[0] == n_segments
 
         self.point_structure = point_structure
         return t_knots_arr, point_structure
-    
+
     def opti_setup(
-            self, 
-            t_knots_arr,
-            point_structure,
-            precission=16,
-            tol=1e-16,
-            p_opts=None,
-            s_opts=None
-        ):
+        self,
+        t_knots_arr,
+        point_structure,
+        precission=16,
+        tol=1e-16,
+        p_opts=None,
+        s_opts=None,
+    ):
         """
         Creates and links the different opti variables to be used in the problem.
         Requires the function dynamic_setup() to have been run prior.
@@ -2341,19 +2347,18 @@ class _multi_pseudospectral:
         t_start = self.t_start
         t_end = self.t_end
         order = self.order
-        
+
         t_knots_arr, point_structure = self._check_structure_consistency(
-            t_knots_arr,
-            point_structure
+            t_knots_arr, point_structure
         )
         n_segments = self.n_segments
         n_coll_total = np_sum(point_structure)
-        #Total Number of points:
+        # Total Number of points:
         n_arr = n_coll_total + n_segments + 1
         self.n_arr = n_arr
         self.n_coll_total = n_coll_total
         self.precission = precission
-        
+
         opti = cas.Opti()
         if p_opts is None:
             if self.verbose:
@@ -2371,99 +2376,94 @@ class _multi_pseudospectral:
         self.opti = opti
 
         # ---- X opti setup ----
-        
+
         x_opti = opti.variable(n_arr, order * self.n_q)
         x_dot_opti = opti.variable(n_arr, order * self.n_q)
-        
+
         x_knot_opti_list = []
         x_coll_opti_list = []
         x_dot_knot_opti_list = []
         x_dot_coll_opti_list = []
-        
+
         ii_inf = 1
         for seg_ii in range(n_segments):
             ii_sup = ii_inf + point_structure[seg_ii]
-            x_coll_opti_list.append(x_opti[ii_inf:ii_sup,:])
-            x_dot_coll_opti_list.append(x_dot_opti[ii_inf:ii_sup,:])
-            x_knot_opti_list.append(x_opti[ii_sup,:])
-            x_dot_knot_opti_list.append(x_dot_opti[ii_sup,:])
-            ii_inf = ii_sup+1
-            
-        #Last knot is not a knot but the end extreme:
+            x_coll_opti_list.append(x_opti[ii_inf:ii_sup, :])
+            x_dot_coll_opti_list.append(x_dot_opti[ii_inf:ii_sup, :])
+            x_knot_opti_list.append(x_opti[ii_sup, :])
+            x_dot_knot_opti_list.append(x_dot_opti[ii_sup, :])
+            ii_inf = ii_sup + 1
+
+        # Last knot is not a knot but the end extreme:
         x_knot_opti_list.pop(-1)
         x_dot_knot_opti_list.pop(-1)
-        
+
         x_like_u_opti = cas.vertcat(*x_coll_opti_list)
         x_dot_like_u_opti = cas.vertcat(*x_dot_coll_opti_list)
-        
+
         # ---- U opti setup ----
-        
+
         u_like_x_opti = opti.variable(n_arr, n_u)
-        
+
         u_knot_opti_list = []
         u_coll_opti_list = []
-        
+
         ii_inf = 1
         for seg_ii in range(n_segments):
             ii_sup = ii_inf + point_structure[seg_ii]
-            u_coll_opti_list.append(u_like_x_opti[ii_inf:ii_sup,:])
-            u_knot_opti_list.append(u_like_x_opti[ii_sup,:])
-            ii_inf = ii_sup+1
-            
-        #Last knot is not a knot but the end extreme:
+            u_coll_opti_list.append(u_like_x_opti[ii_inf:ii_sup, :])
+            u_knot_opti_list.append(u_like_x_opti[ii_sup, :])
+            ii_inf = ii_sup + 1
+
+        # Last knot is not a knot but the end extreme:
         u_knot_opti_list.pop(-1)
-        
+
         u_opti = cas.vertcat(*u_coll_opti_list)
-        
-        #---- time arrays setup ----
-        
-        t_knots_and_extremes_arr = zeros(n_segments+1, dtype = 'float64')
+
+        # ---- time arrays setup ----
+
+        t_knots_and_extremes_arr = zeros(n_segments + 1, dtype="float64")
         t_knots_and_extremes_arr[0] = t_start
         t_knots_and_extremes_arr[1:-1] = t_knots_arr
         t_knots_and_extremes_arr[-1] = t_end
         self.t_knots_and_extremes_arr = t_knots_and_extremes_arr
         h_arr = t_knots_and_extremes_arr[1:] - t_knots_and_extremes_arr[:-1]
         self.h_arr = h_arr
-        
+
         tau_coll_list = []
         tau_coll_arr = []
         t_coll_list = []
         t_coll_arr = []
-        t_arr = [t_start,]
+        t_arr = [
+            t_start,
+        ]
         t_coll_since_knot_list = []
         for seg_ii in range(n_segments):
             _col_tau = coll_points(point_structure[seg_ii], scheme, precission, order)
             _col_t = tau_to_t_points(
                 _col_tau,
                 t_knots_and_extremes_arr[seg_ii],
-                t_knots_and_extremes_arr[seg_ii+1]
-                )
-            tau_coll_list.append(array(_col_tau, dtype = 'float64'))
-            t_coll_list.append(array(_col_t, dtype = 'float64'))
+                t_knots_and_extremes_arr[seg_ii + 1],
+            )
+            tau_coll_list.append(array(_col_tau, dtype="float64"))
+            t_coll_list.append(array(_col_t, dtype="float64"))
             tau_coll_arr += _col_tau
             t_coll_arr += _col_t
             t_arr += _col_t
-            t_arr.append(t_knots_and_extremes_arr[seg_ii+1])
-            _col_t_since_knot = tau_to_t_points(
-                _col_tau,
-                0,
-                h_arr[seg_ii]
-                )
-            t_coll_since_knot_list.append(array(_col_t_since_knot, dtype = 'float64'))
-        
-        t_coll_arr = array(t_coll_arr, dtype = 'float64')
-        tau_coll_arr = array(tau_coll_arr, dtype = 'float64')
-        t_arr = array(t_arr, dtype = 'float64')
-        
-        
+            t_arr.append(t_knots_and_extremes_arr[seg_ii + 1])
+            _col_t_since_knot = tau_to_t_points(_col_tau, 0, h_arr[seg_ii])
+            t_coll_since_knot_list.append(array(_col_t_since_knot, dtype="float64"))
+
+        t_coll_arr = array(t_coll_arr, dtype="float64")
+        tau_coll_arr = array(tau_coll_arr, dtype="float64")
+        t_arr = array(t_arr, dtype="float64")
+
         # ---- lambdas ----
-        
+
         lam_opti = opti.variable(n_coll_total, self.n_lambdas)
 
-
-
         # ---- distribution of data in self ----
-        
+
         self.opti_arrs = {
             "x": x_opti,
             "x_like_u": x_like_u_opti,
@@ -2474,23 +2474,41 @@ class _multi_pseudospectral:
             "t": t_arr,
             "t_col": t_coll_arr,
             "tau_col": tau_coll_arr,
-            "t_knot":t_knots_arr,
+            "t_knot": t_knots_arr,
             "t_knot_ext": t_knots_and_extremes_arr,
             "lam": lam_opti,
         }
-        
+
         self.opti_lists = {
-            "x_col" : x_coll_opti_list,
-            "x_knot" : x_knot_opti_list,
-            "x_knot_ext" : [x_opti[0, :],] + x_knot_opti_list + [x_opti[-1, :],],
-            "x_d_col" : x_dot_coll_opti_list,
-            "x_d_knot" : x_dot_knot_opti_list,
-            "x_d_knot_ext" : [x_dot_opti[0, :],] + x_dot_knot_opti_list + [x_dot_opti[-1, :],],
-            "u_col" : u_coll_opti_list,
-            "u_knot" : u_knot_opti_list,
-            "u_knot_ext" : [u_like_x_opti[0, :],] + u_knot_opti_list + [u_like_x_opti[-1, :],],
-            "t_col" : t_coll_list,
-            "tau_col" : tau_coll_list,
+            "x_col": x_coll_opti_list,
+            "x_knot": x_knot_opti_list,
+            "x_knot_ext": [
+                x_opti[0, :],
+            ]
+            + x_knot_opti_list
+            + [
+                x_opti[-1, :],
+            ],
+            "x_d_col": x_dot_coll_opti_list,
+            "x_d_knot": x_dot_knot_opti_list,
+            "x_d_knot_ext": [
+                x_dot_opti[0, :],
+            ]
+            + x_dot_knot_opti_list
+            + [
+                x_dot_opti[-1, :],
+            ],
+            "u_col": u_coll_opti_list,
+            "u_knot": u_knot_opti_list,
+            "u_knot_ext": [
+                u_like_x_opti[0, :],
+            ]
+            + u_knot_opti_list
+            + [
+                u_like_x_opti[-1, :],
+            ],
+            "t_col": t_coll_list,
+            "tau_col": tau_coll_list,
             "t_col_since_knot": t_coll_since_knot_list,
         }
 
@@ -2502,9 +2520,9 @@ class _multi_pseudospectral:
             "u_s": u_like_x_opti[0, :],
             "u_e": u_like_x_opti[-1, :],
         }
-        
+
         # ---- q and its derivatives as isolated arrays ----
-        
+
         q_and_ders = []
         q_and_ders_like_u = []
         for _ii in range(order):
@@ -2512,10 +2530,10 @@ class _multi_pseudospectral:
             q_and_ders_like_u.append(x_like_u_opti[:, n_q * _ii : n_q * (_ii + 1)])
         q_and_ders.append(x_dot_opti[:, -n_q:])
         q_and_ders_like_u.append(x_dot_like_u_opti[:, -n_q:])
-        
+
         q_and_ders_names = get_q_and_ders_names(order)
         self.q_and_ders_names = q_and_ders_names
-        
+
         for _ii in range(order + 1):
             _name = q_and_ders_names[_ii]
             _arr = q_and_ders[_ii]
@@ -2523,64 +2541,73 @@ class _multi_pseudospectral:
             self.opti_arrs[_name + "_like_u"] = q_and_ders_like_u[_ii]
             self.opti_points[_name + "_s"] = _arr[0, :]
             self.opti_points[_name + "_e"] = _arr[-1, :]
-            
+
         for _ii in range(order + 1):
             _name = q_and_ders_names[_ii]
-            self.opti_lists[_name + '_col'] = []
-            self.opti_lists[_name + '_knot'] = []
-            
+            self.opti_lists[_name + "_col"] = []
+            self.opti_lists[_name + "_knot"] = []
+
         for seg_ii in range(n_segments):
             _x_coll_segment = x_coll_opti_list[seg_ii]
             _x_dot_coll_segment = x_dot_coll_opti_list[seg_ii]
             for _ii in range(order):
                 _name = q_and_ders_names[_ii]
-                _key_name = _name + '_col'
+                _key_name = _name + "_col"
                 self.opti_lists[_key_name].append(
                     _x_coll_segment[:, n_q * _ii : n_q * (_ii + 1)]
-                    )
-            _name = q_and_ders_names[-1]
-            _key_name = _name + '_col'
-            self.opti_lists[_key_name].append(
-                _x_dot_coll_segment[:, -n_q:]
                 )
-            
-        for seg_ii in range(n_segments-1):
+            _name = q_and_ders_names[-1]
+            _key_name = _name + "_col"
+            self.opti_lists[_key_name].append(_x_dot_coll_segment[:, -n_q:])
+
+        for seg_ii in range(n_segments - 1):
             _x_knot_segment = x_knot_opti_list[seg_ii]
             _x_dot_knot_segment = x_dot_knot_opti_list[seg_ii]
             for _ii in range(order):
                 _name = q_and_ders_names[_ii]
-                _key_name = _name + '_knot'
+                _key_name = _name + "_knot"
                 self.opti_lists[_key_name].append(
                     _x_knot_segment[:, n_q * _ii : n_q * (_ii + 1)]
-                    )
+                )
             _name = q_and_ders_names[-1]
-            _key_name = _name + '_knot'
+            _key_name = _name + "_knot"
             _arr = _x_dot_knot_segment[:, -n_q:]
             self.opti_lists[_key_name].append(_arr)
-            
-        for _ii in range(order+1):
+
+        for _ii in range(order + 1):
             _name = q_and_ders_names[_ii]
-            _key_name = _name + '_knot'
+            _key_name = _name + "_knot"
             _list = self.opti_lists[_key_name]
             _start = self.opti_points[_name + "_s"]
             _end = self.opti_points[_name + "_e"]
-            self.opti_lists[_key_name + '_ext'] = [_start,] + _list + [_end,]
-        
+            self.opti_lists[_key_name + "_ext"] = (
+                [
+                    _start,
+                ]
+                + _list
+                + [
+                    _end,
+                ]
+            )
+
         if self.scheme_mode == "ph top-down pseudospectral":
             q_constr_list = []
             t_constr_list = []
             for seg_ii in range(n_segments):
                 _n_coll = point_structure[seg_ii]
                 _q_constr_opti = opti.variable(_n_coll + order, n_q)
-                _LGL_points = array(tau_to_t_points(
-                    LGL(_n_coll + order), 
-                    t_knots_and_extremes_arr[seg_ii],
-                    t_knots_and_extremes_arr[seg_ii+1]
-                    ), dtype = 'float64')
+                _LGL_points = array(
+                    tau_to_t_points(
+                        LGL(_n_coll + order),
+                        t_knots_and_extremes_arr[seg_ii],
+                        t_knots_and_extremes_arr[seg_ii + 1],
+                    ),
+                    dtype="float64",
+                )
                 q_constr_list.append(_q_constr_opti)
                 t_constr_list.append(_LGL_points)
-            self.opti_lists['q_constr'] = q_constr_list
-            self.opti_lists['t_constr'] = t_constr_list
+            self.opti_lists["q_constr"] = q_constr_list
+            self.opti_lists["t_constr"] = t_constr_list
 
     def u_sq_cost(self):
         """
@@ -2611,7 +2638,7 @@ class _multi_pseudospectral:
         n_segments = self.n_segments
         scheme = self.scheme
         point_structure = self.point_structure
-        
+
         cost = 0
 
         for seg_ii in range(n_segments):
@@ -2641,7 +2668,6 @@ class _multi_pseudospectral:
 
         """
 
-        
         n_coll_total = self.n_coll_total
         N_x = self.n_arr
         N_arr = arr.shape[0]
@@ -2656,39 +2682,34 @@ class _multi_pseudospectral:
                 + " of collocation points nor array x lenght"
             )
 
-
         h_arr = self.h_arr
         n_segments = self.n_segments
         scheme = self.scheme
         point_structure = self.point_structure
-        
+
         cost = 0
-        
+
         u_coll = []
-        
+
         ii_inf = 0
-        
-        if mode == 'u':
-            d1 = 0 
-            d2 = 0 
-        elif mode == 'x':
+
+        if mode == "u":
+            d1 = 0
+            d2 = 0
+        elif mode == "x":
             d1 = 2
-            d2 = -1 
+            d2 = -1
         else:
             raise ValueError
-            
+
         for seg_ii in range(n_segments):
             ii_sup = ii_inf + point_structure[seg_ii] + d1
-            u_coll.append(arr[ii_inf:ii_sup,:])
+            u_coll.append(arr[ii_inf:ii_sup, :])
             ii_inf = ii_sup + d2
 
         for seg_ii in range(n_segments):
             _n_coll = point_structure[seg_ii]
-            f_u_cost = _get_cost_obj_quad_int_cas(
-                scheme,
-                _n_coll,
-                squared,
-                mode)
+            f_u_cost = _get_cost_obj_quad_int_cas(scheme, _n_coll, squared, mode)
             cost += h_arr[seg_ii] * cas.sum2(f_u_cost(u_coll[seg_ii]))
 
         self.cost = cost
@@ -2736,7 +2757,9 @@ class _multi_pseudospectral:
         self.cost = cost
         self.opti.minimize(cost)
 
-    def apply_scheme(self, ): #allow_u_jumps_at_knots = False?
+    def apply_scheme(
+        self,
+    ):  # allow_u_jumps_at_knots = False?
         """
         Applies the restrictions corresponding to the selected scheme to
         the opti variables.
@@ -2754,7 +2777,7 @@ class _multi_pseudospectral:
         None.
 
         """
-        
+
         scheme = self.scheme
         scheme_mode = self.scheme_mode
         try:
@@ -2762,7 +2785,7 @@ class _multi_pseudospectral:
             opti_points = self.opti_points
             opti_arrs = self.opti_arrs
             opti_lists = self.opti_lists
-            order = self.order            
+            order = self.order
             params = self.params
             n_segments = self.n_segments
             n_q = self.n_q
@@ -2775,176 +2798,193 @@ class _multi_pseudospectral:
             raise RuntimeError(
                 "opti must be set up before applying constraints, use opti_setup()"
             )
-        
+
         coll_index = get_coll_indices(scheme)
-        
+
         if scheme_mode == "ph top-down pseudospectral":
-            
-            q_constr_list = opti_lists['q_constr']
-            
+
+            q_constr_list = opti_lists["q_constr"]
+
             for seg_ii in range(n_segments):
-                
+
                 _n_coll = point_structure[seg_ii]
                 q_constr = q_constr_list[seg_ii]
                 h = h_arr[seg_ii]
                 D_nu = matrix_D_nu(order + _n_coll)
                 L = matrix_L(_n_coll, scheme, order, self.precission)
-                
+
                 for ii in range(order + 1):
                     _name = q_and_ders_names[ii]
                     deriv_matrix = (2 / h) ** ii * L @ matrix_power(D_nu, ii)
                     _res_mat = deriv_matrix @ q_constr
-                    _res_col = _res_mat[coll_index,:]
-                    _res_start = _res_mat[0,:]
-                    _res_end = _res_mat[-1,:]
-                    
-                    _arr_col = opti_lists[_name +'_col'][seg_ii]
-                    _arr_start = opti_lists[_name +'_knot_ext'][seg_ii]
-                    _arr_end  = opti_lists[_name +'_knot_ext'][seg_ii+1]
-                    
+                    _res_col = _res_mat[coll_index, :]
+                    _res_start = _res_mat[0, :]
+                    _res_end = _res_mat[-1, :]
+
+                    _arr_col = opti_lists[_name + "_col"][seg_ii]
+                    _arr_start = opti_lists[_name + "_knot_ext"][seg_ii]
+                    _arr_end = opti_lists[_name + "_knot_ext"][seg_ii + 1]
+
                     # ----- Scheme Constraints ----
-                    
+
                     opti.subject_to(_arr_col == _res_col)
                     opti.subject_to(_arr_start == _res_start)
-                    
+
                     # ----- Knotting intervals together -----
-                    
+
                     if ii <= order or seg_ii == n_segments:
                         opti.subject_to(_arr_end == _res_end)
-                    
-        elif  scheme_mode == "ph bottom-up pseudospectral":
+
+        elif scheme_mode == "ph bottom-up pseudospectral":
             h_q_d_name = q_and_ders_names[-1]
-            for seg_ii in range(n_segments): 
-                
+            for seg_ii in range(n_segments):
+
                 _n_coll = point_structure[seg_ii]
                 h = h_arr[seg_ii]
-                
-                highest_q_d_col = opti_lists[h_q_d_name + '_col'][seg_ii]
-                highest_q_d_start = opti_lists[h_q_d_name +'_knot_ext'][seg_ii]
-                highest_q_d_end  = opti_lists[h_q_d_name +'_knot_ext'][seg_ii+1]
-                
+
+                highest_q_d_col = opti_lists[h_q_d_name + "_col"][seg_ii]
+                highest_q_d_start = opti_lists[h_q_d_name + "_knot_ext"][seg_ii]
+                highest_q_d_end = opti_lists[h_q_d_name + "_knot_ext"][seg_ii + 1]
+
                 q_and_ders_0 = []
                 for _name in q_and_ders_names[:-1]:
-                    _arr_start = opti_lists[_name +'_knot_ext'][seg_ii]
+                    _arr_start = opti_lists[_name + "_knot_ext"][seg_ii]
                     q_and_ders_0.append(_arr_start)
                 polynomial_data = cas.vertcat(*q_and_ders_0, highest_q_d_col)
-                
+
                 # ----- Extremes of highest derivative Constraints -----
-                
+
                 if scheme in _gauss_like_schemes + _radau_inv_schemes:
                     start_mat = Extreme_Matrix(
-                        _n_coll, scheme, "start", scheme_order=order, precission=self.precission
+                        _n_coll,
+                        scheme,
+                        "start",
+                        scheme_order=order,
+                        precission=self.precission,
                     )
                     _res_h_q_d_start = start_mat @ highest_q_d_col
                 elif scheme in _lobato_like_schemes + _radau_like_schemes:
-                    _res_h_q_d_start =  highest_q_d_col [0,:]
+                    _res_h_q_d_start = highest_q_d_col[0, :]
                 else:
-                    raise ValueError(f'Unrecognized scheme {scheme}')
-                    
+                    raise ValueError(f"Unrecognized scheme {scheme}")
+
                 self.opti.subject_to(highest_q_d_start == _res_h_q_d_start)
-                
+
                 if seg_ii == n_segments:
                     if scheme in _gauss_like_schemes + _radau_like_schemes:
                         end_mat = Extreme_Matrix(
-                            _n_coll, scheme, "end", scheme_order=order, precission=self.precission
+                            _n_coll,
+                            scheme,
+                            "end",
+                            scheme_order=order,
+                            precission=self.precission,
                         )
                         _res_h_q_d_end = end_mat @ highest_q_d_col
                     elif scheme in _lobato_like_schemes + _radau_inv_schemes:
-                        _res_h_q_d_end =  highest_q_d_col [-1,:]
+                        _res_h_q_d_end = highest_q_d_col[-1, :]
                     else:
-                        raise ValueError(f'Unrecognized scheme {scheme}')
-                        
+                        raise ValueError(f"Unrecognized scheme {scheme}")
+
                     self.opti.subject_to(highest_q_d_end == _res_h_q_d_end)
-                
+
                 # ----- Scheme Constraints ----
-                
+
                 for ii in range(order):
                     _name = q_and_ders_names[ii]
-                    
-                    _arr_col = opti_lists[_name +'_col'][seg_ii]
-                    _arr_start = opti_lists[_name +'_knot_ext'][seg_ii]
-                    _arr_end  = opti_lists[_name +'_knot_ext'][seg_ii+1]
-                    
+
+                    _arr_col = opti_lists[_name + "_col"][seg_ii]
+                    _arr_start = opti_lists[_name + "_knot_ext"][seg_ii]
+                    _arr_end = opti_lists[_name + "_knot_ext"][seg_ii + 1]
+
                     I_mat = Integration_Matrix(
-                        _n_coll, scheme, ii, h, scheme_order=order, precission=self.precission
+                        _n_coll,
+                        scheme,
+                        ii,
+                        h,
+                        scheme_order=order,
+                        precission=self.precission,
                     )
-                    _res_mat =  I_mat @ polynomial_data
+                    _res_mat = I_mat @ polynomial_data
                     _res_mat = cas.vertcat(_arr_start, _res_mat)
-                    _res_col = _res_mat[coll_index,:]
-                    _res_end = _res_mat[-1,:]
-                    
+                    _res_col = _res_mat[coll_index, :]
+                    _res_end = _res_mat[-1, :]
+
                     # Careful of not including the starting point!
-                    
+
                     # ----- Scheme Constraints ----
-                    
+
                     opti.subject_to(_arr_col == _res_col)
-                    
+
                     # ----- Knotting intervals together -----
-                    
+
                     opti.subject_to(_arr_end == _res_end)
-                
-        elif  scheme_mode == "ph pseudospectral":
+
+        elif scheme_mode == "ph pseudospectral":
             h_q_d_name = q_and_ders_names[-1]
-            for seg_ii in range(n_segments): 
-                
+            for seg_ii in range(n_segments):
+
                 _n_coll = point_structure[seg_ii]
                 n_nodes = n_col_to_n_nodes(scheme, _n_coll)
-                
+
                 h = h_arr[seg_ii]
-                D_mat = array(matrix_D_bary(
-                    n_nodes,
-                    scheme,
-                    self.precission
-                    ), dtype="float64")
-                
+                D_mat = array(
+                    matrix_D_bary(n_nodes, scheme, self.precission), dtype="float64"
+                )
+
                 # --- Scheme constraints ---
-                _x_col = opti_lists['x_col'][seg_ii]
-                _x_d_col = opti_lists['x_d_col'][seg_ii]
-                _x_start = opti_lists['x_knot_ext'][seg_ii]
-                _x_end  = opti_lists['x_knot_ext'][seg_ii+1]
-                _x_d_start = opti_lists['x_d_knot_ext'][seg_ii]
-                _x_d_end  = opti_lists['x_d_knot_ext'][seg_ii+1]
-                
+                _x_col = opti_lists["x_col"][seg_ii]
+                _x_d_col = opti_lists["x_d_col"][seg_ii]
+                _x_start = opti_lists["x_knot_ext"][seg_ii]
+                _x_end = opti_lists["x_knot_ext"][seg_ii + 1]
+                _x_d_start = opti_lists["x_d_knot_ext"][seg_ii]
+                _x_d_end = opti_lists["x_d_knot_ext"][seg_ii + 1]
+
                 _x_node = _x_col
                 _x_d_node = _x_d_col
-                
-                if scheme in (_gauss_like_schemes + _radau_inv_schemes + _gauss_2_schemes):
+
+                if scheme in (
+                    _gauss_like_schemes + _radau_inv_schemes + _gauss_2_schemes
+                ):
                     _x_node = cas.vertcat(_x_start, _x_node)
                     _x_d_node = cas.vertcat(_x_d_start, _x_d_node)
-                if scheme in (_gauss_inv_schemes + _radau_like_schemes + _gauss_2_schemes):
+                if scheme in (
+                    _gauss_inv_schemes + _radau_like_schemes + _gauss_2_schemes
+                ):
                     _x_node = cas.vertcat(_x_node, _x_end)
                     _x_d_node = cas.vertcat(_x_d_node, _x_d_end)
-            
+
                 _x_d_calc = 2 / h * D_mat @ _x_node
                 opti.subject_to(_x_d_node == _x_d_calc)
-                
+
                 # On 2nd order schemes, impose d(x) = x_d on knot points,
                 # as they are node points but not collocation points
                 # and derivatives are linked as f(t) and not only in col points
 
                 if scheme in _gauss_2_schemes:
-                    opti.subject_to(_x_start [:, n_q:] == _x_d_start[:, :-n_q])
+                    opti.subject_to(_x_start[:, n_q:] == _x_d_start[:, :-n_q])
                     if seg_ii == n_segments:
-                        opti.subject_to(_x_end [:, n_q:] == _x_d_end[:, :-n_q])
-                        
+                        opti.subject_to(_x_end[:, n_q:] == _x_d_end[:, :-n_q])
+
                 # --- knot point values when knot are collocation ---
-                
+
                 if scheme in (_lobato_like_schemes + _radau_like_schemes):
                     opti.subject_to(_x_start == _x_node[0, :])
-                    #opti.subject_to(_x_d_start == _x_d_node[0, :])
-                
+                    # opti.subject_to(_x_d_start == _x_d_node[0, :])
+
                 if scheme in (_lobato_like_schemes + _radau_inv_schemes):
                     opti.subject_to(_x_end == _x_node[-1, :])
-                    #opti.subject_to(_x_d_end == _x_d_node[-1, :])
-            
+                    # opti.subject_to(_x_d_end == _x_d_node[-1, :])
+
                 # --- Scheme not-node end values constraints ---
-                
+
                 if scheme in _gauss_inv_schemes:
                     f_start = get_bary_extreme_f_cas(
                         scheme, n_nodes, mode="x", point="start", order=self.order
                     )
                     opti.subject_to(_x_start == f_start(_x_node))
-                    opti.subject_to(_x_d_start[:, -n_q:] == f_start(_x_d_node[:, -n_q:]))
+                    opti.subject_to(
+                        _x_d_start[:, -n_q:] == f_start(_x_d_node[:, -n_q:])
+                    )
 
                 if scheme in _gauss_like_schemes:
                     f_end = get_bary_extreme_f_cas(
@@ -2953,15 +2993,15 @@ class _multi_pseudospectral:
                     opti.subject_to(_x_end == f_end(_x_node))
                     opti.subject_to(_x_d_end[:, -n_q:] == f_end(_x_d_node[:, -n_q:]))
         else:
-            raise ValueError(f'Unrecognized scheme mode {scheme_mode}')
-                    
+            raise ValueError(f"Unrecognized scheme mode {scheme_mode}")
+
         # ----- Dynamics Constraints ----
-        
-        x_col_arr = opti_arrs['x_like_u']
-        x_d_col_arr = opti_arrs['x_d_like_u']
-        u_arr =  opti_arrs['u']
-        lambda_arr = opti_arrs['lam']
-        
+
+        x_col_arr = opti_arrs["x_like_u"]
+        x_d_col_arr = opti_arrs["x_d_like_u"]
+        u_arr = opti_arrs["u"]
+        lambda_arr = opti_arrs["lam"]
+
         for ii in range(n_coll_total):
             self.opti.subject_to(
                 dynam_f_x(
@@ -2973,18 +3013,18 @@ class _multi_pseudospectral:
                 )
                 == 0
             )
-        
+
         # ----- Values of u in knot points and extremes ----
-        
-        u_k_s = opti_lists['u_knot_ext']
-        u_e = opti_points['u_e']
-        
+
+        u_k_s = opti_lists["u_knot_ext"]
+        u_e = opti_points["u_e"]
+
         for seg_ii in range(n_segments):
             u_s = u_k_s[seg_ii]
-            u_col = opti_lists['u_col'][seg_ii]
+            u_col = opti_lists["u_col"][seg_ii]
             _n_coll = point_structure[seg_ii]
             if scheme in _radau_like_schemes + _lobato_like_schemes:
-                opti.subject_to(u_s == u_col[0, :]) 
+                opti.subject_to(u_s == u_col[0, :])
             else:
                 start_f = get_bary_extreme_f_cas(
                     scheme, _n_coll, mode="u", point="start", order=order
@@ -2992,7 +3032,7 @@ class _multi_pseudospectral:
                 opti.subject_to(u_s == start_f(u_col))
 
         # note that we reuse _n_coll and u_col from last loop iteration
-        
+
         if scheme in _radau_inv_schemes + _lobato_like_schemes:
             opti.subject_to(u_e == u_col[-1, :])
         else:
@@ -3000,10 +3040,8 @@ class _multi_pseudospectral:
                 scheme, _n_coll, mode="u", point="end", order=order
             )
             opti.subject_to(u_e == end_f(u_col))
-            
-            
-       
-                
+
+
 # class _Custom:
 #     def _check_structure_consistency(
 #         self, t_knots_arr, point_structure_q, n_v, n_a, point_structure_v
@@ -3726,7 +3764,7 @@ class _Zero_init:
         """
         q_opti, v_opti, a_opti = self._ini_guess_start()
         self.opti.set_initial(q_opti, 0)
-        #if self.scheme not in ["LG2", "D2", "LGLm", "JG"]:
+        # if self.scheme not in ["LG2", "D2", "LGLm", "JG"]:
         self.opti.set_initial(v_opti, 0)
         if self.scheme_mode == "equispaced":
             self.opti.set_initial(a_opti, 0)
@@ -3776,23 +3814,26 @@ class _Lin_init:
         q_e = array(q_e, dtype="float64")
         t_arr = self.opti_arrs["t"]
         q_guess = interp_2d(
-            array(t_arr, dtype = 'float64'),
-            array((self.t_start,self.t_end), dtype = 'float64'),
-            concatenate((expand_dims(q_s, 0),expand_dims(q_e, 0)))
-            )
+            array(t_arr, dtype="float64"),
+            array((self.t_start, self.t_end), dtype="float64"),
+            concatenate((expand_dims(q_s, 0), expand_dims(q_e, 0))),
+        )
         q_dot_guess = (q_e - q_s) * ones([N, 1]) / h
         self.opti.set_initial(q_opti, q_guess)
-        #if self.scheme not in ["LG2", "D2", "LGLm", "JG"]:
+        # if self.scheme not in ["LG2", "D2", "LGLm", "JG"]:
         self.opti.set_initial(v_opti, q_dot_guess)
-        
+
         if self.scheme_mode == "top-down pseudospectral":
             q_constr_opti = self.opti_arrs["q_constr"]
             n_constr = q_constr_opti.shape[0]
-            s_constr_arr = array(tau_to_t_points(LGL(n_constr), self.t_start, self.t_end), dtype = 'float64')
+            s_constr_arr = array(
+                tau_to_t_points(LGL(n_constr), self.t_start, self.t_end),
+                dtype="float64",
+            )
             q_constr_guess = interp_2d(
                 s_constr_arr,
-                array((self.t_start,self.t_end), dtype = 'float64'),
-                concatenate((expand_dims(q_s, 0),expand_dims(q_e, 0)))
+                array((self.t_start, self.t_end), dtype="float64"),
+                concatenate((expand_dims(q_s, 0), expand_dims(q_e, 0))),
             )
             self.opti.set_initial(q_constr_opti, q_constr_guess)
         if self.order > 1 and self.scheme_mode == "equispaced":
@@ -3806,7 +3847,7 @@ class _Lin_init:
 
 
 class _Waypoints_init:
-    def initial_guess(self, q_points, t_points = None, u_points = None):
+    def initial_guess(self, q_points, t_points=None, u_points=None):
         """
         Sets initial guess values for q, v and a.
         q is a lineal interpolation between q_s and q_e
@@ -3829,9 +3870,9 @@ class _Waypoints_init:
 
         """
         q_opti, v_opti, a_opti = self._ini_guess_start()
-        x_opti = self.opti_arrs['x']
-        x_dot_opti = self.opti_arrs['x_d']
-        
+        x_opti = self.opti_arrs["x"]
+        x_dot_opti = self.opti_arrs["x_d"]
+
         if self.scheme_mode == "equispaced":
             N = self.N + 1  # Number of segments
         elif self.scheme_mode in [
@@ -3847,55 +3888,44 @@ class _Waypoints_init:
             raise NotImplementedError(
                 f"Linear init not implemented for scheme mode {self.scheme_mode}"
             )
-            
+
         if t_points is None:
             t_points = linspace(self.t_start, self.t_end, N)
-            
+
         t_arr = self.opti_arrs["t"]
-        q_guess = interp_2d(
-            array(t_arr, dtype = 'float64'),
-            t_points,
-            q_points
-            )
-        q_dot_points = gradient(q_points, t_points, axis = 0)
-        q_dot_guess = interp_2d(
-            array(t_arr, dtype = 'float64'),
-            t_points,
-            q_dot_points
-            )
+        q_guess = interp_2d(array(t_arr, dtype="float64"), t_points, q_points)
+        q_dot_points = gradient(q_points, t_points, axis=0)
+        q_dot_guess = interp_2d(array(t_arr, dtype="float64"), t_points, q_dot_points)
         q_and_ders_guess = [q_guess, q_dot_guess]
-        
-        for ii in range(2, self.order+1):
-            q_dot_points = gradient(q_dot_points, t_points, axis = 0)
+
+        for ii in range(2, self.order + 1):
+            q_dot_points = gradient(q_dot_points, t_points, axis=0)
             q_dot_guess = interp_2d(
-                array(t_arr, dtype = 'float64'),
-                t_points,
-                q_dot_points
-                )
+                array(t_arr, dtype="float64"), t_points, q_dot_points
+            )
             q_and_ders_guess.append(q_dot_guess)
-        
+
         if self.order == 1:
             x_guess = q_guess
             x_dot_guess = q_dot_guess
         else:
-            x_guess = concatenate(q_and_ders_guess[:-1], axis = 1)
-            x_dot_guess = concatenate(q_and_ders_guess[1:], axis = 1)
-        
+            x_guess = concatenate(q_and_ders_guess[:-1], axis=1)
+            x_dot_guess = concatenate(q_and_ders_guess[1:], axis=1)
+
         self.opti.set_initial(x_opti, x_guess)
-        #if self.scheme not in ["LG2", "D2", "LGLm", "JG"]:
+        # if self.scheme not in ["LG2", "D2", "LGLm", "JG"]:
         self.opti.set_initial(x_dot_opti, x_dot_guess)
-        
+
         if self.scheme_mode == "top-down pseudospectral":
             q_constr_opti = self.opti_arrs["q_constr"]
             n_constr = q_constr_opti.shape[0]
-            s_constr_arr = array(tau_to_t_points(LGL(n_constr), self.t_start, self.t_end), dtype = 'float64')
-            q_constr_guess = interp_2d(
-                s_constr_arr,
-                t_points,
-                q_points
+            s_constr_arr = array(
+                tau_to_t_points(LGL(n_constr), self.t_start, self.t_end),
+                dtype="float64",
             )
+            q_constr_guess = interp_2d(s_constr_arr, t_points, q_points)
             self.opti.set_initial(q_constr_opti, q_constr_guess)
-            
+
         if self.scheme_mode == "equispaced" and "hs" in self.scheme:
             self.opti.set_initial(
                 self.opti_arrs["x_c"], (x_guess[:-1, :] + x_guess[1:, :]) / 2
@@ -3903,24 +3933,18 @@ class _Waypoints_init:
             self.opti.set_initial(
                 self.opti_arrs["x_d_c"], (x_dot_guess[:-1, :] + x_dot_guess[1:, :]) / 2
             )
-                
+
         if u_points is not None:
-            if self.scheme_mode[:3] == 'ph ':
+            if self.scheme_mode[:3] == "ph ":
                 u_opti = self.opti_arrs["u_like_x"]
-                u_guess = interp_2d(
-                    array(t_arr, dtype = 'float64'),
-                    t_points,
-                    u_points
-                    )
+                u_guess = interp_2d(array(t_arr, dtype="float64"), t_points, u_points)
                 self.opti.set_initial(u_opti, u_guess)
             else:
                 u_opti = self.opti_arrs["u"]
                 t_col_arr = self.opti_arrs["t_col"]
                 u_guess = interp_2d(
-                    array(t_col_arr, dtype = 'float64'),
-                    t_points,
-                    u_points
-                    )
+                    array(t_col_arr, dtype="float64"), t_points, u_points
+                )
                 self.opti.set_initial(u_opti, u_guess)
                 if self.scheme_mode == "equispaced" and "hs" in self.scheme:
                     self.opti.set_initial(
@@ -3956,7 +3980,7 @@ class _Custom_init:
         u_opti = self.opti_arrs["u"]
         self.opti.set_initial(q_opti, q_guess)
         self.opti.set_initial(u_opti, u_guess)
-        #if self.scheme not in ["LG2", "D2", "LGLm", "JG"]:
+        # if self.scheme not in ["LG2", "D2", "LGLm", "JG"]:
         self.opti.set_initial(v_opti, v_guess)
         if self.scheme_mode == "equispaced":
             self.opti.set_initial(a_opti, 0)
@@ -3976,12 +4000,11 @@ class _Custom_init:
         if self.scheme_mode == "top-down pseudospectral":
             q_constr_opti = self.opti_arrs["q_constr"]
             n_constr = q_constr_opti.shape[0]
-            s_constr_arr = array(tau_to_t_points(LGL(n_constr), self.t_start, self.t_end), dtype = 'float64')
-            q_constr_guess = interp_2d(
-                s_constr_arr,
-                self.opti_arrs['t'],
-                q_guess
+            s_constr_arr = array(
+                tau_to_t_points(LGL(n_constr), self.t_start, self.t_end),
+                dtype="float64",
             )
+            q_constr_guess = interp_2d(s_constr_arr, self.opti_arrs["t"], q_guess)
             self.opti.set_initial(q_constr_opti, q_constr_guess)
 
 
@@ -4116,7 +4139,7 @@ def Opti_Problem(
         inherit.append(_BU_Pseudospectral)
     elif scheme in _implemented_top_down_pseudospectral_schemes:
         inherit.append(_TD_Pseudospectral)
-    elif scheme[:3] == 'ph_':
+    elif scheme[:3] == "ph_":
         inherit.append(_multi_pseudospectral)
     else:
         raise NotImplementedError(

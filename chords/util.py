@@ -521,12 +521,13 @@ def get_weights(N, scheme, order=2, mode="u"):
 
     return gauss_integral_2d(pol, N_gauss, -1.0, 1.0)
 
+
 # ----------------- Miscelanea -----------------------
+
 
 def is_integer(x):
     try:
-        result = (int(x) == x)
+        result = int(x) == x
         return result
     except TypeError:
         return False
-    

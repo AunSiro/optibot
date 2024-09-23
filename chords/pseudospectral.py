@@ -385,8 +385,8 @@ def get_coll_indices(scheme):
         coll_index = slice(None, None)
     elif scheme in _other_schemes:
         if scheme in [
-                "D2",
-            ]:
+            "D2",
+        ]:
             coll_index = slice(None, None)
         else:
             raise NotImplementedError(
