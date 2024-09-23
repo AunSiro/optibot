@@ -286,6 +286,7 @@ def gen_fig_filename(
     save_format="pdf",
     N=None,
     q_counter=None,
+    add=None,
 ):
     from os.path import join
 
@@ -300,6 +301,8 @@ def gen_fig_filename(
         title += f"_N{N}"
     for scheme in schemes_printed:
         title += f"--{scheme}"
+    if add is not None:
+        title += f"--{add}"
     title += f".{save_format}"
     filename = join(folder_name, title)
     return filename
@@ -312,6 +315,7 @@ def save_fig(
     save_format="pdf",
     N=None,
     q_counter=None,
+    add=None,
 ):
     from os.path import isdir
     from os import makedirs
@@ -323,6 +327,7 @@ def save_fig(
         save_format,
         N,
         q_counter,
+        add,
     )
     folder_name = problem_name + "_figs"
     if not isdir(folder_name):
