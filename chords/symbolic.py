@@ -30,10 +30,12 @@ from sympy import (
     Symbol,
     Derivative,
     Function,
+    diff,
 )
 from sympy.physics.mechanics import dynamicsymbols
 from sympy.functions import sign
-from sympy.physics.mechanics import LagrangesMethod, find_dynamicsymbols
+from sympy.physics.mechanics import find_dynamicsymbols
+from sympy.physics.mechanics import LagrangesMethod as SyLagMet
 
 
 def get_str(x):
@@ -699,6 +701,126 @@ def print_funcs(expr_list, q_vars=0, flavour="np", verbose=False):
 
 
 # --- Modifications of Lagranges Method from Sympy:
+    
+class LagrangesMethod(SyLagMet):
+    def __init__(self, Lagrangian, qs, forcelist=None, bodies=None, frame=None,
+                 hol_coneqs=None, nonhol_coneqs=None):
+        """Supply the following for the initialization of LagrangesMethod.
+
+        Lagrangian : Sympifyable
+
+        qs : array_like
+            The generalized coordinates
+
+        hol_coneqs : array_like, optional
+            The holonomic constraint equations
+
+        nonhol_coneqs : array_like, optional
+            The nonholonomic constraint equations
+
+        forcelist : iterable, optional
+            Takes an iterable of (Point, Vector) or (ReferenceFrame, Vector)
+            tuples which represent the force at a point or torque on a frame.
+            This feature is primarily to account for the nonconservative forces
+            and/or moments.
+
+        bodies : iterable, optional
+            Takes an iterable containing the rigid bodies and particles of the
+            system.
+
+        frame : ReferenceFrame, optional
+            Supply the inertial frame. This is used to determine the
+            generalized forces due to non-conservative forces.
+        """
+        super().__init__(
+            Lagrangian,
+            qs,
+            forcelist,
+            bodies,
+            frame,
+            hol_coneqs,
+            nonhol_coneqs,
+        )
+        
+        self._c_mat = None
+        self._g_mat = None
+        
+    def _C_from_M(self, M, q, qdot):
+        C = M*0
+        n_q = M.shape[0]
+    
+        for i in range(n_q):
+            for j in range(n_q):
+                for k in range(n_q):
+                    C[i,j] = C[i,j] + qdot[k] * (
+                        diff(M[i,j],q[k]) +
+                        diff(M[i,k],q[j]) -
+                        diff(M[k,j],q[i]) 
+                    ) /2
+        
+        C = simplify(C)
+        return C
+    
+    def form_lagranges_equations(self):
+        super().form_lagranges_equations()
+        
+        q = self.q
+        q_d = self._qdots
+        q_dd = self._qdoubledots
+        M = self._m_d
+        
+        C = self._C_from_M(M, q, q_d)
+        G = simplify((self._term1 - self._term2)- M@q_dd - C@q_d)
+        self._c_mat = C
+        self._g_mat = G
+        
+    @property
+    def C_matrix(self):
+        """Returns the C matrix.
+
+        Explanation
+        ===========
+
+        When the dynamics are expressed as:
+            M @ q_dd + C @ q_d + G = F_ex
+        """
+
+        if self.eom is None:
+            raise ValueError('Need to compute the equations of motion first')
+        
+        return self._c_mat
+        
+    @property
+    def G_matrix(self):
+        """Returns the G matrix.
+
+        Explanation
+        ===========
+
+        When the dynamics are expressed as:
+            M @ q_dd + C @ q_d + G = F_ex
+        """
+
+        if self.eom is None:
+            raise ValueError('Need to compute the equations of motion first')
+        
+        return self._g_mat
+    
+    @property
+    def ext_forces_matrix(self):
+        """Returns the F_ex matrix.
+
+        Explanation
+        ===========
+
+        When the dynamics are expressed as:
+            M @ q_dd + C @ q_d + G = F_ex
+        """
+
+        if self.eom is None:
+            raise ValueError('Need to compute the equations of motion first')
+        
+        return self._term4
 
 
 class SimpLagrangesMethod(LagrangesMethod):

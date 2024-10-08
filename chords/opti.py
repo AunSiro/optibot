@@ -368,6 +368,18 @@ def _get_cost_obj_quad_int_cas(scheme, N, order=2, squared=False, mode="u"):
     return cas_f
 
 
+def exact_cuadratic_squared_integration(x_arr, x_c_arr, h):
+    if len(x_arr.shape) == 1:
+        a = x_arr[:-1]
+        b = x_c_arr
+        c = x_arr[1:]
+    elif len(x_arr.shape) == 2:
+        a = x_arr[:-1 , :]
+        b = x_c_arr
+        c = x_arr[1: , :]
+    else:
+        raise ValueError('invalid shape for arrays, must be 1 or 2 dimensional')
+    return h*(2*a**2 + 2*a*b - a*c + 8*b**2 + 2*b*c + 2*c**2)/15
 # --- Opti problem
 
 
@@ -1997,7 +2009,7 @@ class _Equispaced:
                     + cas.sum1(arr[:, :])
                     + cas.sum1(arr[1:-1, :])
                 )
-                / (3 * self.N)
+                / (6 * self.N)
             )
 
         self.cost = cost
@@ -2023,28 +2035,22 @@ class _Equispaced:
         """
 
         dt = self.t_end - self.t_start
-        arr_sq = arr**2
+        N = self.N
+        h = dt/N
+        
         if arr_c is None:
-            cost = dt * cas.sum2(
-                (cas.sum1(arr_sq[:, :]) + cas.sum1(arr_sq[1:-1, :])) / self.N
-            )
-        else:
-            arr_c_sq = arr_c**2
-            cost = dt * cas.sum2(
-                (
-                    4 * cas.sum1(arr_c_sq[:, :])
-                    + cas.sum1(arr_sq[:, :])
-                    + cas.sum1(arr_sq[1:-1, :])
-                )
-                / (3 * self.N)
-            )
+            arr_c = (arr[:,:-1] + arr[:,1:])/2
+        
+        int_arr = exact_cuadratic_squared_integration(arr, arr_c, h)
+        
+        cost = cas.sum2(cas.sum1(int_arr))
 
         self.cost = cost
         self.opti.minimize(cost)
 
     def u_sq_cost(self):
         """
-        Calculates a quadrature integration of u squared and sets it
+        Calculates a HS quadrature integration of u squared and sets it
         as the optimization cost to minimize
 
         Requires the functions dynamic_setup() and opti_setup(), in that order,
@@ -2089,7 +2095,7 @@ class _Equispaced:
                         + 3 * cas.sum1(U_sq[:-1, :])
                         + 8 * cas.sum1(U_sq[1:, :])
                     )
-                    / (18 * self.N)
+                    / (36 * self.N)
                 )
             else:
                 cost = dt * cas.sum2(
@@ -2098,7 +2104,7 @@ class _Equispaced:
                         + cas.sum1(U_sq[:, :])
                         + cas.sum1(U_sq[1:-1, :])
                     )
-                    / (3 * self.N)
+                    / (6 * self.N)
                 )
         else:
             cost = dt * cas.sum2(

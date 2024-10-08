@@ -394,7 +394,7 @@ def increase_order_implicit_func(
     Parameters
     ----------
     F : Function
-        function F(x, u, params) such that x' = F(x, u, params)
+        Dynanics function
     n_q: int
         number of q coordinates in the system
     new_order : int
@@ -451,6 +451,7 @@ def increase_order_implicit_func(
             given that x = (q, v, a, j), x' = (q', v', a', j')
 
     """
+    assert new_order >= old_order
 
     try:
         old_docstring = str(F.__doc__)
@@ -478,17 +479,15 @@ def increase_order_implicit_func(
             params = args[-1]
             if lambdas_in_f:
                 q_and_der = args[:-3]
-            else:
-                q_and_der = args[:-2]
-            assert len(q_and_der) == new_order + 1
-            q_and_der_old = q_and_der[: old_order + 1]
-            if lambdas_in_f:
                 lambdas = args[-2]
                 u = args[-3]
                 other_vars = [u, lambdas, params]
             else:
+                q_and_der = args[:-2]
                 u = args[-2]
                 other_vars = [u, params]
+            assert len(q_and_der) == new_order + 1
+            q_and_der_old = q_and_der[: old_order + 1]
             old_args = q_and_der_old + other_vars
             return F(*old_args)
 
@@ -1304,6 +1303,11 @@ def hsj_accel_restr(x, x_n, a, a_n, dt, scheme_params):
 
 
 def get_x_divisions(x, order=2, return_indices=False):
+    if order == 1:
+        if is_iterable(x):
+            return([x,])
+        else:
+            return([array([x]),])
     dim = x.shape[-1] // order
     x_list = []
     if is2d(x):
@@ -1602,6 +1606,8 @@ def generate_hs_interp(order, deriv=0):
                 x_interp_list[pos][:] = (
                     x_interp_list[pos] + tau**i / q_coefs[i] * x_list[i + M - l]
                 )
+        if not is_iterable(x):
+            x_interp = x_interp_list[0]
         return x_interp
 
     return hs_interp
@@ -1778,12 +1784,18 @@ def _newpoint(X, X_dot, h, t, params, scheme, scheme_params=None):
 
         else:
             raise NameError(f"scheme {scheme} not recognized")
+    
+            
+    
     return x_interp
 
 
 def _prepare_interp(X, U, h, t_array):
     N = t_array.size
-    arr_width = X.shape[-1]
+    if len(X.shape) == 1:
+        arr_width = 1
+    else:
+        arr_width = X.shape[-1]
     new_X = zeros([N, arr_width])
     if X.shape[0] == U.shape[0] + 1:
         U = extend_array(U)

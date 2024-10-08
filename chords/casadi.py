@@ -35,7 +35,7 @@ def sympy2casadi(sympy_expr, sympy_var, casadi_var):
 
     sympy_var : list of sympy symbols
 
-    casadi_var : list of casady symbols
+    casadi_var : list of casadi symbols
 
 
     Returns
