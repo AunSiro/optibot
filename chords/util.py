@@ -228,7 +228,23 @@ def set_fonts():
     plt.rcParams.update({"font.size": 15})
 
 
-def plot_by_segments(
+def plot_by_segments(t_arr, y_plot, label, N, end_t, plot_dict=None):
+        if plot_dict is None:
+            plot_dict = {'c': 'gray'}
+        interv_n = (N * t_arr) / end_t
+        cut_p = 0
+        for ll in range(1, N + 1):
+            jj = np.searchsorted(interv_n, ll)
+            plt.plot(
+                t_arr[cut_p:jj],
+                y_plot[cut_p:jj],
+                label=label if cut_p == 0 else None,
+                **plot_dict,
+            )
+            cut_p = jj
+            
+
+def graph_by_segments(
     results, schemes, N, thing_to_plot, title, ylabel, component="all"
 ):
     plt.figure(figsize=oct_fig_size)
