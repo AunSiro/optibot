@@ -1303,12 +1303,16 @@ def hsj_accel_restr(x, x_n, a, a_n, dt, scheme_params):
 
 
 def get_x_divisions(x, order=2, return_indices=False):
-    if order == 1:
-        if is_iterable(x):
-            return([x,])
-        else:
-            return([array([x]),])
-    dim = x.shape[-1] // order
+    
+    try:
+        dim = x.shape[-1] // order
+    except:
+        if order == 1:
+            if is_iterable(x):
+                return([x,])
+            else:
+                return([array([x]),])
+        
     x_list = []
     if is2d(x):
         for ii in range(order):
