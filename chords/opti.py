@@ -2108,7 +2108,7 @@ class _Equispaced:
                 )
         else:
             cost = dt * cas.sum2(
-                (cas.sum1(U_sq[:, :]) + cas.sum1(U_sq[1:-1, :])) / self.N
+                (cas.sum1(U_sq[:, :]) + cas.sum1(U_sq[1:-1, :])) / (2 * self.N)
             )
         self.cost = cost
         self.opti.minimize(cost)
