@@ -63,11 +63,11 @@ def sch_to_lab(sch):
     if sch[:3] == "BU_":
         sch = sch[3:]
         label = label_dict[sch]
-        label += " B-U"
+        label += " D-A"
     elif sch[:3] == "TD_":
         sch = sch[3:]
         label = label_dict[sch]
-        label += " T-D"
+        label += " I-A"
     else:
         label = label_dict[sch]
     return label
@@ -139,11 +139,11 @@ def sch_to_long_label(sch):
     if sch[:3] == "BU_":
         sch = sch[3:]
         label = lname_dict[sch]
-        label += " bottom-up"
+        label += " integrative"
     elif sch[:3] == "TD_":
         sch = sch[3:]
         label = lname_dict[sch]
-        label += " top-down"
+        label += " derivative"
     else:
         label = lname_dict[sch]
     return label
@@ -167,15 +167,24 @@ def sch_to_color(sch):
         color_dict[sc_name] = f"C{ii}"
 
     for ii, sc_name in enumerate(pseud_sch):
-        color_dict[sc_name] = f"C{ii}"
+        color_dict[sc_name] = f"C{ii+4}"
 
-    cc = colormaps["cubehelix"](np.linspace(0.2, 0.9, n_sch))
+    c_ch = colormaps["cubehelix"](np.linspace(0.2, 0.9, n_sch))
+    c_gp2 = colormaps["gnuplot2"](np.linspace(0.85, 0.2, n_sch))
+    
     for ii, sc_name in enumerate(pseud_sch):
-        color_dict["BU_" + sc_name] = cc[ii]
-
-    cc = colormaps["gnuplot2"](np.linspace(0.85, 0.2, n_sch))
+        color_dict["BU_" + sc_name] = c_ch[ii]    
     for ii, sc_name in enumerate(pseud_sch):
-        color_dict["TD_" + sc_name] = cc[ii]
+        color_dict["TD_" + sc_name] = c_gp2[ii]
+    
+    color_dict['BU_LG'] = colormaps["cubehelix"](0.45)
+    color_dict['TD_LG'] = colormaps["gist_stern"](0.12)
+    
+    color_dict['BU_LGR'] = colormaps["gnuplot2"](0.2)
+    color_dict['TD_LGR'] = colormaps["terrain"](0.6)
+    
+    color_dict['BU_LGL'] = colormaps["cubehelix"](0.7)
+    color_dict['TD_LGL'] = colormaps["cubehelix"](0.3)
 
     sch = sch.replace("_parab", "")
     sch = sch.replace("_inv", "")
@@ -307,7 +316,8 @@ def gen_fig_filename(
     from os.path import join
 
     folder_name = problem_name + "_figs"
-    schemes_printed.sort()
+    schemes = schemes_printed.copy() #avoid modifying original list
+    schemes.sort()
     title = f"{problem_name}_{graph_name}"
     if not (q_counter is None):
         title += f"_q_{q_counter+1}"
@@ -315,7 +325,7 @@ def gen_fig_filename(
         title += "_vs_N"
     else:
         title += f"_N{N}"
-    for scheme in schemes_printed:
+    for scheme in schemes:
         title += f"--{scheme}"
     if add is not None:
         title += f"--{add}"
