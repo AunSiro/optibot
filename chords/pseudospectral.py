@@ -556,7 +556,8 @@ def _v_sum(t_arr, i):
     """
     n = len(t_arr)
     t_arr = array(t_arr, dtype="float64")
-    h = npround(npmax(t_arr) - npmin(t_arr))
+    h = npmax(t_arr) - npmin(t_arr)
+    # h = npround(h) # Why was I making it an integer??
     t_arr *= 4 / h
     prod_coef = [ii for ii in range(n)]
     prod_coef.pop(i)

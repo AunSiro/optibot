@@ -2968,18 +2968,24 @@ class _multi_pseudospectral:
 
                 if scheme in _gauss_2_schemes:
                     opti.subject_to(_x_start[:, n_q:] == _x_d_start[:, :-n_q])
-                    if seg_ii == n_segments:
+                    if seg_ii == n_segments-1:
                         opti.subject_to(_x_end[:, n_q:] == _x_d_end[:, :-n_q])
 
                 # --- knot point values when knot are collocation ---
 
                 if scheme in (_lobato_like_schemes + _radau_like_schemes):
                     opti.subject_to(_x_start == _x_node[0, :])
-                    # opti.subject_to(_x_d_start == _x_d_node[0, :])
+                    if seg_ii == 0:
+                        opti.subject_to(_x_d_start == _x_d_node[0, :])
 
                 if scheme in (_lobato_like_schemes + _radau_inv_schemes):
                     opti.subject_to(_x_end == _x_node[-1, :])
-                    # opti.subject_to(_x_d_end == _x_d_node[-1, :])
+                
+                if scheme in _lobato_like_schemes:
+                    opti.subject_to(_x_d_end == _x_d_node[-1, :])
+                
+                if scheme in _radau_inv_schemes and seg_ii == n_segments-1:
+                    opti.subject_to(_x_d_end == _x_d_node[-1, :])
 
                 # --- Scheme not-node end values constraints ---
 
@@ -3025,6 +3031,9 @@ class _multi_pseudospectral:
         u_k_s = opti_lists["u_knot_ext"]
         u_e = opti_points["u_e"]
 
+        # The value of u at the knots and start is calculated as the value at
+        # the start of the corresponding interval
+        
         for seg_ii in range(n_segments):
             u_s = u_k_s[seg_ii]
             u_col = opti_lists["u_col"][seg_ii]

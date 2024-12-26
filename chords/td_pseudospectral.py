@@ -148,7 +148,6 @@ def Polynomial_interpolations_TD(
     for ii in range(interp_order + 1):
         coefs = (2 / h) ** ii * matrix_power(D_nu, ii) @ q_constr
         q_and_der_polys.append(bary_poly_2d(LGL_points, coefs))
-
     if uu is None:
         return q_and_der_polys
     else:
@@ -273,7 +272,6 @@ def interpolations_TD_pseudospectral(
             scheme,
             scheme_order,
         )
-
     if u_interp == "pol":
         u_arr = u_pol(t_arr)
 
@@ -318,6 +316,7 @@ def interpolations_TD_pseudospectral(
         raise NameError(
             f'Invalid interpolation method for x:{x_interp}.\n valid options are "pol", "lin", "Hermite"'
         )
+        
     return x_arr, x_dot_arr, u_arr
 
 
