@@ -1303,16 +1303,19 @@ def hsj_accel_restr(x, x_n, a, a_n, dt, scheme_params):
 
 
 def get_x_divisions(x, order=2, return_indices=False):
-    
     try:
         dim = x.shape[-1] // order
     except:
         if order == 1:
             if is_iterable(x):
-                return([x,])
+                return [
+                    x,
+                ]
             else:
-                return([array([x]),])
-        
+                return [
+                    array([x]),
+                ]
+
     x_list = []
     if is2d(x):
         for ii in range(order):
@@ -1788,9 +1791,7 @@ def _newpoint(X, X_dot, h, t, params, scheme, scheme_params=None):
 
         else:
             raise NameError(f"scheme {scheme} not recognized")
-    
-            
-    
+
     return x_interp
 
 

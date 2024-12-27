@@ -296,51 +296,51 @@ def generate_G(M, F_impl, order=2):
 
 
 def _generate_sub_problems(res):
-    scheme = res['scheme']
+    scheme = res["scheme"]
     mode = res["scheme_mode"]
 
-    assert 'ph' in mode
-    new_mode = mode.replace('ph ', '')
-    n_seg = res['n_segments']
+    assert "ph" in mode
+    new_mode = mode.replace("ph ", "")
+    n_seg = res["n_segments"]
 
     problem_list = []
 
     for ii_seg in range(n_seg):
-        xx = res['x_col_list'][ii_seg]
-        xx_d = res['x_d_col_list'][ii_seg]
-        uu = res['u_col_list'][ii_seg]
-        tt = res['t_col_list'][ii_seg]
+        xx = res["x_col_list"][ii_seg]
+        xx_d = res["x_d_col_list"][ii_seg]
+        uu = res["u_col_list"][ii_seg]
+        tt = res["t_col_list"][ii_seg]
 
-        x_s = res['x_knot_ext_list'][ii_seg]
-        x_f = res['x_knot_ext_list'][ii_seg+1]
-        x_d_s = res['x_d_knot_ext_list'][ii_seg]
-        x_d_f = res['x_d_knot_ext_list'][ii_seg+1]
-        t_s = res['t_knot_ext'][ii_seg:ii_seg+1]
-        t_f = res['t_knot_ext'][ii_seg+1:ii_seg+2]
+        x_s = res["x_knot_ext_list"][ii_seg]
+        x_f = res["x_knot_ext_list"][ii_seg + 1]
+        x_d_s = res["x_d_knot_ext_list"][ii_seg]
+        x_d_f = res["x_d_knot_ext_list"][ii_seg + 1]
+        t_s = res["t_knot_ext"][ii_seg : ii_seg + 1]
+        t_f = res["t_knot_ext"][ii_seg + 1 : ii_seg + 2]
 
         if scheme in _gauss_like_schemes + _gauss_inv_schemes + _radau_inv_schemes:
-            xx = concatenate((expand_dims(x_s,0), xx), axis = 0)
-            xx_d = concatenate((expand_dims(x_d_s,0), xx_d), axis = 0)
-            tt = concatenate((t_s, tt), axis = 0)
+            xx = concatenate((expand_dims(x_s, 0), xx), axis=0)
+            xx_d = concatenate((expand_dims(x_d_s, 0), xx_d), axis=0)
+            tt = concatenate((t_s, tt), axis=0)
         if scheme in _gauss_like_schemes + _gauss_inv_schemes + _radau_like_schemes:
-            xx = concatenate((xx, expand_dims(x_f,0)), axis = 0)
-            xx_d = concatenate((xx_d, expand_dims(x_d_f,0)), axis = 0)
-            tt = concatenate((tt, t_f), axis = 0)
+            xx = concatenate((xx, expand_dims(x_f, 0)), axis=0)
+            xx_d = concatenate((xx_d, expand_dims(x_d_f, 0)), axis=0)
+            tt = concatenate((tt, t_f), axis=0)
 
         problem = {
-            'scheme': scheme,
-            'scheme_mode': new_mode,
-            'solve_order': res["solve_order"],
-            'params':res["params"],
-            'x':xx,
-            'x_d': xx_d,
-            'u': uu,
-            't': tt,
+            "scheme": scheme,
+            "scheme_mode": new_mode,
+            "solve_order": res["solve_order"],
+            "params": res["params"],
+            "x": xx,
+            "x_d": xx_d,
+            "u": uu,
+            "t": tt,
         }
 
-        if 'top-down' in mode:
-            problem['q_constr']= res['q_constr_list'][ii_seg]
-        elif 'bottom-up' in mode:
+        if "top-down" in mode:
+            problem["q_constr"] = res["q_constr_list"][ii_seg]
+        elif "bottom-up" in mode:
             pass
         else:
             if scheme in _gauss_like_schemes:
@@ -349,15 +349,15 @@ def _generate_sub_problems(res):
                 indices = slice(1, None), slice(None, None)
             else:
                 indices = slice(None, None), slice(None, None)
-            n_q = res['n_q']
-            qq = xx[: , :n_q]
+            n_q = res["n_q"]
+            qq = xx[:, :n_q]
             if n_q == xx.shape[-1]:
                 vv = xx_d
             else:
-                vv = xx[: , n_q:n_q*2]
-            problem['q_node']=qq[indices]
-            problem['v_node']=vv[indices]
-            problem['x_node']=xx[indices]
+                vv = xx[:, n_q : n_q * 2]
+            problem["q_node"] = qq[indices]
+            problem["v_node"] = vv[indices]
+            problem["x_node"] = xx[indices]
         problem_list.append(problem)
 
     return problem_list
@@ -371,6 +371,7 @@ def interpolation(
     u_interp=None,
     n_interp=1000,
     save_in_res=True,
+    given_t_array=None,
 ):
     scheme = res["scheme"]
     mode = res["scheme_mode"]
@@ -389,8 +390,12 @@ def interpolation(
     # n_q = n_x // problem_order
     assert n_x % problem_order == 0
 
-    if mode == "equispaced":
+    if given_t_array is None:
         t_arr = linspace(t0, tf, n_interp)
+    else:
+        t_arr = given_t_array
+
+    if mode == "equispaced":
         h = (tf - t0) / (tt.shape[0] - 1)
         if u_interp is None:
             if "parab" in scheme:
@@ -424,7 +429,7 @@ def interpolation(
             u_scheme=u_interp,
             scheme_params=scheme_params,
         )
-        interpolations = {"x": x_arr, "u": u_arr, "t":t_arr}
+        interpolations = {"x": x_arr, "u": u_arr, "t": t_arr}
         for ii in range(1, problem_order + 1):
             _arr = interpolated_array_derivative(
                 X=xx,
@@ -448,7 +453,6 @@ def interpolation(
         qq = res["q_node"]
         vv = res["v_node"]
         xx = res["x_node"]
-        t_arr = linspace(t0, tf, n_interp)
         (
             q_arr,
             q_arr_d,
@@ -467,6 +471,7 @@ def interpolation(
             x_interp=x_interp,
             params=params,
             n_interp=n_interp,
+            given_t_arr=given_t_array,
         )
 
         if len(q_arr.shape) == 1:
@@ -489,7 +494,7 @@ def interpolation(
                 "Pseudospectral schemes not yet prepared for higher than 2 order"
             )
 
-        interpolations = {"x": x_arr, "x_d": x_dot_arr, "u": u_arr, "t":t_arr}
+        interpolations = {"x": x_arr, "x_d": x_dot_arr, "u": u_arr, "t": t_arr}
 
         for ii in range(2, problem_order + 1):
             _arr = interpolations_deriv_pseudospectral(
@@ -501,6 +506,7 @@ def interpolation(
                 x_interp=x_interp,
                 params=params,
                 n_interp=n_interp,
+                given_t_arr=given_t_array,
             )
             interpolations["x" + "_d" * ii] = _arr
 
@@ -510,7 +516,6 @@ def interpolation(
         if x_interp is None:
             x_interp = "pol"
 
-        t_arr = linspace(t0, tf, n_interp)
         x_arr, x_dot_arr, u_arr = interpolations_BU_pseudospectral(
             xx,
             xx_d,
@@ -523,8 +528,9 @@ def interpolation(
             u_interp=u_interp,
             x_interp=x_interp,
             n_interp=n_interp,
+            given_t_arr=given_t_array,
         )
-        interpolations = {"x": x_arr, "x_d": x_dot_arr, "u": u_arr, "t":t_arr}
+        interpolations = {"x": x_arr, "x_d": x_dot_arr, "u": u_arr, "t": t_arr}
         for ii in range(2, problem_order + 1):
             _arr = interpolations_deriv_BU_pseudospectral(
                 xx,
@@ -537,6 +543,7 @@ def interpolation(
                 scheme_order=scheme_order,
                 x_interp=x_interp,
                 n_interp=n_interp,
+                given_t_arr=given_t_array,
             )
             interpolations["x" + "_d" * ii] = _arr
 
@@ -547,7 +554,6 @@ def interpolation(
             x_interp = "pol"
 
         n_coll = uu.shape[0]
-        t_arr = linspace(t0, tf, n_interp)
         q_constr = res["q_constr"]
         x_arr, x_dot_arr, u_arr = interpolations_TD_pseudospectral(
             q_constr,
@@ -561,9 +567,10 @@ def interpolation(
             u_interp=u_interp,
             x_interp=x_interp,
             n_interp=n_interp,
+            given_t_arr=given_t_array,
         )
-        interpolations = {"x": x_arr, "x_d": x_dot_arr, "u": u_arr, "t":t_arr}
-        
+        interpolations = {"x": x_arr, "x_d": x_dot_arr, "u": u_arr, "t": t_arr}
+
         for ii in range(2, problem_order + 1):
             _arr = interpolations_deriv_TD_pseudospectral(
                 q_constr,
@@ -577,39 +584,55 @@ def interpolation(
                 scheme_order=scheme_order,
                 x_interp=x_interp,
                 n_interp=n_interp,
+                given_t_arr=given_t_array,
             )
             interpolations["x" + "_d" * ii] = _arr
-        
+
     elif mode[:3] == "ph ":
         problem_list = _generate_sub_problems(res)
         interps = []
-        n_seg = res['n_segments']
+        n_seg = res["n_segments"]
         t_arr = linspace(t0, tf, n_interp)
-        knots = res['t_knot']
-        
+        knots = res["t_knot"]
+
         _jj = searchsorted(t_arr, knots)
-        _in_len = [_jj[0]+1]
-        for ii in range(len(_jj)-1):
-            _in_len.append(_jj[ii+1] - _jj[ii] +1)
-        _in_len.append(n_interp-_jj[-1])
-        
-        for ii,problem in enumerate(problem_list):
-            interps.append(interpolation(
-                problem,
-                problem_order,
-                scheme_order,
-                x_interp,
-                u_interp,
-                _in_len[ii],
-                save_in_res,
-            ))
+        _in_len = [_jj[0] + 1]
+        for ii in range(len(_jj) - 1):
+            _in_len.append(_jj[ii + 1] - _jj[ii] + 1)
+        _in_len.append(n_interp - _jj[-1])
+
+        if given_t_array is None:
+            given_t_array = [
+                None,
+            ] * n_seg
+            conc_end = -1
+        else:
+            conc_end = None
+
+        for ii, problem in enumerate(problem_list):
+            interps.append(
+                interpolation(
+                    problem,
+                    problem_order,
+                    scheme_order,
+                    x_interp,
+                    u_interp,
+                    _in_len[ii],
+                    save_in_res,
+                    given_t_array[ii],
+                )
+            )
         interpolations = {}
         for key in interps[0].keys():
-            interpolations[key+'_list'] = [pp[key] for pp in interps]
-            _arr_list = [interpolations[key+'_list'][ii][:-1] for ii in range(n_seg-1)]
-            _arr_list += [interpolations[key+'_list'][-1],]
-            interpolations[key] = concatenate(_arr_list, axis = 0)
-        #interpolations = interps
+            interpolations[key + "_list"] = [pp[key] for pp in interps]
+            _arr_list = [
+                interpolations[key + "_list"][ii][:conc_end] for ii in range(n_seg - 1)
+            ]
+            _arr_list += [
+                interpolations[key + "_list"][-1],
+            ]
+            interpolations[key] = concatenate(_arr_list, axis=0)
+        # interpolations = interps
     else:
         raise ValueError(f"Unrecognized mode {mode}")
 
@@ -632,7 +655,7 @@ def interpolation(
     #         raise NotImplementedError(
     #             "pseudospectral schemes not prepared for higher order interpolations"
     #         )
-    if 'ph ' in mode:
+    if "ph " in mode:
         pass
     else:
         for ii in range(problem_order + 1):
@@ -702,7 +725,6 @@ def dynamic_errors(
     n_interp=1000,
     save_in_res=True,
 ):
-
     interpolations = interpolation(
         res,
         problem_order,

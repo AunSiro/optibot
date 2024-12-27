@@ -171,20 +171,20 @@ def sch_to_color(sch):
 
     c_ch = colormaps["cubehelix"](np.linspace(0.2, 0.9, n_sch))
     c_gp2 = colormaps["gnuplot2"](np.linspace(0.85, 0.2, n_sch))
-    
+
     for ii, sc_name in enumerate(pseud_sch):
-        color_dict["BU_" + sc_name] = c_ch[ii]    
+        color_dict["BU_" + sc_name] = c_ch[ii]
     for ii, sc_name in enumerate(pseud_sch):
         color_dict["TD_" + sc_name] = c_gp2[ii]
-    
-    color_dict['BU_LG'] = colormaps["cubehelix"](0.45)
-    color_dict['TD_LG'] = colormaps["gist_stern"](0.12)
-    
-    color_dict['BU_LGR'] = colormaps["gnuplot2"](0.2)
-    color_dict['TD_LGR'] = colormaps["terrain"](0.6)
-    
-    color_dict['BU_LGL'] = colormaps["cubehelix"](0.7)
-    color_dict['TD_LGL'] = colormaps["cubehelix"](0.3)
+
+    color_dict["BU_LG"] = colormaps["cubehelix"](0.45)
+    color_dict["TD_LG"] = colormaps["gist_stern"](0.12)
+
+    color_dict["BU_LGR"] = colormaps["gnuplot2"](0.2)
+    color_dict["TD_LGR"] = colormaps["terrain"](0.6)
+
+    color_dict["BU_LGL"] = colormaps["cubehelix"](0.7)
+    color_dict["TD_LGL"] = colormaps["cubehelix"](0.3)
 
     sch = sch.replace("_parab", "")
     sch = sch.replace("_inv", "")
@@ -238,20 +238,20 @@ def set_fonts():
 
 
 def plot_by_segments(t_arr, y_plot, label, N, end_t, plot_dict=None):
-        if plot_dict is None:
-            plot_dict = {'c': 'gray'}
-        interv_n = (N * t_arr) / end_t
-        cut_p = 0
-        for ll in range(1, N + 1):
-            jj = np.searchsorted(interv_n, ll)
-            plt.plot(
-                t_arr[cut_p:jj],
-                y_plot[cut_p:jj],
-                label=label if cut_p == 0 else None,
-                **plot_dict,
-            )
-            cut_p = jj
-            
+    if plot_dict is None:
+        plot_dict = {"c": "gray"}
+    interv_n = (N * t_arr) / end_t
+    cut_p = 0
+    for ll in range(1, N + 1):
+        jj = np.searchsorted(interv_n, ll)
+        plt.plot(
+            t_arr[cut_p:jj],
+            y_plot[cut_p:jj],
+            label=label if cut_p == 0 else None,
+            **plot_dict,
+        )
+        cut_p = jj
+
 
 def graph_by_segments(
     results, schemes, N, thing_to_plot, title, ylabel, component="all"
@@ -316,7 +316,7 @@ def gen_fig_filename(
     from os.path import join
 
     folder_name = problem_name + "_figs"
-    schemes = schemes_printed.copy() #avoid modifying original list
+    schemes = schemes_printed.copy()  # avoid modifying original list
     schemes.sort()
     title = f"{problem_name}_{graph_name}"
     if not (q_counter is None):
@@ -477,7 +477,6 @@ def Lag_pol_2d(N, scheme, order=2):
 
 @lru_cache(maxsize=2000)
 def Lag_pol_2d_x(N, scheme, order=2):
-
     if scheme in _gauss_like_schemes:
         arr_points_tau = node_points(N - 1, scheme)
         arr_points_tau = arr_points_tau + [

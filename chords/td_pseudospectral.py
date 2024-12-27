@@ -167,6 +167,7 @@ def interpolations_TD_pseudospectral(
     u_interp="pol",
     x_interp="pol",
     n_interp=5000,
+    given_t_arr=None,
 ):
     """
     Generates arrays of equispaced points with values of interpolations.
@@ -260,7 +261,10 @@ def interpolations_TD_pseudospectral(
     if scheme not in _implemented_schemes:
         NameError(f"Invalid scheme.\n valid options are {_implemented_schemes}")
 
-    t_arr = linspace(t0, tf, n_interp)
+    if given_t_arr is None:
+        t_arr = linspace(t0, tf, n_interp)
+    else:
+        t_arr = given_t_arr
 
     if "pol" in [x_interp, u_interp]:
         u_pol, q_and_der_polys = Polynomial_interpolations_TD(
@@ -316,7 +320,7 @@ def interpolations_TD_pseudospectral(
         raise NameError(
             f'Invalid interpolation method for x:{x_interp}.\n valid options are "pol", "lin", "Hermite"'
         )
-        
+
     return x_arr, x_dot_arr, u_arr
 
 
@@ -332,6 +336,7 @@ def interpolations_deriv_TD_pseudospectral(
     scheme_order,
     x_interp="pol",
     n_interp=5000,
+    given_t_arr=None,
 ):
     """
     Generates arrays of equispaced points with values of interpolations of the
@@ -424,7 +429,10 @@ def interpolations_deriv_TD_pseudospectral(
     if scheme not in _implemented_schemes:
         NameError(f"Invalid scheme.\n valid options are {_implemented_schemes}")
 
-    t_arr = linspace(t0, tf, n_interp)
+    if given_t_arr is None:
+        t_arr = linspace(t0, tf, n_interp)
+    else:
+        t_arr = given_t_arr
 
     if x_interp == "pol":
         q_and_der_polys = Polynomial_interpolations_TD(

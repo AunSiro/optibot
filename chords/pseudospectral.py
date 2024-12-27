@@ -428,6 +428,37 @@ def tau_to_t_points(points, t0, tf):
     return new_points
 
 
+def t_to_tau_points(points, t0, tf):
+    """
+    converts a point or series of points from t in [t0, tf] to tau in [-1,1]
+
+    Parameters
+    ----------
+    points : number, list, array or tuple
+        points in t
+    t0 : float
+        initial t
+    tf : float
+        final t
+
+    Returns
+    -------
+    new_points : number, list, array or tuple
+        points in t
+
+    """
+    points_arr = array(points)
+    h = tf - t0
+    new_points = -1 + 2 * (points_arr - t0) / h
+    if type(points) == list:
+        new_points = list(new_points)
+    elif type(points) == tuple:
+        new_points = tuple(new_points)
+    elif type(points) == float:
+        new_points = float(new_points)
+    return new_points
+
+
 def tau_to_t_function(f, t0, tf):
     """
     converts a function from f(tau), tau in [-1,1] to f(t), t in [t0, tf]
@@ -1454,6 +1485,7 @@ def interpolations_pseudospectral(
     x_interp="pol",
     params=None,
     n_interp=5000,
+    given_t_arr=None,
 ):
     """
     Generates arrays of equispaced points with values of interpolations.
@@ -1533,7 +1565,12 @@ def interpolations_pseudospectral(
         params = []
 
     N = len(qq)
-    tau_arr = linspace(-1, 1, n_interp)
+    if given_t_arr is None:
+        tau_arr = linspace(-1, 1, n_interp)
+        t_arr_lin = linspace(t0, t1, n_interp)
+    else:
+        tau_arr = t_to_tau_points(given_t_arr, t0, t1)
+        t_arr_lin = given_t_arr
 
     if u_interp == "pol":
         pol_u = get_pol_u(scheme, uu)
@@ -1579,7 +1616,6 @@ def interpolations_pseudospectral(
             )
 
         coll_p = t0 + (1 + array(tau_x, dtype="float64")) * (t1 - t0) / 2
-        t_arr_lin = linspace(t0, t1, n_interp)
         q_arr_d = find_der_polyline(t_arr_lin, coll_p, qq)
         v_arr_d = find_der_polyline(t_arr_lin, coll_p, vv)
         q_arr_d_d = zeros_like(q_arr)
@@ -1592,7 +1628,6 @@ def interpolations_pseudospectral(
         her_q, her_v, her_q_d, her_v_d, her_q_d_d = get_hermite_x(
             qq, vv, aa, tau_x, t0, t1
         )
-        t_arr_lin = linspace(t0, t1, n_interp)
         q_arr = her_q(t_arr_lin)
         v_arr = her_v(t_arr_lin)
         q_arr_d = her_q_d(t_arr_lin)
@@ -1614,6 +1649,7 @@ def interpolations_deriv_pseudospectral(
     x_interp="pol",
     params=None,
     n_interp=5000,
+    given_t_arr=None,
 ):
     """
     Generates arrays of equispaced points with values of interpolations of the
@@ -1682,8 +1718,15 @@ def interpolations_deriv_pseudospectral(
     xx = array(xx)
     N = xx.shape[0]
     n_x = xx.shape[-1]
-    tau_arr = linspace(-1, 1, n_interp)
-    t_arr = linspace(t0, t1, n_interp)
+
+    if given_t_arr is None:
+        tau_arr = linspace(-1, 1, n_interp)
+        t_arr = linspace(t0, t1, n_interp)
+    else:
+        tau_arr = t_to_tau_points(given_t_arr, t0, t1)
+        t_arr = given_t_arr
+        n_interp = len(given_t_arr)
+
     tau_x = array(node_points(N, scheme), dtype="float64")
     t_x = tau_to_t_points(tau_x, t0, t1)
 

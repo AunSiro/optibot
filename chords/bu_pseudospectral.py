@@ -439,6 +439,7 @@ def interpolations_BU_pseudospectral(
     u_interp="pol",
     x_interp="pol",
     n_interp=5000,
+    given_t_arr=None,
 ):
     """
     Generates arrays of equispaced points with values of interpolations.
@@ -521,7 +522,10 @@ def interpolations_BU_pseudospectral(
     if scheme not in _implemented_schemes:
         NameError(f"Invalid scheme.\n valid options are {_implemented_schemes}")
 
-    t_arr = linspace(t0, tf, n_interp)
+    if given_t_arr is None:
+        t_arr = linspace(t0, tf, n_interp)
+    else:
+        t_arr = given_t_arr
     t_x = tau_to_t_points(
         array([-1.0] + BU_construction_points(n_col, scheme, scheme_order)), t0, tf
     )
@@ -643,6 +647,7 @@ def interpolations_deriv_BU_pseudospectral(
     scheme_order=2,
     x_interp="pol",
     n_interp=5000,
+    given_t_arr=None,
 ):
     """
     Generates arrays of equispaced points with values of interpolations of the
@@ -723,7 +728,10 @@ def interpolations_deriv_BU_pseudospectral(
     if scheme not in _implemented_schemes:
         NameError(f"Invalid scheme.\n valid options are {_implemented_schemes}")
 
-    t_arr = linspace(t0, tf, n_interp)
+    if given_t_arr is None:
+        t_arr = linspace(t0, tf, n_interp)
+    else:
+        t_arr = given_t_arr
     t_x = tau_to_t_points(
         array([-1.0] + BU_construction_points(n_col, scheme, scheme_order)), t0, tf
     )

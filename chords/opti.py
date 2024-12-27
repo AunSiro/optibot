@@ -374,12 +374,16 @@ def exact_cuadratic_squared_integration(x_arr, x_c_arr, h):
         b = x_c_arr
         c = x_arr[1:]
     elif len(x_arr.shape) == 2:
-        a = x_arr[:-1 , :]
+        a = x_arr[:-1, :]
         b = x_c_arr
-        c = x_arr[1: , :]
+        c = x_arr[1:, :]
     else:
-        raise ValueError('invalid shape for arrays, must be 1 or 2 dimensional')
-    return h*(2*a**2 + 2*a*b - a*c + 8*b**2 + 2*b*c + 2*c**2)/15
+        raise ValueError("invalid shape for arrays, must be 1 or 2 dimensional")
+    return (
+        h * (2 * a**2 + 2 * a * b - a * c + 8 * b**2 + 2 * b * c + 2 * c**2) / 15
+    )
+
+
 # --- Opti problem
 
 
@@ -2036,13 +2040,13 @@ class _Equispaced:
 
         dt = self.t_end - self.t_start
         N = self.N
-        h = dt/N
-        
+        h = dt / N
+
         if arr_c is None:
-            arr_c = (arr[:,:-1] + arr[:,1:])/2
-        
+            arr_c = (arr[:, :-1] + arr[:, 1:]) / 2
+
         int_arr = exact_cuadratic_squared_integration(arr, arr_c, h)
-        
+
         cost = cas.sum2(cas.sum1(int_arr))
 
         self.cost = cost
@@ -2808,11 +2812,9 @@ class _multi_pseudospectral:
         coll_index = get_coll_indices(scheme)
 
         if scheme_mode == "ph top-down pseudospectral":
-
             q_constr_list = opti_lists["q_constr"]
 
             for seg_ii in range(n_segments):
-
                 _n_coll = point_structure[seg_ii]
                 q_constr = q_constr_list[seg_ii]
                 h = h_arr[seg_ii]
@@ -2838,13 +2840,22 @@ class _multi_pseudospectral:
 
                     # ----- Knotting intervals together -----
 
-                    if ii <= order or seg_ii == n_segments:
+                    if ii <= order or seg_ii == n_segments - 1:
                         opti.subject_to(_arr_end == _res_end)
+
+                # ----- Extremes and knots of X_d not highest derivative -----
+
+                x_e = opti_lists["x_knot_ext"][seg_ii + 1]
+                x_d_e = opti_lists["x_d_knot_ext"][seg_ii + 1]
+                self.opti.subject_to(x_e[n_q:] == x_d_e[:-n_q])
+                if seg_ii == 0:
+                    x_s = opti_lists["x_knot_ext"][0]
+                    x_d_s = opti_lists["x_d_knot_ext"][0]
+                    self.opti.subject_to(x_s[n_q:] == x_d_s[:-n_q])
 
         elif scheme_mode == "ph bottom-up pseudospectral":
             h_q_d_name = q_and_ders_names[-1]
             for seg_ii in range(n_segments):
-
                 _n_coll = point_structure[seg_ii]
                 h = h_arr[seg_ii]
 
@@ -2876,7 +2887,7 @@ class _multi_pseudospectral:
 
                 self.opti.subject_to(highest_q_d_start == _res_h_q_d_start)
 
-                if seg_ii == n_segments:
+                if seg_ii == n_segments - 1:
                     if scheme in _gauss_like_schemes + _radau_like_schemes:
                         end_mat = Extreme_Matrix(
                             _n_coll,
@@ -2892,6 +2903,16 @@ class _multi_pseudospectral:
                         raise ValueError(f"Unrecognized scheme {scheme}")
 
                     self.opti.subject_to(highest_q_d_end == _res_h_q_d_end)
+
+                # ----- Extremes and knots of X_d not highest derivative -----
+
+                x_e = opti_lists["x_knot_ext"][seg_ii + 1]
+                x_d_e = opti_lists["x_d_knot_ext"][seg_ii + 1]
+                self.opti.subject_to(x_e[n_q:] == x_d_e[:-n_q])
+                if seg_ii == 0:
+                    x_s = opti_lists["x_knot_ext"][0]
+                    x_d_s = opti_lists["x_d_knot_ext"][0]
+                    self.opti.subject_to(x_s[n_q:] == x_d_s[:-n_q])
 
                 # ----- Scheme Constraints ----
 
@@ -2928,7 +2949,6 @@ class _multi_pseudospectral:
         elif scheme_mode == "ph pseudospectral":
             h_q_d_name = q_and_ders_names[-1]
             for seg_ii in range(n_segments):
-
                 _n_coll = point_structure[seg_ii]
                 n_nodes = n_col_to_n_nodes(scheme, _n_coll)
 
@@ -2968,7 +2988,7 @@ class _multi_pseudospectral:
 
                 if scheme in _gauss_2_schemes:
                     opti.subject_to(_x_start[:, n_q:] == _x_d_start[:, :-n_q])
-                    if seg_ii == n_segments-1:
+                    if seg_ii == n_segments - 1:
                         opti.subject_to(_x_end[:, n_q:] == _x_d_end[:, :-n_q])
 
                 # --- knot point values when knot are collocation ---
@@ -2980,11 +3000,11 @@ class _multi_pseudospectral:
 
                 if scheme in (_lobato_like_schemes + _radau_inv_schemes):
                     opti.subject_to(_x_end == _x_node[-1, :])
-                
+
                 if scheme in _lobato_like_schemes:
                     opti.subject_to(_x_d_end == _x_d_node[-1, :])
-                
-                if scheme in _radau_inv_schemes and seg_ii == n_segments-1:
+
+                if scheme in _radau_inv_schemes and seg_ii == n_segments - 1:
                     opti.subject_to(_x_d_end == _x_d_node[-1, :])
 
                 # --- Scheme not-node end values constraints ---
@@ -2997,6 +3017,8 @@ class _multi_pseudospectral:
                     opti.subject_to(
                         _x_d_start[:, -n_q:] == f_start(_x_d_node[:, -n_q:])
                     )
+                    if seg_ii == 0:
+                        self.opti.subject_to(_x_start[n_q:] == _x_d_start[:-n_q])
 
                 if scheme in _gauss_like_schemes:
                     f_end = get_bary_extreme_f_cas(
@@ -3004,6 +3026,8 @@ class _multi_pseudospectral:
                     )
                     opti.subject_to(_x_end == f_end(_x_node))
                     opti.subject_to(_x_d_end[:, -n_q:] == f_end(_x_d_node[:, -n_q:]))
+                    if seg_ii == n_segments - 1:
+                        self.opti.subject_to(_x_end[n_q:] == _x_d_end[:-n_q])
         else:
             raise ValueError(f"Unrecognized scheme mode {scheme_mode}")
 
@@ -3033,7 +3057,7 @@ class _multi_pseudospectral:
 
         # The value of u at the knots and start is calculated as the value at
         # the start of the corresponding interval
-        
+
         for seg_ii in range(n_segments):
             u_s = u_k_s[seg_ii]
             u_col = opti_lists["u_col"][seg_ii]

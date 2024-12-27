@@ -701,10 +701,19 @@ def print_funcs(expr_list, q_vars=0, flavour="np", verbose=False):
 
 
 # --- Modifications of Lagranges Method from Sympy:
-    
+
+
 class LagrangesMethod(SyLagMet):
-    def __init__(self, Lagrangian, qs, forcelist=None, bodies=None, frame=None,
-                 hol_coneqs=None, nonhol_coneqs=None):
+    def __init__(
+        self,
+        Lagrangian,
+        qs,
+        forcelist=None,
+        bodies=None,
+        frame=None,
+        hol_coneqs=None,
+        nonhol_coneqs=None,
+    ):
         """Supply the following for the initialization of LagrangesMethod.
 
         Lagrangian : Sympifyable
@@ -741,39 +750,44 @@ class LagrangesMethod(SyLagMet):
             hol_coneqs,
             nonhol_coneqs,
         )
-        
+
         self._c_mat = None
         self._g_mat = None
-        
+
     def _C_from_M(self, M, q, qdot):
-        C = M*0
+        C = M * 0
         n_q = M.shape[0]
-    
+
         for i in range(n_q):
             for j in range(n_q):
                 for k in range(n_q):
-                    C[i,j] = C[i,j] + qdot[k] * (
-                        diff(M[i,j],q[k]) +
-                        diff(M[i,k],q[j]) -
-                        diff(M[k,j],q[i]) 
-                    ) /2
-        
+                    C[i, j] = (
+                        C[i, j]
+                        + qdot[k]
+                        * (
+                            diff(M[i, j], q[k])
+                            + diff(M[i, k], q[j])
+                            - diff(M[k, j], q[i])
+                        )
+                        / 2
+                    )
+
         C = simplify(C)
         return C
-    
+
     def form_lagranges_equations(self):
         super().form_lagranges_equations()
-        
+
         q = self.q
         q_d = self._qdots
         q_dd = self._qdoubledots
         M = self._m_d
-        
+
         C = self._C_from_M(M, q, q_d)
-        G = simplify((self._term1 - self._term2)- M@q_dd - C@q_d)
+        G = simplify((self._term1 - self._term2) - M @ q_dd - C @ q_d)
         self._c_mat = C
         self._g_mat = G
-        
+
     @property
     def C_matrix(self):
         """Returns the C matrix.
@@ -786,10 +800,10 @@ class LagrangesMethod(SyLagMet):
         """
 
         if self.eom is None:
-            raise ValueError('Need to compute the equations of motion first')
-        
+            raise ValueError("Need to compute the equations of motion first")
+
         return self._c_mat
-        
+
     @property
     def G_matrix(self):
         """Returns the G matrix.
@@ -802,10 +816,10 @@ class LagrangesMethod(SyLagMet):
         """
 
         if self.eom is None:
-            raise ValueError('Need to compute the equations of motion first')
-        
+            raise ValueError("Need to compute the equations of motion first")
+
         return self._g_mat
-    
+
     @property
     def ext_forces_matrix(self):
         """Returns the F_ex matrix.
@@ -818,8 +832,8 @@ class LagrangesMethod(SyLagMet):
         """
 
         if self.eom is None:
-            raise ValueError('Need to compute the equations of motion first')
-        
+            raise ValueError("Need to compute the equations of motion first")
+
         return self._term4
 
 
