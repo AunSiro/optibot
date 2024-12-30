@@ -60,6 +60,12 @@ def sch_to_lab(sch):
         "CGR": "Cheb-R",
         "CGR_inv": "Cheb-R_inv",
     }
+    if sch[:3] == "ph_":
+        ph = True
+        sch = sch[3:]
+    else:
+        ph = False
+
     if sch[:3] == "BU_":
         sch = sch[3:]
         label = label_dict[sch]
@@ -70,6 +76,9 @@ def sch_to_lab(sch):
         label += " I-A"
     else:
         label = label_dict[sch]
+
+    if ph:
+        label = "ph_adp " + label
     return label
 
 
@@ -136,6 +145,12 @@ def sch_to_long_label(sch):
     for ii in range(len(titles)):
         lname_dict[schemes[ii]] = titles[ii]
 
+    if sch[:3] == "ph_":
+        ph = True
+        sch = sch[3:]
+    else:
+        ph = False
+
     if sch[:3] == "BU_":
         sch = sch[3:]
         label = lname_dict[sch]
@@ -146,6 +161,9 @@ def sch_to_long_label(sch):
         label += " derivative"
     else:
         label = lname_dict[sch]
+
+    if ph:
+        label = "ph adaptive " + label
     return label
 
 
@@ -187,6 +205,7 @@ def sch_to_color(sch):
     color_dict["TD_LGL"] = colormaps["cubehelix"](0.3)
 
     sch = sch.replace("_parab", "")
+    sch = sch.replace("ph_", "")
     sch = sch.replace("_inv", "")
     sch = sch.replace("trapz_n", "trapz_mod")
     sch = sch.replace("hsn", "hs_mod")
@@ -556,3 +575,9 @@ def is_integer(x):
         return result
     except TypeError:
         return False
+
+
+def log_base(x, base):
+    aa = np.log(x)
+    bb = np.log(base)
+    return aa / bb

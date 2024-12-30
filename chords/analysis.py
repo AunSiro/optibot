@@ -55,6 +55,7 @@ from numpy import (
     trapz,
     mean,
     searchsorted,
+    concatenate,
 )
 from .pseudospectral import (
     _gauss_like_schemes,
@@ -592,14 +593,7 @@ def interpolation(
         problem_list = _generate_sub_problems(res)
         interps = []
         n_seg = res["n_segments"]
-        t_arr = linspace(t0, tf, n_interp)
         knots = res["t_knot"]
-
-        _jj = searchsorted(t_arr, knots)
-        _in_len = [_jj[0] + 1]
-        for ii in range(len(_jj) - 1):
-            _in_len.append(_jj[ii + 1] - _jj[ii] + 1)
-        _in_len.append(n_interp - _jj[-1])
 
         if given_t_array is None:
             given_t_array = [
@@ -608,6 +602,18 @@ def interpolation(
             conc_end = -1
         else:
             conc_end = None
+            n_interp = len(concatenate(given_t_array))
+
+        t_arr = linspace(t0, tf, n_interp)
+        _jj = searchsorted(t_arr, knots).flatten()
+
+        if len(array(knots).flatten()) > 0:
+            _in_len = [_jj[0] + 1]
+            for ii in range(len(_jj) - 1):
+                _in_len.append(_jj[ii + 1] - _jj[ii] + 1)
+            _in_len.append(n_interp - _jj[-1])
+        else:
+            _in_len = [n_interp]
 
         for ii, problem in enumerate(problem_list):
             interps.append(
@@ -724,6 +730,7 @@ def dynamic_errors(
     u_interp=None,
     n_interp=1000,
     save_in_res=True,
+    given_t_array=None,
 ):
     interpolations = interpolation(
         res,
@@ -732,6 +739,7 @@ def dynamic_errors(
         x_interp,
         u_interp,
         n_interp,
+        given_t_array=given_t_array,
     )
 
     params = res["params"]
@@ -972,6 +980,11 @@ def arr_max(x):
 
 def arr_abs_integr_vert(t_arr, x):
     errors = trapz(npabs(x), t_arr, axis=0)
+    return errors
+
+
+def total_state_error(t_arr, dyn_err):
+    errors = trapz(npabs(dyn_err), t_arr, axis=0)
     return errors
 
 
