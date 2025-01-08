@@ -78,7 +78,7 @@ def sch_to_lab(sch):
         label = label_dict[sch]
 
     if ph:
-        label = "ph_adp " + label
+        label = "adaptive " + label
     return label
 
 
