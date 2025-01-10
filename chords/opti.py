@@ -3929,7 +3929,7 @@ class _Waypoints_init:
             )
 
         if t_points is None:
-            t_points = linspace(self.t_start, self.t_end, N)
+            t_points = linspace(self.t_start, self.t_end, q_points.shape[0])
 
         t_arr = self.opti_arrs["t"]
         q_guess = interp_2d(array(t_arr, dtype="float64"), t_points, q_points)
