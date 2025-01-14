@@ -2185,54 +2185,7 @@ class _Equispaced:
                 half_x = hs_mod_half_x
             else:
                 half_x = hs_half_x
-
-        # Dynamics Constraints:
-        for ii in range(N + 1):
-            self.opti.subject_to(
-                dynam_f_x(
-                    x_opti[ii, :],
-                    x_dot_opti[ii, :],
-                    u_opti[ii, :],
-                    lam_opti[ii, :],
-                    params,
-                )
-                == 0
-            )
-        if "hs" in scheme:
-            for ii in range(N):
-                self.opti.subject_to(
-                    x_c_opti[ii, :]
-                    == half_x(
-                        x_opti[ii, :],
-                        x_opti[ii + 1, :],
-                        highest_q_d_opti[ii, :],
-                        highest_q_d_opti[ii + 1, :],
-                        T / N,
-                    )
-                )
-                self.opti.subject_to(
-                    dynam_f_x(
-                        x_c_opti[ii, :],
-                        x_c_dot_opti[ii, :],
-                        u_c_opti[ii, :],
-                        lam_c_opti[ii, :],
-                        params,
-                    )
-                    == 0
-                )
-            if "parab" not in scheme:
-                if "j" in scheme:
-                    for ii in range(N):
-                        self.opti.subject_to(
-                            u_c_opti[ii, :]
-                            == 0.6 * u_opti[ii, :] + 0.4 * u_opti[ii + 1, :]
-                        )
-                else:
-                    for ii in range(N):
-                        self.opti.subject_to(
-                            u_c_opti[ii, :] == (u_opti[ii, :] + u_opti[ii + 1, :]) / 2
-                        )
-
+                
         # Scheme Constraints
         restr_schemes = {
             #'euler': euler_accel_restr, #comprobar compatibilidad
@@ -2281,6 +2234,54 @@ class _Equispaced:
                     )
                     == 0
                 )
+
+        # Dynamics Constraints:
+        for ii in range(N + 1):
+            self.opti.subject_to(
+                dynam_f_x(
+                    x_opti[ii, :],
+                    x_dot_opti[ii, :],
+                    u_opti[ii, :],
+                    lam_opti[ii, :],
+                    params,
+                )
+                == 0
+            )
+        if "hs" in scheme:
+            for ii in range(N):
+                self.opti.subject_to(
+                    x_c_opti[ii, :]
+                    == half_x(
+                        x_opti[ii, :],
+                        x_opti[ii + 1, :],
+                        highest_q_d_opti[ii, :],
+                        highest_q_d_opti[ii + 1, :],
+                        T / N,
+                    )
+                )
+                self.opti.subject_to(
+                    dynam_f_x(
+                        x_c_opti[ii, :],
+                        x_c_dot_opti[ii, :],
+                        u_c_opti[ii, :],
+                        lam_c_opti[ii, :],
+                        params,
+                    )
+                    == 0
+                )
+            if "parab" not in scheme:
+                if "j" in scheme:
+                    for ii in range(N):
+                        self.opti.subject_to(
+                            u_c_opti[ii, :]
+                            == 0.6 * u_opti[ii, :] + 0.4 * u_opti[ii + 1, :]
+                        )
+                else:
+                    for ii in range(N):
+                        self.opti.subject_to(
+                            u_c_opti[ii, :] == (u_opti[ii, :] + u_opti[ii + 1, :]) / 2
+                        )
+
 
 
 class _multi_pseudospectral:
